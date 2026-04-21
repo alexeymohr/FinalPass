@@ -1,0 +1,18 @@
+name: ebu_r128
+display_name: "EBU R128 — stereo (pre-produced)"
+integrated_lufs:
+  target: -23.0
+  tolerance: 0.5
+true_peak_max_dbtp: -1.0
+lra_max: 18.0
+channel_config: "stereo"
+notes: |
+  EBU R128 — Loudness normalisation and permitted maximum level of audio signals.
+  Source: https://tech.ebu.ch/publications/r128
+  Integrated target -23 LUFS; deviation ±0.5 LU permitted for pre-produced
+  programmes (±1 LU allowed for live content — not this preset). True peak
+  maximum -1 dBTP. R128 itself prescribes no LRA cap; the lra_max of 18 in
+  this preset is a FinalPass convention for flagging very wide-dynamic mixes,
+  not an official R128 requirement.
+  Values are current best-public-knowledge targets; not an official platform
+  certification. Verify against your current delivery paperwork.

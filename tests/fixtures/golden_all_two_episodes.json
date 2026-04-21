@@ -1,0 +1,264 @@
+{
+  "finalpass_version": "0.1.0",
+  "schema_version": 3,
+  "spec": {
+    "name": "ebu_r128",
+    "display_name": "EBU R128 \u2014 stereo (pre-produced)",
+    "source": "bundled"
+  },
+  "fps": 23.976,
+  "command": "all",
+  "groups": [
+    {
+      "group_id": "S01E03",
+      "files": [
+        {
+          "path": "SHOW_S01E03_PM_STEREO.wav",
+          "role": "pm",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "duration_seconds": 10.0,
+          "measurements": {
+            "integrated_lufs": -22.84269456095681,
+            "true_peak_dbtp": -9.608133363997757,
+            "lra": 1.1103476701764095,
+            "short_term_max_lufs": -16.900220134820632,
+            "momentary_max_lufs": -16.342592107761288
+          },
+          "checks": [
+            {
+              "metric": "integrated_lufs",
+              "target": -23.0,
+              "tolerance": 0.5,
+              "limit": null,
+              "measured": -22.84269456095681,
+              "pass": true,
+              "skipped": false,
+              "reason": null,
+              "error": null
+            },
+            {
+              "metric": "true_peak_dbtp",
+              "target": null,
+              "tolerance": null,
+              "limit": -1.0,
+              "measured": -9.608133363997757,
+              "pass": true,
+              "skipped": false,
+              "reason": null,
+              "error": null
+            },
+            {
+              "metric": "lra",
+              "target": null,
+              "tolerance": null,
+              "limit": 18.0,
+              "measured": 1.1103476701764095,
+              "pass": true,
+              "skipped": false,
+              "reason": null,
+              "error": null
+            }
+          ],
+          "errors": [],
+          "channel_config_hint": "stereo",
+          "channel_config_actual": "stereo"
+        }
+      ],
+      "group_summary": {
+        "total_checks": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "overall_pass": true
+      },
+      "errors": []
+    },
+    {
+      "group_id": "S01E04",
+      "files": [
+        {
+          "path": "SHOW_S01E04_PM_STEREO.wav",
+          "role": "pm",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "duration_seconds": 10.0,
+          "measurements": {
+            "integrated_lufs": -22.851284268655075,
+            "true_peak_dbtp": -10.267972047413934,
+            "lra": 1.1563464861152113,
+            "short_term_max_lufs": -16.84569297539372,
+            "momentary_max_lufs": -16.178090968267835
+          },
+          "checks": [
+            {
+              "metric": "integrated_lufs",
+              "target": -23.0,
+              "tolerance": 0.5,
+              "limit": null,
+              "measured": -22.851284268655075,
+              "pass": true,
+              "skipped": false,
+              "reason": null,
+              "error": null
+            },
+            {
+              "metric": "true_peak_dbtp",
+              "target": null,
+              "tolerance": null,
+              "limit": -1.0,
+              "measured": -10.267972047413934,
+              "pass": true,
+              "skipped": false,
+              "reason": null,
+              "error": null
+            },
+            {
+              "metric": "lra",
+              "target": null,
+              "tolerance": null,
+              "limit": 18.0,
+              "measured": 1.1563464861152113,
+              "pass": true,
+              "skipped": false,
+              "reason": null,
+              "error": null
+            }
+          ],
+          "errors": [],
+          "channel_config_hint": "stereo",
+          "channel_config_actual": "stereo"
+        }
+      ],
+      "group_summary": {
+        "total_checks": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0,
+        "overall_pass": true
+      },
+      "errors": []
+    }
+  ],
+  "files": [
+    {
+      "path": "SHOW_S01E03_PM_STEREO.wav",
+      "role": "pm",
+      "sample_rate": 48000,
+      "bit_depth": 24,
+      "channel_count": 2,
+      "duration_seconds": 10.0,
+      "measurements": {
+        "integrated_lufs": -22.84269456095681,
+        "true_peak_dbtp": -9.608133363997757,
+        "lra": 1.1103476701764095,
+        "short_term_max_lufs": -16.900220134820632,
+        "momentary_max_lufs": -16.342592107761288
+      },
+      "checks": [
+        {
+          "metric": "integrated_lufs",
+          "target": -23.0,
+          "tolerance": 0.5,
+          "limit": null,
+          "measured": -22.84269456095681,
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "error": null
+        },
+        {
+          "metric": "true_peak_dbtp",
+          "target": null,
+          "tolerance": null,
+          "limit": -1.0,
+          "measured": -9.608133363997757,
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "error": null
+        },
+        {
+          "metric": "lra",
+          "target": null,
+          "tolerance": null,
+          "limit": 18.0,
+          "measured": 1.1103476701764095,
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "error": null
+        }
+      ],
+      "errors": [],
+      "channel_config_hint": "stereo",
+      "channel_config_actual": "stereo"
+    },
+    {
+      "path": "SHOW_S01E04_PM_STEREO.wav",
+      "role": "pm",
+      "sample_rate": 48000,
+      "bit_depth": 24,
+      "channel_count": 2,
+      "duration_seconds": 10.0,
+      "measurements": {
+        "integrated_lufs": -22.851284268655075,
+        "true_peak_dbtp": -10.267972047413934,
+        "lra": 1.1563464861152113,
+        "short_term_max_lufs": -16.84569297539372,
+        "momentary_max_lufs": -16.178090968267835
+      },
+      "checks": [
+        {
+          "metric": "integrated_lufs",
+          "target": -23.0,
+          "tolerance": 0.5,
+          "limit": null,
+          "measured": -22.851284268655075,
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "error": null
+        },
+        {
+          "metric": "true_peak_dbtp",
+          "target": null,
+          "tolerance": null,
+          "limit": -1.0,
+          "measured": -10.267972047413934,
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "error": null
+        },
+        {
+          "metric": "lra",
+          "target": null,
+          "tolerance": null,
+          "limit": 18.0,
+          "measured": 1.1563464861152113,
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "error": null
+        }
+      ],
+      "errors": [],
+      "channel_config_hint": "stereo",
+      "channel_config_actual": "stereo"
+    }
+  ],
+  "unclassified": [],
+  "summary": {
+    "groups_total": 2,
+    "groups_passed": 2,
+    "groups_failed": 0,
+    "total_checks": 6,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "overall_pass": true
+  }
+}

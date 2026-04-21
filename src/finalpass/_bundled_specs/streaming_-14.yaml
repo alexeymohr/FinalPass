@@ -1,0 +1,15 @@
+name: streaming_-14
+display_name: "Streaming −14 LUFS (Spotify / YouTube / Tidal normalization target)"
+integrated_lufs:
+  target: -14.0
+  tolerance: 2.0
+true_peak_max_dbtp: -1.0
+lra_max: 18.0
+channel_config: "stereo"
+notes: |
+  Normalization target (Spotify, YouTube, Tidal, Apple Music). Informational
+  only — platforms normalize toward this value rather than rejecting
+  deliveries.
+  Source: https://soundplate.com/streaming-loudness-lufs-table/
+  Values are current best-public-knowledge targets; not an official platform
+  certification. Verify against your current delivery paperwork.

@@ -1,0 +1,34 @@
+# FinalPass classifier patterns. Case-insensitive regex, boundary-aware.
+# Schema: see finalpass.classify.ClassifierConfig (Pydantic v2).
+#
+# Every role token must be bracketed by start-of-string or one of
+# [_ - .] to avoid substring collisions (FIXING.wav must not match fx,
+# PREMIX.wav must not match pm). A filename may match at most one role;
+# multiple-role matches raise AmbiguousClassificationError.
+
+patterns:
+  - role: pm
+    regex: '(?i)(^|[_\-\.])(PM|PRINTMASTER|MIX|FINAL)([_\-\.]|$)'
+  - role: dx
+    regex: '(?i)(^|[_\-\.])(DX|DIA|DIALOG|DIALOGUE)([_\-\.]|$)'
+  - role: mx
+    regex: '(?i)(^|[_\-\.])(MX|MUS|MUSIC)([_\-\.]|$)'
+  - role: fx
+    regex: '(?i)(^|[_\-\.])(FX|SFX|EFFECTS)([_\-\.]|$)'
+  - role: me
+    regex: '(?i)(^|[_\-\.])(ME|M&E|M_AND_E|MANDE)([_\-\.]|$)'
+  - role: opt
+    regex: '(?i)(^|[_\-\.])(OPT|OPTIONAL|NARR|NARRATION)([_\-\.]|$)'
+
+group_identifier:
+  # First pattern to match wins. Group id = the uppercased matched substring.
+  patterns:
+    - '(?i)S(\d+)E(\d+)'
+    - '(?i)EP(\d+)'
+    - '(?i)R(\d+)'
+
+channel_config_tokens:
+  mono:   ['(?i)(^|[_\-\.])(MONO|1[_\-\.]?0)([_\-\.]|$)']
+  stereo: ['(?i)(^|[_\-\.])(STEREO|ST|2[_\-\.]?0)([_\-\.]|$)']
+  "5.1":  ['(?i)(^|[_\-\.])(5[_\-\.]?1|51)([_\-\.]|$)']
+  "7.1":  ['(?i)(^|[_\-\.])(7[_\-\.]?1|71)([_\-\.]|$)']

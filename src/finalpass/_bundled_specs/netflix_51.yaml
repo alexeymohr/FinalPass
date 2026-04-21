@@ -1,0 +1,19 @@
+name: netflix_51
+display_name: "Netflix Original — 5.1 (dialog-anchored)"
+integrated_lufs:
+  target: -27.0
+  tolerance: 2.0
+dialog_lufs:
+  target: -27.0
+  tolerance: 2.0
+true_peak_max_dbtp: -2.0
+lra_max: 18.0
+channel_config: "5.1"
+notes: |
+  Netflix — Sound Mix Specifications & Best Practices v1.6.
+  Source: https://partnerhelp.netflixstudios.com/hc/en-us/articles/360001794307
+  Same loudness targets as the stereo preset (-27 LKFS ±2 LU dialog-gated,
+  -2 dBTP, program LRA upper bound 18 LU). Channel order: SMPTE
+  L R C LFE Ls Rs. Provide --dx to check dialog LUFS separately.
+  Values are current best-public-knowledge targets; not an official platform
+  certification. Verify against your current delivery paperwork.
