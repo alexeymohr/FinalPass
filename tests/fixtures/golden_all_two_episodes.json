@@ -1,6 +1,6 @@
 {
   "finalpass_version": "0.1.0",
-  "schema_version": 3,
+  "schema_version": 5,
   "spec": {
     "name": "ebu_r128",
     "display_name": "EBU R128 \u2014 stereo (pre-produced)",
@@ -20,11 +20,11 @@
           "channel_count": 2,
           "duration_seconds": 10.0,
           "measurements": {
-            "integrated_lufs": -22.84269456095681,
-            "true_peak_dbtp": -9.608133363997757,
-            "lra": 1.1103476701764095,
-            "short_term_max_lufs": -16.900220134820632,
-            "momentary_max_lufs": -16.342592107761288
+            "integrated_lufs": -22.906775147968684,
+            "true_peak_dbtp": -9.558163876308372,
+            "lra": 1.1433352916708799,
+            "short_term_max_lufs": -16.82358550974242,
+            "momentary_max_lufs": -16.12045946922071
           },
           "checks": [
             {
@@ -32,7 +32,7 @@
               "target": -23.0,
               "tolerance": 0.5,
               "limit": null,
-              "measured": -22.84269456095681,
+              "measured": -22.906775147968684,
               "pass": true,
               "skipped": false,
               "reason": null,
@@ -43,7 +43,7 @@
               "target": null,
               "tolerance": null,
               "limit": -1.0,
-              "measured": -9.608133363997757,
+              "measured": -9.558163876308372,
               "pass": true,
               "skipped": false,
               "reason": null,
@@ -54,7 +54,7 @@
               "target": null,
               "tolerance": null,
               "limit": 18.0,
-              "measured": 1.1103476701764095,
+              "measured": 1.1433352916708799,
               "pass": true,
               "skipped": false,
               "reason": null,
@@ -66,9 +66,58 @@
           "channel_config_actual": "stereo"
         }
       ],
+      "null_test": {
+        "pass": true,
+        "skipped": false,
+        "reason": null,
+        "window_ms": 1000.0,
+        "hop_ms": 100.0,
+        "threshold_dbfs": -40.0,
+        "summary": {
+          "windows_total": 91,
+          "windows_flagged": 0,
+          "flagged_regions": 0,
+          "max_residual_rms_dbfs": -137.22593772433493,
+          "mean_residual_rms_dbfs": -137.24506668697092
+        },
+        "flags": [],
+        "errors": [],
+        "stem_strategy": "dx_mx_fx",
+        "selected_roles": [
+          "dx",
+          "mx",
+          "fx"
+        ]
+      },
+      "me_check": {
+        "pass": true,
+        "skipped": false,
+        "reason": null,
+        "analysis_signal": "mono_downmix_excluding_lfe",
+        "window_ms": 500.0,
+        "hop_ms": 100.0,
+        "band_low_hz": 200.0,
+        "band_high_hz": 4000.0,
+        "corr_threshold": 0.65,
+        "coherence_threshold": 0.6,
+        "dx_gate_dbfs": -45.0,
+        "me_floor_dbfs": -60.0,
+        "summary": {
+          "windows_total": 96,
+          "windows_gated_out": 0,
+          "windows_analyzed": 96,
+          "windows_flagged": 0,
+          "flagged_regions": 0,
+          "max_dialog_bleed_score": 0.07185904087903085,
+          "max_corr_abs": 0.04670837657137005,
+          "max_coherence_mean": 0.059560185568123224
+        },
+        "flags": [],
+        "errors": []
+      },
       "group_summary": {
-        "total_checks": 3,
-        "passed": 3,
+        "total_checks": 5,
+        "passed": 5,
         "failed": 0,
         "skipped": 0,
         "overall_pass": true
@@ -86,11 +135,11 @@
           "channel_count": 2,
           "duration_seconds": 10.0,
           "measurements": {
-            "integrated_lufs": -22.851284268655075,
-            "true_peak_dbtp": -10.267972047413934,
-            "lra": 1.1563464861152113,
-            "short_term_max_lufs": -16.84569297539372,
-            "momentary_max_lufs": -16.178090968267835
+            "integrated_lufs": -22.839645951569867,
+            "true_peak_dbtp": -9.203907170241779,
+            "lra": 1.0447281161120046,
+            "short_term_max_lufs": -16.81102071675297,
+            "momentary_max_lufs": -16.33746368445766
           },
           "checks": [
             {
@@ -98,7 +147,7 @@
               "target": -23.0,
               "tolerance": 0.5,
               "limit": null,
-              "measured": -22.851284268655075,
+              "measured": -22.839645951569867,
               "pass": true,
               "skipped": false,
               "reason": null,
@@ -109,7 +158,7 @@
               "target": null,
               "tolerance": null,
               "limit": -1.0,
-              "measured": -10.267972047413934,
+              "measured": -9.203907170241779,
               "pass": true,
               "skipped": false,
               "reason": null,
@@ -120,7 +169,7 @@
               "target": null,
               "tolerance": null,
               "limit": 18.0,
-              "measured": 1.1563464861152113,
+              "measured": 1.0447281161120046,
               "pass": true,
               "skipped": false,
               "reason": null,
@@ -132,9 +181,58 @@
           "channel_config_actual": "stereo"
         }
       ],
+      "null_test": {
+        "pass": true,
+        "skipped": false,
+        "reason": null,
+        "window_ms": 1000.0,
+        "hop_ms": 100.0,
+        "threshold_dbfs": -40.0,
+        "summary": {
+          "windows_total": 91,
+          "windows_flagged": 0,
+          "flagged_regions": 0,
+          "max_residual_rms_dbfs": -137.2185109577669,
+          "mean_residual_rms_dbfs": -137.24926998328607
+        },
+        "flags": [],
+        "errors": [],
+        "stem_strategy": "dx_mx_fx",
+        "selected_roles": [
+          "dx",
+          "mx",
+          "fx"
+        ]
+      },
+      "me_check": {
+        "pass": true,
+        "skipped": false,
+        "reason": null,
+        "analysis_signal": "mono_downmix_excluding_lfe",
+        "window_ms": 500.0,
+        "hop_ms": 100.0,
+        "band_low_hz": 200.0,
+        "band_high_hz": 4000.0,
+        "corr_threshold": 0.65,
+        "coherence_threshold": 0.6,
+        "dx_gate_dbfs": -45.0,
+        "me_floor_dbfs": -60.0,
+        "summary": {
+          "windows_total": 96,
+          "windows_gated_out": 0,
+          "windows_analyzed": 96,
+          "windows_flagged": 0,
+          "flagged_regions": 0,
+          "max_dialog_bleed_score": 0.062349644424744464,
+          "max_corr_abs": 0.040527268876083905,
+          "max_coherence_mean": 0.05920309521029805
+        },
+        "flags": [],
+        "errors": []
+      },
       "group_summary": {
-        "total_checks": 3,
-        "passed": 3,
+        "total_checks": 5,
+        "passed": 5,
         "failed": 0,
         "skipped": 0,
         "overall_pass": true
@@ -151,11 +249,11 @@
       "channel_count": 2,
       "duration_seconds": 10.0,
       "measurements": {
-        "integrated_lufs": -22.84269456095681,
-        "true_peak_dbtp": -9.608133363997757,
-        "lra": 1.1103476701764095,
-        "short_term_max_lufs": -16.900220134820632,
-        "momentary_max_lufs": -16.342592107761288
+        "integrated_lufs": -22.906775147968684,
+        "true_peak_dbtp": -9.558163876308372,
+        "lra": 1.1433352916708799,
+        "short_term_max_lufs": -16.82358550974242,
+        "momentary_max_lufs": -16.12045946922071
       },
       "checks": [
         {
@@ -163,7 +261,7 @@
           "target": -23.0,
           "tolerance": 0.5,
           "limit": null,
-          "measured": -22.84269456095681,
+          "measured": -22.906775147968684,
           "pass": true,
           "skipped": false,
           "reason": null,
@@ -174,7 +272,7 @@
           "target": null,
           "tolerance": null,
           "limit": -1.0,
-          "measured": -9.608133363997757,
+          "measured": -9.558163876308372,
           "pass": true,
           "skipped": false,
           "reason": null,
@@ -185,7 +283,7 @@
           "target": null,
           "tolerance": null,
           "limit": 18.0,
-          "measured": 1.1103476701764095,
+          "measured": 1.1433352916708799,
           "pass": true,
           "skipped": false,
           "reason": null,
@@ -204,11 +302,11 @@
       "channel_count": 2,
       "duration_seconds": 10.0,
       "measurements": {
-        "integrated_lufs": -22.851284268655075,
-        "true_peak_dbtp": -10.267972047413934,
-        "lra": 1.1563464861152113,
-        "short_term_max_lufs": -16.84569297539372,
-        "momentary_max_lufs": -16.178090968267835
+        "integrated_lufs": -22.839645951569867,
+        "true_peak_dbtp": -9.203907170241779,
+        "lra": 1.0447281161120046,
+        "short_term_max_lufs": -16.81102071675297,
+        "momentary_max_lufs": -16.33746368445766
       },
       "checks": [
         {
@@ -216,7 +314,7 @@
           "target": -23.0,
           "tolerance": 0.5,
           "limit": null,
-          "measured": -22.851284268655075,
+          "measured": -22.839645951569867,
           "pass": true,
           "skipped": false,
           "reason": null,
@@ -227,7 +325,7 @@
           "target": null,
           "tolerance": null,
           "limit": -1.0,
-          "measured": -10.267972047413934,
+          "measured": -9.203907170241779,
           "pass": true,
           "skipped": false,
           "reason": null,
@@ -238,7 +336,7 @@
           "target": null,
           "tolerance": null,
           "limit": 18.0,
-          "measured": 1.1563464861152113,
+          "measured": 1.0447281161120046,
           "pass": true,
           "skipped": false,
           "reason": null,
@@ -255,8 +353,8 @@
     "groups_total": 2,
     "groups_passed": 2,
     "groups_failed": 0,
-    "total_checks": 6,
-    "passed": 6,
+    "total_checks": 10,
+    "passed": 10,
     "failed": 0,
     "skipped": 0,
     "overall_pass": true

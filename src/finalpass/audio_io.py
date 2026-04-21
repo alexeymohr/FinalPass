@@ -25,6 +25,7 @@ _SUBTYPE_BIT_DEPTH: dict[str, int] = {
 }
 
 _ALLOWED_EXTENSIONS = {".wav", ".bwf"}
+_CHANNEL_CONFIG_FROM_COUNT: dict[int, str] = {1: "mono", 2: "stereo", 6: "5.1", 8: "7.1"}
 
 
 class AudioFile(BaseModel):
@@ -36,6 +37,15 @@ class AudioFile(BaseModel):
     bit_depth: int
     channel_count: int
     duration_seconds: float
+
+    @property
+    def sample_count(self) -> int:
+        return int(self.data.shape[0])
+
+
+def channel_config_from_count(n_channels: int) -> str | None:
+    """Map a raw channel count to the supported FinalPass channel label."""
+    return _CHANNEL_CONFIG_FROM_COUNT.get(n_channels)
 
 
 def read_wav(path: Path) -> AudioFile:

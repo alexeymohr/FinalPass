@@ -1,8 +1,8 @@
 # FinalPass
 
-Delivery QC CLI for post-production sound. Runs loudness, stem-sum null, and M&E dialogue-bleed passes against a named spec; writes JSON, an HTML report, and an AAF of Pro Tools markers.
+Delivery QC CLI for post-production sound. Phase 4 ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, and folder-level auto-null / auto-M&E against a named spec. HTML reporting and AAF marker export land in later phases.
 
-**Status: Phase 1 (loudness pass only).** The `null`, `me`, HTML report, and AAF export passes land in later phases.
+**Status: Phase 4 complete.** `loudness`, standalone `null`, standalone `me`, and `all` with auto-null / auto-M&E are implemented. HTML report and AAF export land in later phases.
 
 ## Install (dev)
 
@@ -19,8 +19,24 @@ Python 3.11+. WAV/BWF input.
 uv run finalpass specs list
 uv run finalpass specs show <name>
 uv run finalpass loudness <file>... --spec <name> [--dx <file>] [--out <dir>] [--json-only] [--fps <rate>]
+uv run finalpass null <pm> <stems>... [--out <dir>] [--json-only] [--fps <rate>]
+                                      [--window-ms <ms>] [--hop-ms <ms>] [--threshold-dbfs <dbfs>]
+uv run finalpass me <me_file> --dx <dx_file> [--out <dir>] [--json-only] [--fps <rate>]
+                                             [--window-ms <ms>] [--hop-ms <ms>]
+                                             [--band-low-hz <hz>] [--band-high-hz <hz>]
+                                             [--corr-threshold <value>]
+                                             [--coherence-threshold <value>]
+                                             [--dx-gate-dbfs <dbfs>] [--me-floor-dbfs <dbfs>]
 uv run finalpass all <folder> --spec <name> [--out <dir>] [--json-only] [--fps <rate>]
                                             [--patterns <config.yaml>] [--include-unclassified]
+                                            [--null-window-ms <ms>] [--null-hop-ms <ms>]
+                                            [--null-threshold-dbfs <dbfs>]
+                                            [--me-window-ms <ms>] [--me-hop-ms <ms>]
+                                            [--me-band-low-hz <hz>] [--me-band-high-hz <hz>]
+                                            [--me-corr-threshold <value>]
+                                            [--me-coherence-threshold <value>]
+                                            [--me-dx-gate-dbfs <dbfs>]
+                                            [--me-me-floor-dbfs <dbfs>]
 ```
 
 Exit codes: `0` all pass, `1` failures found, `2` tool error.
@@ -28,8 +44,10 @@ Exit codes: `0` all pass, `1` failures found, `2` tool error.
 ### `finalpass all` quickstart
 
 Point it at a folder. FinalPass classifies each WAV by role (PM, DX, MX, FX,
-M&E, optional), groups files by episode/reel/fallback identifier, and runs
-the loudness pass on each group.
+M&E, optional), groups files by episode/reel/fallback identifier, runs the
+loudness pass on each group, auto-runs the null pass when a group has a
+reconstructable stem set, and auto-runs the M&E bleed heuristic when a group
+has both `dx` and `me`.
 
 ```
 uv run python examples/_generate.py          # synthesize a two-episode delivery
@@ -39,10 +57,26 @@ uv run finalpass all examples/delivery_two_episodes --spec ebu_r128
 With a dialog-anchored spec (`netflix_stereo`, `netflix_51`), the classified
 DX file is automatically measured against `dialog_lufs` — no `--dx` flag.
 
-Schema: `finalpass all` emits `schema_version: 3` with `groups[]`,
-`unclassified[]`, `command: "all"`, `folder`, and per-file
-`channel_config_hint`/`channel_config_actual`. `finalpass loudness` emits
-`schema_version: 1` (unchanged from Phase 1).
+Auto-null stem selection is intentionally narrow:
+- prefer `dx + mx + fx`
+- fallback to `dx + me`
+- otherwise the group records `Null: SKIPPED — insufficient_stems_for_auto_null`
+
+Auto-M&E runs only on `dx + me`. If either role is missing, the group records
+`M&E: SKIPPED — missing_dx_or_me`.
+
+Use standalone `finalpass null` for any unusual or manual stem combination.
+Use standalone `finalpass me` when you want to tune the speech-band, gate, or
+threshold settings directly.
+
+Schema versions:
+- `finalpass loudness` emits `schema_version: 1`
+- `finalpass null` emits `schema_version: 1`
+- `finalpass me` emits `schema_version: 1`
+- `finalpass all` emits `schema_version: 5` with `groups[].null_test`,
+  `groups[].me_check`,
+  `unclassified[]`, `command: "all"`, `folder`, and per-file
+  `channel_config_hint`/`channel_config_actual`
 
 ### Filename conventions
 
@@ -74,9 +108,11 @@ keys as [_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml)).
 
 ## Scope — v0.1
 
-**In:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Three passes: loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), stem sum null, M&E dialogue bleed. Bundled spec presets plus user-overridable YAML. JSON + HTML + AAF markers + summary.
+**Current (through Phase 4):** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with conservative auto-null plus auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + terminal summary.
 
-**Out (non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification — FinalPass measures, it does not bless.
+**Later in v0.1:** HTML report and AAF markers.
+
+**Out (non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Speech recognition, transcription, diarization, or ML/VAD. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification — FinalPass measures, it does not bless.
 
 ## Bundled specs (Phase 1)
 

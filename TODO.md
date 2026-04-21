@@ -2,20 +2,6 @@
 
 Features outside the current phase's spec go here, not into the code.
 
-## Phase 2 — File classifier + `all`
-- Filename pattern classifier (PM, DX, MX, FX, ME stems).
-- `finalpass all <folder>` — runs loudness pass across classified files.
-- Summary text output.
-
-## Phase 3 — Stem sum null
-- `finalpass null <printmaster> <stem>...`
-- Windowed residual RMS, flagged regions with TC.
-- Integration into `all`.
-
-## Phase 4 — M&E dialogue check
-- `finalpass me <me_file> --dx <dx_file>`
-- Normalized cross-correlation + 200 Hz – 4 kHz band-limited coherence.
-
 ## Phase 5 — HTML report
 - `report.html` — jinja2 template, inline SVG timelines, self-contained single file.
 
@@ -36,9 +22,10 @@ Features outside the current phase's spec go here, not into the code.
 - **Open question #1 (Report model)** resolved **separate models**, not unified.
   - Phase 1 (`finalpass loudness`) emits `Report` at `schema_version: 1` with
     `summary: Summary` (no `groups_*` fields).
-  - Phase 2 (`finalpass all`) emits `AllReport` at `schema_version: 3` with
-    `groups[]`, `unclassified[]`, `command`, `folder`, and `summary: AllSummary`
-    (which has `groups_total/passed/failed` on top of the Phase 1 totals).
+  - The integrated folder path now emits `AllReport` at `schema_version: 5`
+    with `groups[]`, `groups[].null_test`, `groups[].me_check`, `unclassified[]`, `command`,
+    `folder`, and `summary: AllSummary` (which has `groups_total/passed/failed`
+    on top of the Phase 1 totals).
   - `FileReport`, `Measurements`, `CheckResult` are shared between both reports.
   - **Why not unified**: PHASE_2_SPEC.md says "Phase 1's schema_version: 1
     output from the `loudness` subcommand stays at 1 — don't retrofit it".
@@ -48,6 +35,42 @@ Features outside the current phase's spec go here, not into the code.
     drop `measured: null` on skipped checks and break the Phase 1 golden.
     Separate classes make the version contract obvious and keep the Phase 1
     golden untouched.
+
+## Phase 3 — design decisions
+
+- **Standalone null got its own schema.**
+  - `finalpass null` emits `NullReport` at `schema_version: 1`.
+  - `finalpass all` bumps to `schema_version: 4` and adds `groups[].null_test`
+    rather than retrofitting the Phase 1 `loudness` shape.
+- **Auto-null stays conservative.**
+  - Preferred auto-selection is `dx + mx + fx`.
+  - Fallback is `dx + me`.
+  - Everything else records `insufficient_stems_for_auto_null` and skips the
+    null check rather than pretending a partial reconstruction is meaningful.
+- **Detected offsets fail cleanly; they are not auto-corrected.**
+  - The null pass raises `AlignmentError` on evidence of a constant global
+    offset instead of silently shifting inputs and continuing.
+  - This keeps Phase 3 aligned with the explicit "no auto-alignment" rule and
+    preserves the loudness/null distinction for later AAF marker work.
+
+## Phase 4 — design decisions
+
+- **Standalone M&E got its own schema.**
+  - `finalpass me` emits `MEReport` at `schema_version: 1`.
+  - `finalpass all` bumps to `schema_version: 5` and adds `groups[].me_check`
+    without retrofitting the Phase 1 or Phase 3 standalone shapes.
+- **Auto-M&E is deliberately narrow.**
+  - The integrated path runs only when a group has both `dx` and `me`.
+  - Missing either role records `missing_dx_or_me` and skips the M&E check
+    rather than guessing around partial material.
+- **Phase 4 stays DSP-only.**
+  - The M&E heuristic is speech-band filtering + zero-lag correlation +
+    coherence, with DX gating and an M&E floor.
+  - No ML, speech recognition, transcription, diarization, or auto-alignment
+    entered the Phase 4 codepath.
+- **Shared marker shape stayed shared.**
+  - Phase 4 reuses the Phase 3 `FlaggedRegion` contract and adds `code: "ME"`
+    / `metric: "dialog_bleed_score"` instead of inventing a second flag schema.
 
 ## Known fragilities
 - **Private API use: `pyloudnorm.Meter._filters`.** `finalpass.loudness._k_weight`

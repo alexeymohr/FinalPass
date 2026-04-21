@@ -14,6 +14,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from finalpass.cli import main
+from tests.audio_cases import build_two_episodes
 
 FLOAT_TOLERANCE = 0.1
 
@@ -85,34 +86,8 @@ def _normalize_all(report: dict) -> dict:
 
 
 def test_golden_all_two_episodes(tmp_path: Path) -> None:
-    """Golden for `finalpass all` — two-episode delivery, both groups pass."""
-    import numpy as np
-    import soundfile as sf
-
-    SR = 48000
-    SEED = 0xC0DE
-
-    def _pink(n_samples, n_channels, seed):
-        rng = np.random.default_rng(seed)
-        white = rng.standard_normal((n_samples, n_channels))
-        pink = np.zeros_like(white)
-        pink[0] = 0.05 * white[0]
-        for i in range(1, n_samples):
-            pink[i] = 0.99 * pink[i - 1] + 0.05 * white[i]
-        rms = float(np.sqrt(np.mean(pink ** 2)))
-        if rms > 0:
-            pink *= (10 ** (-23.0 / 20.0)) / rms
-        return pink.astype(np.float64)
-
-    folder = tmp_path / "delivery"
-    folder.mkdir()
-    for idx, name in enumerate([
-        "SHOW_S01E03_PM_STEREO.wav",
-        "SHOW_S01E03_DX_STEREO.wav",
-        "SHOW_S01E04_PM_STEREO.wav",
-        "SHOW_S01E04_DX_STEREO.wav",
-    ]):
-        sf.write(str(folder / name), _pink(10 * SR, 2, seed=SEED + idx), SR, subtype="PCM_24")
+    """Golden for `finalpass all` — two-episode exact-sum delivery, both groups pass."""
+    folder = build_two_episodes(tmp_path / "delivery")
 
     runner = CliRunner()
     result = runner.invoke(main, [

@@ -1,8 +1,9 @@
 """Pydantic v2 models for the on-disk JSON reports.
 
-Phase 1's ``loudness`` command emits schema v1; Phase 2's ``all`` command emits
-schema v3. Kept separate from :mod:`finalpass.specs` so the spec input schema
-and the report output schemas can evolve independently.
+Phase 1's ``loudness`` command emits schema v1, Phase 3's ``null`` command
+emits schema v1, Phase 4's ``me`` command emits schema v1, and the integrated
+``all`` command emits schema v5. Kept separate from :mod:`finalpass.specs` so
+the spec input schema and the report output schemas can evolve independently.
 """
 
 from __future__ import annotations
@@ -108,6 +109,100 @@ class GroupError(BaseModel):
     message: str
 
 
+class FlaggedRegion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal["NULL", "ME"]
+    metric: Literal["residual_rms_dbfs", "dialog_bleed_score"]
+    value: float
+    threshold: float
+    start_sample: int
+    end_sample: int
+    start_tc: str
+    end_tc: str
+    duration_seconds: float
+    detail: str
+
+
+class NullSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    windows_total: int
+    windows_flagged: int
+    flagged_regions: int
+    max_residual_rms_dbfs: float
+    mean_residual_rms_dbfs: float
+
+
+class NullTestResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    pass_: bool | None = Field(alias="pass")
+    skipped: bool = False
+    reason: str | None = None
+    window_ms: float
+    hop_ms: float
+    threshold_dbfs: float
+    summary: NullSummary | None = None
+    flags: list[FlaggedRegion] = Field(default_factory=list)
+    errors: list[GroupError] = Field(default_factory=list)
+
+
+class AutoNullTestResult(NullTestResult):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    stem_strategy: Literal["dx_mx_fx", "dx_me"] | None = None
+    selected_roles: list[Literal["dx", "mx", "fx", "me"]] = Field(default_factory=list)
+
+
+class AnalysisInputFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    sample_rate: int
+    bit_depth: int
+    channel_count: int
+    channel_config_actual: str | None = None
+    duration_seconds: float
+
+
+# Back-compat alias for the existing standalone `null` path.
+NullInputFile = AnalysisInputFile
+
+
+class MECheckSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    windows_total: int
+    windows_gated_out: int
+    windows_analyzed: int
+    windows_flagged: int
+    flagged_regions: int
+    max_dialog_bleed_score: float
+    max_corr_abs: float
+    max_coherence_mean: float
+
+
+class MECheckResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    pass_: bool | None = Field(alias="pass")
+    skipped: bool = False
+    reason: str | None = None
+    analysis_signal: Literal["mono_downmix_excluding_lfe"]
+    window_ms: float
+    hop_ms: float
+    band_low_hz: float
+    band_high_hz: float
+    corr_threshold: float
+    coherence_threshold: float
+    dx_gate_dbfs: float
+    me_floor_dbfs: float
+    summary: MECheckSummary | None = None
+    flags: list[FlaggedRegion] = Field(default_factory=list)
+    errors: list[GroupError] = Field(default_factory=list)
+
+
 class GroupSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -123,6 +218,8 @@ class Group(BaseModel):
 
     group_id: str
     files: list[FileReport]
+    null_test: AutoNullTestResult | None = None
+    me_check: MECheckResult | None = None
     group_summary: GroupSummary
     errors: list[GroupError] = Field(default_factory=list)
 
@@ -148,7 +245,7 @@ class AllSummary(BaseModel):
 
 
 class AllReport(BaseModel):
-    """Phase 2 `all` command report — `schema_version == 3`."""
+    """Phase 4 `all` command report — `schema_version == 5`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -164,3 +261,37 @@ class AllReport(BaseModel):
     files: list[FileReport]
     unclassified: list[UnclassifiedEntry]
     summary: AllSummary
+
+
+class NullReport(BaseModel):
+    """Phase 3 standalone `null` command report — `schema_version == 1`."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    finalpass_version: str
+    schema_version: int
+    command: Literal["null"]
+    run_id: str
+    run_started_at: str
+    fps: float
+    printmaster: AnalysisInputFile
+    stems: list[AnalysisInputFile]
+    null_test: NullTestResult
+    summary: Summary
+
+
+class MEReport(BaseModel):
+    """Phase 4 standalone `me` command report — `schema_version == 1`."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    finalpass_version: str
+    schema_version: int
+    command: Literal["me"]
+    run_id: str
+    run_started_at: str
+    fps: float
+    me_file: AnalysisInputFile
+    dx_file: AnalysisInputFile
+    me_check: MECheckResult
+    summary: Summary

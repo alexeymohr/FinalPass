@@ -35,3 +35,23 @@ class DuplicateRoleError(FinalPassError):
 
 class NoAudioFilesError(FinalPassError):
     """The target folder contains no readable WAV/BWF files."""
+
+
+class SampleRateMismatchError(FinalPassError):
+    """A set of files does not share one sample rate."""
+
+
+class SampleCountMismatchError(FinalPassError):
+    """A set of files does not share one total sample count."""
+
+
+class AlignmentError(FinalPassError):
+    """A constant non-zero global offset was detected between inputs."""
+
+
+class UnsupportedChannelConfigError(FinalPassError):
+    """A file's channel count is outside FinalPass v0.1 support."""
+
+
+class ChannelConfigLabelMismatch(FinalPassError):
+    """Filename channel label and file-header channel layout disagree."""

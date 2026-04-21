@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from click.testing import CliRunner
+
+from finalpass.cli import main
+from tests.audio_cases import SEED, SR, exact_sum_components, shift_with_zeros, write_audio
+
+
+def _write_exact_sum_case(root: Path, *, seconds: float = 10.0, base_seed: int = SEED) -> dict[str, Path]:
+    data = exact_sum_components(seconds=seconds, base_seed=base_seed)
+    root.mkdir(parents=True, exist_ok=True)
+    return {
+        "pm": write_audio(root / "SHOW_S01E03_PM_STEREO.wav", data["pm"]),
+        "dx": write_audio(root / "SHOW_S01E03_DX_STEREO.wav", data["dx"]),
+        "mx": write_audio(root / "SHOW_S01E03_MX_STEREO.wav", data["mx"]),
+        "fx": write_audio(root / "SHOW_S01E03_FX_STEREO.wav", data["fx"]),
+    }
+
+
+def test_null_exact_sum_passes(tmp_path: Path) -> None:
+    files = _write_exact_sum_case(tmp_path / "case")
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--json-only",
+    ])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["schema_version"] == 1
+    assert data["command"] == "null"
+    assert data["null_test"]["pass"] is True
+    assert data["null_test"]["flags"] == []
+    assert data["summary"]["overall_pass"] is True
+
+
+def test_null_injected_gross_error_fails_with_flagged_region(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    data = exact_sum_components(base_seed=SEED + 100)
+    start = int(round(5.0 * SR))
+    end = int(round(7.0 * SR))
+    data["pm"][start:end] = data["pm"][start:end] - data["fx"][start:end]
+    files = {
+        "pm": write_audio(root / "SHOW_S01E04_PM_STEREO.wav", data["pm"]),
+        "dx": write_audio(root / "SHOW_S01E04_DX_STEREO.wav", data["dx"]),
+        "mx": write_audio(root / "SHOW_S01E04_MX_STEREO.wav", data["mx"]),
+        "fx": write_audio(root / "SHOW_S01E04_FX_STEREO.wav", data["fx"]),
+    }
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--json-only",
+    ])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["null_test"]["pass"] is False
+    assert payload["null_test"]["flags"]
+    first = payload["null_test"]["flags"][0]
+    assert first["start_sample"] <= start
+    assert first["end_sample"] >= end
+
+
+def test_null_sample_rate_mismatch_exits_two(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    data = exact_sum_components(base_seed=SEED + 200)
+    pm = write_audio(root / "PM.wav", data["pm"], sr=48000)
+    dx = write_audio(root / "DX.wav", data["dx"], sr=44100)
+    mx = write_audio(root / "MX.wav", data["mx"], sr=48000)
+    fx = write_audio(root / "FX.wav", data["fx"], sr=48000)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["null", str(pm), str(dx), str(mx), str(fx)])
+    assert result.exit_code == 2
+    assert "sample rate" in result.output.lower()
+
+
+def test_null_channel_count_mismatch_exits_two(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    stereo = exact_sum_components(base_seed=SEED + 300, n_channels=2)
+    mono = exact_sum_components(base_seed=SEED + 301, n_channels=1)
+    pm = write_audio(root / "PM.wav", stereo["pm"])
+    dx = write_audio(root / "DX.wav", mono["dx"])
+    mx = write_audio(root / "MX.wav", stereo["mx"])
+    fx = write_audio(root / "FX.wav", stereo["fx"])
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["null", str(pm), str(dx), str(mx), str(fx)])
+    assert result.exit_code == 2
+    assert "channel count" in result.output.lower()
+
+
+def test_null_sample_count_mismatch_exits_two(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    long = exact_sum_components(seconds=10.0, base_seed=SEED + 400)
+    short = exact_sum_components(seconds=8.0, base_seed=SEED + 401)
+    pm = write_audio(root / "PM.wav", long["pm"])
+    dx = write_audio(root / "DX.wav", short["dx"])
+    mx = write_audio(root / "MX.wav", long["mx"])
+    fx = write_audio(root / "FX.wav", long["fx"])
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["null", str(pm), str(dx), str(mx), str(fx)])
+    assert result.exit_code == 2
+    assert "sample count" in result.output.lower() or "samples" in result.output.lower()
+
+
+def test_null_detected_global_offset_exits_two(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    data = exact_sum_components(base_seed=SEED + 500)
+    shifted_dx = shift_with_zeros(data["dx"], 2400)
+    pm = write_audio(root / "PM.wav", data["pm"])
+    dx = write_audio(root / "DX.wav", shifted_dx)
+    mx = write_audio(root / "MX.wav", data["mx"])
+    fx = write_audio(root / "FX.wav", data["fx"])
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["null", str(pm), str(dx), str(mx), str(fx)])
+    assert result.exit_code == 2
+    assert "offset" in result.output.lower() or "align" in result.output.lower()
+
+
+def test_null_short_file_shorter_than_window_uses_single_window(tmp_path: Path) -> None:
+    files = _write_exact_sum_case(tmp_path / "case", seconds=0.5, base_seed=SEED + 600)
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--json-only",
+    ])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["null_test"]["summary"]["windows_total"] == 1
