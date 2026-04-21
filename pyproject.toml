@@ -12,7 +12,11 @@ requires-python = ">=3.11"
 authors = [{ name = "Alexey Mohr" }]
 dependencies = [
     "click>=8.1",
+    "jinja2>=3.1.6",
     "numpy>=1.26",
+    # Exact Phase 6 pin: pyaaf2 1.7.1 is the latest aged release verified
+    # against the 7-day supply-chain hold.
+    "pyaaf2==1.7.1",
     # pydantic <2.13 pin: 2.13.x was released in the last 7 days (supply-chain
     # hold). Remove the upper bound after 2026-04-20 when 2.13.x ages in.
     "pydantic>=2.6,<2.13",
@@ -38,6 +42,7 @@ packages = ["src/finalpass"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/finalpass/_bundled_specs" = "finalpass/_bundled_specs"
 "src/finalpass/_bundled_patterns.yaml" = "finalpass/_bundled_patterns.yaml"
+"src/finalpass/templates" = "finalpass/templates"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

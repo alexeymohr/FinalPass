@@ -1,8 +1,8 @@
 # FinalPass
 
-Delivery QC CLI for post-production sound. Phase 4 ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, and folder-level auto-null / auto-M&E against a named spec. HTML reporting and AAF marker export land in later phases.
+Delivery QC CLI for post-production sound. Phase 6 ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, and conditional AAF marker export for timed null/M&E flags.
 
-**Status: Phase 4 complete.** `loudness`, standalone `null`, standalone `me`, and `all` with auto-null / auto-M&E are implemented. HTML report and AAF export land in later phases.
+**Status: Phase 6 complete.** `loudness`, standalone `null`, standalone `me`, and `all` with auto-null / auto-M&E are implemented. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
 
 ## Install (dev)
 
@@ -40,6 +40,30 @@ uv run finalpass all <folder> --spec <name> [--out <dir>] [--json-only] [--fps <
 ```
 
 Exit codes: `0` all pass, `1` failures found, `2` tool error.
+
+## Artifacts
+
+Normal runs always write these files to `--out` (default `./finalpass-report/`):
+
+- `report.json` — the stable machine-readable contract.
+- `report.html` — a self-contained local HTML report rendered from the persisted report model only.
+
+Conditional artifact:
+
+- `markers.aaf` — written only when the run contains one or more timed `null` / `me` flagged regions.
+
+`--json-only` writes no files and emits JSON to stdout only.
+
+Still not implemented:
+
+- `summary.txt` — not a current output artifact.
+
+AAF export stays intentionally narrow in v0.1:
+
+- standalone `null` exports `null_test.flags[]`
+- standalone `me` exports `me_check.flags[]`
+- `all` exports only `groups[].null_test.flags[]` and `groups[].me_check.flags[]`
+- no synthetic markers are created for loudness-only failures, group-level errors, or skipped checks
 
 ### `finalpass all` quickstart
 
@@ -108,9 +132,9 @@ keys as [_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml)).
 
 ## Scope — v0.1
 
-**Current (through Phase 4):** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with conservative auto-null plus auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + terminal summary.
+**Current (through Phase 5):** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with conservative auto-null plus auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + terminal summary.
 
-**Later in v0.1:** HTML report and AAF markers.
+**Later in v0.1:** AAF markers.
 
 **Out (non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Speech recognition, transcription, diarization, or ML/VAD. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification — FinalPass measures, it does not bless.
 

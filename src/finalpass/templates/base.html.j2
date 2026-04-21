@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · FinalPass</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f5;
+      --panel: #ffffff;
+      --panel-alt: #f1f2ee;
+      --text: #1e2420;
+      --muted: #5f6b63;
+      --line: #d8ddd6;
+      --pass-bg: #dff2e4;
+      --pass-text: #155d3b;
+      --fail-bg: #f6d9d3;
+      --fail-text: #8b1e1e;
+      --skip-bg: #ece9df;
+      --skip-text: #5d5647;
+      --accent: #27566b;
+      --rail: #e4e7e1;
+      --flag: #c4472d;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #f3f4ef 0%, #fafaf8 100%);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.45;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 56px; }
+    h1, h2, h3 { margin: 0 0 12px; line-height: 1.15; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.25rem; margin-top: 24px; }
+    h3 { font-size: 1rem; margin-top: 20px; }
+    p, ul { margin: 0 0 12px; }
+    .eyebrow { margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; }
+    .header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 24px;
+    }
+    .lede { color: var(--muted); max-width: 70ch; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 1px 0 rgba(16, 24, 40, 0.03);
+    }
+    .card-muted { background: var(--panel-alt); }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      font-size: 0.82rem;
+    }
+    .badge-pass { background: var(--pass-bg); color: var(--pass-text); }
+    .badge-fail { background: var(--fail-bg); color: var(--fail-text); }
+    .badge-skipped { background: var(--skip-bg); color: var(--skip-text); }
+    .summary-grid, .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: #fcfcfb;
+    }
+    .stat-label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .stat-value { font-size: 1.08rem; font-weight: 700; }
+    .meta-grid .stat-value { font-size: 0.95rem; font-weight: 600; word-break: break-word; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.94rem;
+    }
+    th, td {
+      border-top: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: #fbfbf9;
+    }
+    .mono { font-family: var(--mono); font-size: 0.92rem; }
+    .muted { color: var(--muted); }
+    .section-stack > * + * { margin-top: 14px; }
+    .timeline {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: #fcfcfb;
+    }
+    .timeline svg { width: 100%; height: auto; display: block; }
+    .timeline-caption { margin-top: 8px; color: var(--muted); font-size: 0.88rem; }
+    .errors {
+      margin: 10px 0 0;
+      padding-left: 1.2rem;
+    }
+    .group-block {
+      border-top: 2px solid var(--line);
+      padding-top: 20px;
+      margin-top: 28px;
+    }
+    .subsection { margin-top: 18px; }
+    .artifact-list { margin: 0; padding-left: 1.2rem; }
+    @media (max-width: 720px) {
+      main { padding: 20px 14px 40px; }
+      .header { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="header">
+      <div>
+        <p class="eyebrow">FinalPass HTML Report</p>
+        <h1>{{ title }}</h1>
+        <p class="lede">{{ subtitle }}</p>
+      </div>
+      <div>
+        {% block header_badge %}{% endblock %}
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Run Metadata</h2>
+      <div class="meta-grid">
+        <div class="stat"><div class="stat-label">Command</div><div class="stat-value">{{ command }}</div></div>
+        <div class="stat"><div class="stat-label">FinalPass version</div><div class="stat-value mono">{{ report.finalpass_version }}</div></div>
+        <div class="stat"><div class="stat-label">Schema version</div><div class="stat-value mono">{{ report.schema_version }}</div></div>
+        <div class="stat"><div class="stat-label">Run ID</div><div class="stat-value mono">{{ report.run_id }}</div></div>
+        <div class="stat"><div class="stat-label">Run started</div><div class="stat-value mono">{{ report.run_started_at }}</div></div>
+        <div class="stat"><div class="stat-label">Artifacts</div><div class="stat-value">{% for artifact in artifacts %}<span class="mono">{{ artifact }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</div></div>
+      </div>
+    </section>
+
+    {% block body %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -55,3 +55,11 @@ class UnsupportedChannelConfigError(FinalPassError):
 
 class ChannelConfigLabelMismatch(FinalPassError):
     """Filename channel label and file-header channel layout disagree."""
+
+
+class ReportRenderError(FinalPassError):
+    """HTML report rendering failed."""
+
+
+class AAFExportError(FinalPassError):
+    """AAF marker export failed."""

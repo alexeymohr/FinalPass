@@ -287,6 +287,63 @@ def test_all_auto_me_fail(tmp_path: Path) -> None:
     assert by_gid["S01E04"]["me_check"]["flags"][0]["metric"] == "dialog_bleed_score"
 
 
+def test_all_normal_run_writes_json_and_html(tmp_path: Path) -> None:
+    folder = build_two_episodes(tmp_path / "delivery", e04_null_defect=True, e04_me_bleed_defect=True)
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 1, result.output
+    json_path = out_dir / "report.json"
+    html_path = out_dir / "report.html"
+    aaf_path = out_dir / "markers.aaf"
+    assert json_path.exists()
+    assert html_path.exists()
+    assert aaf_path.exists()
+    assert "report.json" in result.output
+    assert "report.html" in result.output
+    assert "markers.aaf" in result.output
+    html = html_path.read_text(encoding="utf-8")
+    assert "Measured files" in html
+    assert "Null check" in html
+    assert "M&amp;E check" in html
+
+
+def test_all_json_only_writes_no_files(tmp_path: Path) -> None:
+    folder = build_two_episodes(tmp_path / "delivery")
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+        "--json-only",
+    ])
+    assert result.exit_code == 0, result.output
+    assert not (out_dir / "report.json").exists()
+    assert not (out_dir / "report.html").exists()
+    assert not (out_dir / "markers.aaf").exists()
+
+
+def test_all_clean_normal_run_writes_no_aaf(tmp_path: Path) -> None:
+    folder = build_two_episodes(tmp_path / "delivery")
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 0, result.output
+    assert (out_dir / "report.json").exists()
+    assert (out_dir / "report.html").exists()
+    assert not (out_dir / "markers.aaf").exists()
+    assert "No exportable timed markers" in result.output
+
+
 def test_all_missing_dx_or_me_skips_auto_me(tmp_path: Path) -> None:
     folder = tmp_path / "delivery"
     build_group(folder, "S01E03", write_roles=("pm", "dx"), base_seed=SEED + 800)

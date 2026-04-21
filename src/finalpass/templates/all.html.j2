@@ -1,0 +1,156 @@
+{% extends "base.html.j2" %}
+{% import "_macros.html.j2" as macros %}
+
+{% block header_badge %}
+{{ macros.badge(report.summary.overall_pass|verdict_label(false), report.summary.overall_pass|verdict_class(false)) }}
+{% endblock %}
+
+{% block body %}
+<section class="card">
+  <h2>Run Summary</h2>
+  <p class="muted">{{ report.spec.name }} — {{ report.spec.display_name }}</p>
+  {{ macros.summary_stats([
+    ("Overall", macros.badge(report.summary.overall_pass|verdict_label(false), report.summary.overall_pass|verdict_class(false))),
+    ("Groups total", report.summary.groups_total),
+    ("Groups passed", report.summary.groups_passed),
+    ("Groups failed", report.summary.groups_failed),
+    ("Total checks", report.summary.total_checks),
+    ("Passed", report.summary.passed),
+    ("Failed", report.summary.failed),
+    ("Skipped", report.summary.skipped),
+  ]) }}
+</section>
+
+{% if report.unclassified %}
+<section class="card">
+  <h2>Unclassified files</h2>
+  <table>
+    <thead>
+      <tr><th>Path</th><th>Reason</th></tr>
+    </thead>
+    <tbody>
+      {% for entry in report.unclassified %}
+      <tr>
+        <td class="mono">{{ entry.path }}</td>
+        <td>{{ entry.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% for group in report.groups %}
+<section class="group-block">
+  <div class="card">
+    <h2>{{ group.group_id }}</h2>
+    {{ macros.summary_stats([
+      ("Verdict", macros.badge(group.group_summary.overall_pass|verdict_label(false), group.group_summary.overall_pass|verdict_class(false))),
+      ("Total checks", group.group_summary.total_checks),
+      ("Passed", group.group_summary.passed),
+      ("Failed", group.group_summary.failed),
+      ("Skipped", group.group_summary.skipped),
+    ]) }}
+  </div>
+
+  {{ macros.errors_block(group.errors) }}
+
+  {% if group.files %}
+  <section class="card">
+    <h3>Measured files</h3>
+    <table>
+      <thead>
+        <tr><th>Path</th><th>Role</th><th>Sample rate</th><th>Bit depth</th><th>Channels</th><th>Duration</th></tr>
+      </thead>
+      <tbody>
+        {% for file_report in group.files %}
+        <tr>
+          <td class="mono">{{ file_report.path }}</td>
+          <td>{{ file_report.role }}</td>
+          <td>{{ file_report.sample_rate }} Hz</td>
+          <td>{{ file_report.bit_depth }}-bit</td>
+          <td>{{ channel_display(file_report.channel_config_actual, file_report.channel_count) }}</td>
+          <td>{{ file_report.duration_seconds|fmt_seconds(2) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {% for file_report in group.files %}
+    {{ macros.file_report(file_report) }}
+  {% endfor %}
+  {% endif %}
+
+  {% if group.null_test %}
+  <section class="subsection">
+    <div class="card">
+      <h3>Null check</h3>
+      {{ macros.summary_stats([
+        ("Verdict", macros.badge(group.null_test.pass_|verdict_label(group.null_test.skipped), group.null_test.pass_|verdict_class(group.null_test.skipped))),
+        ("Skipped reason", group.null_test.reason or "—"),
+        ("Stem strategy", group.null_test.stem_strategy or "—"),
+        ("Selected roles", group.null_test.selected_roles|join(", ") if group.null_test.selected_roles else "—"),
+      ]) }}
+    </div>
+    {% if group.null_test.summary %}
+    <section class="card">
+      <h3>Null analysis summary</h3>
+      {{ macros.summary_stats([
+        ("Windows total", group.null_test.summary.windows_total),
+        ("Windows flagged", group.null_test.summary.windows_flagged),
+        ("Flagged regions", group.null_test.summary.flagged_regions),
+        ("Max residual RMS", "%.1f dBFS"|format(group.null_test.summary.max_residual_rms_dbfs)),
+        ("Mean residual RMS", "%.1f dBFS"|format(group.null_test.summary.mean_residual_rms_dbfs)),
+      ]) }}
+    </section>
+    {% endif %}
+    {% set anchor = group_anchor_file(group) %}
+    {% if anchor %}
+      {{ macros.flagged_timeline(timeline_lane(group.null_test.flags, sample_rate=group_sample_rate(group), duration_seconds=group_duration_seconds(group)), "Null flagged-region timeline") }}
+    {% endif %}
+    {% if group.null_test.flags %}
+      {{ macros.flagged_table(group.null_test.flags, "Peak residual") }}
+    {% endif %}
+    {{ macros.errors_block(group.null_test.errors) }}
+  </section>
+  {% endif %}
+
+  {% if group.me_check %}
+  <section class="subsection">
+    <div class="card">
+      <h3>M&amp;E check</h3>
+      {{ macros.summary_stats([
+        ("Verdict", macros.badge(group.me_check.pass_|verdict_label(group.me_check.skipped), group.me_check.pass_|verdict_class(group.me_check.skipped))),
+        ("Skipped reason", group.me_check.reason or "—"),
+        ("Analysis signal", group.me_check.analysis_signal),
+      ]) }}
+    </div>
+    {% if group.me_check.summary %}
+    <section class="card">
+      <h3>M&amp;E analysis summary</h3>
+      {{ macros.summary_stats([
+        ("Windows total", group.me_check.summary.windows_total),
+        ("Windows gated out", group.me_check.summary.windows_gated_out),
+        ("Windows analyzed", group.me_check.summary.windows_analyzed),
+        ("Windows flagged", group.me_check.summary.windows_flagged),
+        ("Flagged regions", group.me_check.summary.flagged_regions),
+        ("Max bleed score", group.me_check.summary.max_dialog_bleed_score|fmt_float(2)),
+        ("Max correlation", group.me_check.summary.max_corr_abs|fmt_float(2)),
+        ("Max coherence", group.me_check.summary.max_coherence_mean|fmt_float(2)),
+      ]) }}
+    </section>
+    {% endif %}
+    {% set anchor = group_anchor_file(group) %}
+    {% if anchor %}
+      {{ macros.flagged_timeline(timeline_lane(group.me_check.flags, sample_rate=group_sample_rate(group), duration_seconds=group_duration_seconds(group)), "M&E flagged-region timeline") }}
+    {% endif %}
+    {% if group.me_check.flags %}
+      {{ macros.flagged_table(group.me_check.flags, "Bleed score") }}
+    {% endif %}
+    {{ macros.errors_block(group.me_check.errors) }}
+  </section>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

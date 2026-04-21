@@ -2,13 +2,6 @@
 
 Features outside the current phase's spec go here, not into the code.
 
-## Phase 5 — HTML report
-- `report.html` — jinja2 template, inline SVG timelines, self-contained single file.
-
-## Phase 6 — AAF marker export
-- `markers.aaf` — pyaaf2 CompositionMob with DescriptiveMarkers on a marker track.
-- Framerate-correct; comment format `[LOUDNESS|NULL|ME] <metric> <value> — <detail>`.
-
 ## Phase 7 — Polish
 - `examples/` — fixture folders with reference reports.
 - CI.
@@ -71,6 +64,35 @@ Features outside the current phase's spec go here, not into the code.
 - **Shared marker shape stayed shared.**
   - Phase 4 reuses the Phase 3 `FlaggedRegion` contract and adds `code: "ME"`
     / `metric: "dialog_bleed_score"` instead of inventing a second flag schema.
+
+## Phase 5 — design decisions
+
+- **HTML renders from existing persisted models only.**
+  - `report.py` consumes already-built report models and packaged Jinja templates.
+  - The renderer never reopens audio files, reruns analysis, or expands JSON schemas.
+- **Timelines are flagged-region lanes, not continuous traces.**
+  - Phase 5 uses the persisted merged `flags[]` only.
+  - Empty-state presentation stays honest: no synthetic per-window curves.
+- **Normal runs now write the core report artifacts together.**
+  - `report.json` remains the stable machine contract.
+  - `report.html` is rendered in-memory first, then the JSON/HTML pair is written.
+  - `--json-only` still writes no files.
+
+## Phase 6 — design decisions
+
+- **AAF export stays timed-flags-only.**
+  - `markers.aaf` exports only persisted timed `null` / `me` `flags[]`.
+  - No synthetic markers are created for loudness-only failures, group errors, or skipped checks.
+- **One run, one marker track.**
+  - Each CLI run writes at most one `markers.aaf`.
+  - The exported AAF is a top-level `CompositionMob` with one event/marker track containing `DescriptiveMarker` objects.
+- **Marker placement uses exact edit-rate math from samples.**
+  - Placement comes from persisted sample positions and the shared timecode helper path.
+  - The CLI still exposes only `--fps`, so FinalPass formats persisted timecode strings in non-drop notation while placing AAF markers at the exact rational edit rate.
+
+## Future optional artifacts
+
+- `summary.txt` — optional one-page text artifact if it proves useful after HTML and AAF land.
 
 ## Known fragilities
 - **Private API use: `pyloudnorm.Meter._filters`.** `finalpass.loudness._k_weight`

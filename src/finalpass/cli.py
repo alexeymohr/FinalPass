@@ -10,8 +10,10 @@ Exit codes (from PHASE_1_SPEC.md):
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +29,7 @@ from . import (
     NULL_SCHEMA_VERSION,
     __version__,
 )
+from . import aaf_export
 from .audio_io import AudioFile, channel_config_from_count, read_wav
 from .classify import (
     ClassifiedFile,
@@ -35,6 +38,7 @@ from .classify import (
     scan_folder,
 )
 from .errors import (
+    AAFExportError,
     AlignmentError,
     AmbiguousClassificationError,
     AudioFormatError,
@@ -86,6 +90,7 @@ from .null_test import (
     analyze_null,
     describe_audio as describe_null_audio,
 )
+from .report import render_report_html
 from .specs import Spec, list_bundled, load_spec
 
 _err_console = Console(stderr=True)
@@ -125,11 +130,12 @@ def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, 
     if json_only:
         click.echo(payload)
     else:
-        _render_table(report)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / "report.json"
-        out_path.write_text(payload + "\n", encoding="utf-8")
-        _out_console.print(f"\n[dim]Wrote[/dim] {out_path}")
+        try:
+            _render_table(report)
+            _write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+        except FinalPassError as exc:
+            _err_console.print(f"[red]error:[/red] {exc}")
+            sys.exit(2)
 
     sys.exit(0 if report.summary.overall_pass else 1)
 
@@ -307,6 +313,64 @@ def _format_target_limit(c) -> str:
     return "—"
 
 
+def _write_report_artifacts(
+    *,
+    report: Report | NullReport | MEReport | AllReport,
+    payload: str,
+    out_dir: Path,
+) -> tuple[Path, Path, Path | None]:
+    candidates = aaf_export.collect_marker_candidates(report)
+    artifacts = ("report.json", "report.html", "markers.aaf") if candidates else ("report.json", "report.html")
+    html = render_report_html(report, artifacts=artifacts)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    json_path = out_dir / "report.json"
+    html_path = out_dir / "report.html"
+    aaf_path = out_dir / "markers.aaf"
+    json_path.write_text(payload + "\n", encoding="utf-8")
+
+    _out_console.print(f"\n[dim]Wrote[/dim] {json_path}")
+
+    if not candidates:
+        if aaf_path.exists():
+            aaf_path.unlink()
+        html_path.write_text(html + "\n", encoding="utf-8")
+        _out_console.print(f"[dim]Wrote[/dim] {html_path}")
+        _out_console.print(f"[dim]No exportable timed markers; did not write[/dim] {aaf_path}")
+        return json_path, html_path, None
+
+    if aaf_path.exists():
+        aaf_path.unlink()
+
+    temp_fd, temp_name = tempfile.mkstemp(
+        prefix="finalpass-markers-",
+        suffix=".aaf",
+        dir=str(out_dir),
+    )
+    os.close(temp_fd)
+    Path(temp_name).unlink(missing_ok=True)
+    temp_path = Path(temp_name)
+    try:
+        aaf_export.write_markers_aaf(temp_path, candidates, fps=report.fps)
+        temp_path.replace(aaf_path)
+    except FinalPassError:
+        temp_path.unlink(missing_ok=True)
+        raise
+    except Exception as exc:  # pragma: no cover - defensive wrapper
+        temp_path.unlink(missing_ok=True)
+        raise AAFExportError(f"Could not write markers.aaf: {exc}") from exc
+    finally:
+        try:
+            Path(temp_name).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    html_path.write_text(html + "\n", encoding="utf-8")
+    _out_console.print(f"[dim]Wrote[/dim] {html_path}")
+    _out_console.print(f"[dim]Wrote[/dim] {aaf_path}")
+    return json_path, html_path, aaf_path
+
+
 # ---------------------------------------------------------------------------
 # Phase 3 — `finalpass null` command
 
@@ -339,11 +403,12 @@ def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, 
     if json_only:
         click.echo(payload)
     else:
-        _render_null_report(report)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / "report.json"
-        out_path.write_text(payload + "\n", encoding="utf-8")
-        _out_console.print(f"\n[dim]Wrote[/dim] {out_path}")
+        try:
+            _render_null_report(report)
+            _write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+        except FinalPassError as exc:
+            _err_console.print(f"[red]error:[/red] {exc}")
+            sys.exit(2)
 
     sys.exit(0 if report.summary.overall_pass else 1)
 
@@ -487,11 +552,12 @@ def me_cmd(
     if json_only:
         click.echo(payload)
     else:
-        _render_me_report(report)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / "report.json"
-        out_path.write_text(payload + "\n", encoding="utf-8")
-        _out_console.print(f"\n[dim]Wrote[/dim] {out_path}")
+        try:
+            _render_me_report(report)
+            _write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+        except FinalPassError as exc:
+            _err_console.print(f"[red]error:[/red] {exc}")
+            sys.exit(2)
 
     sys.exit(0 if report.summary.overall_pass else 1)
 
@@ -679,11 +745,12 @@ def all_cmd(
     if json_only:
         click.echo(payload)
     else:
-        _render_all_report(report)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / "report.json"
-        out_path.write_text(payload + "\n", encoding="utf-8")
-        _out_console.print(f"\n[dim]Wrote[/dim] {out_path}")
+        try:
+            _render_all_report(report)
+            _write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+        except FinalPassError as exc:
+            _err_console.print(f"[red]error:[/red] {exc}")
+            sys.exit(2)
 
     sys.exit(0 if report.summary.overall_pass else 1)
 

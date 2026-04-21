@@ -2,7 +2,7 @@
 
 ## Elevator pitch
 
-One command to QC a sound delivery folder. FinalPass classifies what's there, measures loudness against a named platform spec, nulls the stems against the printmaster to catch gross mix errors, and checks the M&E for dialogue bleed. It writes a JSON record, an HTML report, and — the piece that sets it apart — an AAF of markers you drop straight onto a Pro Tools track and jump directly to the flagged regions.
+One command to QC a sound delivery folder. FinalPass classifies what's there, measures loudness against a named platform spec, nulls the stems against the printmaster to catch gross mix errors, and checks the M&E for dialogue bleed. Today it writes a JSON record, a self-contained HTML report, and a conditional AAF of timed markers you can drop onto a Pro Tools marker track and jump directly to flagged null/M&E regions.
 
 ## Why it exists
 
@@ -20,18 +20,20 @@ FinalPass is that tool, CLI-first so it can be automated, scripted, and trusted.
 
 ## Output
 
-For any run, FinalPass writes to `./finalpass-report/`:
+For any normal run, FinalPass writes to `./finalpass-report/`:
 
 - `report.json` — full machine-readable record, the stable contract for downstream tooling.
-- `report.html` — self-contained single file, pass/fail summary, loudness table, SVG timelines for residual and M&E correlation.
-- `markers.aaf` — CompositionMob with a marker track. One DescriptiveMarker per flagged region, comment formatted as `[LOUDNESS|NULL|ME] <metric> <value> — <detail>`. Drop onto a Pro Tools track; memory locations populate.
-- `summary.txt` — human-readable one-pager.
+- `report.html` — self-contained single file, pass/fail summary, loudness tables, and flagged-region lanes for null and M&E.
+- `markers.aaf` — written only when the run contains exportable timed `null` / `me` flags.
+
+AAF stays intentionally strict in Phase 6: only persisted timed `null` / `me` flags export. Loudness-only failures, group-level errors, and skipped checks remain JSON/HTML-only because they have no honest timeline positions.
+- `summary.txt` — not a current output artifact.
 
 Exit codes: `0` all pass, `1` failures found, `2` tool error.
 
 ## Scope — v0.1
 
-**In:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1. The three passes. Bundled spec presets plus user-overridable YAML. All four output artifacts. Python 3.11+.
+**In:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1. The three passes. Bundled spec presets plus user-overridable YAML. JSON + HTML output artifacts, plus conditional timed-marker AAF export. Python 3.11+.
 
 **Out (explicit non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification (we measure, we don't bless).
 
@@ -52,7 +54,7 @@ Each phase ends with a CLI the user can actually run and verify.
 - **Phase 3 — Stem sum null pass.** `finalpass null` subcommand and integration into `all`.
 - **Phase 4 — M&E dialogue check.** `finalpass me` subcommand and integration into `all`.
 - **Phase 5 — HTML report.** Jinja2 template, inline SVG timelines, self-contained single file.
-- **Phase 6 — AAF marker export.** The pyaaf2 piece. Markers track with flagged regions as DescriptiveMarkers. Framerate-correct.
+- **Phase 6 — AAF marker export.** Complete. One AAF per CLI run, a single marker track, and persisted timed `null` / `me` flags exported as DescriptiveMarkers.
 - **Phase 7 — Polish.** Example folders, reference reports in `examples/`, CI, tagged v0.1 release.
 
 ## What lives outside this repo

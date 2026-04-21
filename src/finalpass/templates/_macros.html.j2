@@ -1,0 +1,162 @@
+{% macro badge(label, cls) -%}
+<span class="badge {{ cls }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro summary_stats(items) -%}
+<div class="summary-grid">
+  {%- for label, value in items %}
+  <div class="stat">
+    <div class="stat-label">{{ label }}</div>
+    <div class="stat-value">{{ value }}</div>
+  </div>
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
+{% macro errors_block(errors) -%}
+  {%- if errors %}
+  <section class="card card-muted">
+    <h3>Errors</h3>
+    <ul class="errors">
+      {%- for error in errors %}
+      <li><strong>{{ error.type }}</strong>: {{ error.message }}</li>
+      {%- endfor %}
+    </ul>
+  </section>
+  {%- endif %}
+{%- endmacro %}
+
+{% macro measurements_table(measurements) -%}
+<table>
+  <thead>
+    <tr>
+      <th>Measurement</th>
+      <th>Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Integrated LUFS</td><td>{{ measurements.integrated_lufs|fmt_float(1) }}</td></tr>
+    <tr><td>True Peak dBTP</td><td>{{ measurements.true_peak_dbtp|fmt_float(1) }}</td></tr>
+    <tr><td>LRA</td><td>{{ measurements.lra|fmt_float(1) }}</td></tr>
+    <tr><td>Short-term max LUFS</td><td>{{ measurements.short_term_max_lufs|fmt_float(1) }}</td></tr>
+    <tr><td>Momentary max LUFS</td><td>{{ measurements.momentary_max_lufs|fmt_float(1) }}</td></tr>
+  </tbody>
+</table>
+{%- endmacro %}
+
+{% macro checks_table(checks) -%}
+<table>
+  <thead>
+    <tr>
+      <th>Metric</th>
+      <th>Measured</th>
+      <th>Target / limit</th>
+      <th>Verdict</th>
+      <th>Detail</th>
+    </tr>
+  </thead>
+  <tbody>
+    {%- for check in checks %}
+    <tr>
+      <td>{{ check.metric }}</td>
+      <td>{{ check.measured|fmt_float(1) }}</td>
+      <td>{{ format_target_limit(check) }}</td>
+      <td>{{ badge(check.pass_|verdict_label(check.skipped), check.pass_|verdict_class(check.skipped)) }}</td>
+      <td>
+        {%- if check.skipped and check.reason %}{{ check.reason }}
+        {%- elif check.error %}{{ check.error }}
+        {%- else %}—{%- endif %}
+      </td>
+    </tr>
+    {%- endfor %}
+  </tbody>
+</table>
+{%- endmacro %}
+
+{% macro file_report(file_report) -%}
+<section class="card section-stack">
+  <h3>{{ file_report.path|basename }}</h3>
+  <div class="meta-grid">
+    <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ file_report.path }}</div></div>
+    <div class="stat"><div class="stat-label">Role</div><div class="stat-value">{{ file_report.role }}</div></div>
+    <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ file_report.sample_rate }} Hz</div></div>
+    <div class="stat"><div class="stat-label">Bit depth</div><div class="stat-value">{{ file_report.bit_depth }}-bit</div></div>
+    <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(file_report.channel_config_actual, file_report.channel_count) }}</div></div>
+    <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">{{ file_report.duration_seconds|fmt_seconds(2) }}</div></div>
+  </div>
+  <div>
+    <h4>Measurements</h4>
+    {{ measurements_table(file_report.measurements) }}
+  </div>
+  <div>
+    <h4>Checks</h4>
+    {{ checks_table(file_report.checks) }}
+  </div>
+  {% if file_report.errors %}
+  <div>
+    <h4>File errors</h4>
+    <ul class="errors">
+      {% for error in file_report.errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</section>
+{%- endmacro %}
+
+{% macro flagged_timeline(lane, title, fill_class='flag') -%}
+<section class="card section-stack">
+  <h3>{{ title }}</h3>
+  <div class="timeline">
+    <svg viewBox="0 0 {{ lane.view_box_width }} 70" role="img" aria-label="{{ title }}">
+      <rect x="{{ lane.track_x }}" y="18" width="{{ lane.track_width }}" height="18" rx="9" fill="var(--rail)"></rect>
+      {%- for rect in lane.rects %}
+      <rect x="{{ rect.x }}" y="18" width="{{ rect.width }}" height="18" rx="4" fill="var(--flag)">
+        <title>{{ rect.title }}</title>
+      </rect>
+      {%- endfor %}
+      <text x="{{ lane.track_x }}" y="58" font-size="12" fill="var(--muted)">0.00s</text>
+      <text x="{{ lane.track_x + lane.track_width }}" y="58" text-anchor="end" font-size="12" fill="var(--muted)">{{ lane.duration_label }}</text>
+    </svg>
+    <p class="timeline-caption">{{ lane.caption }}</p>
+    {% if not lane.rects %}
+    <p class="timeline-caption">{{ lane.empty_message }}</p>
+    {% endif %}
+  </div>
+</section>
+{%- endmacro %}
+
+{% macro flagged_table(flags, value_label) -%}
+<section class="card">
+  <h3>Flagged regions</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Metric</th>
+        <th>Start</th>
+        <th>End</th>
+        <th>Duration</th>
+        <th>{{ value_label }}</th>
+        <th>Threshold</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for flag in flags %}
+      <tr>
+        <td>{{ flag.code }}</td>
+        <td>{{ flag.metric }}</td>
+        <td class="mono">{{ flag.start_tc }}</td>
+        <td class="mono">{{ flag.end_tc }}</td>
+        <td>{{ flag.duration_seconds|fmt_seconds(2) }}</td>
+        <td>{% if flag.metric == "dialog_bleed_score" %}{{ flag.value|fmt_float(2) }}{% else %}{{ flag.value|fmt_float(1) }} dBFS{% endif %}</td>
+        <td>{% if flag.metric == "dialog_bleed_score" %}{{ flag.threshold|fmt_float(2) }}{% else %}{{ flag.threshold|fmt_float(1) }} dBFS{% endif %}</td>
+        <td>{{ flag.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{%- endmacro %}

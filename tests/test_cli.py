@@ -34,11 +34,19 @@ def test_loudness_pass_exits_zero(pink_stereo_10s: Path, tmp_path: Path) -> None
     # Pink noise at -23 dBFS should pass R128.
     assert result.exit_code in (0, 1), f"unexpected exit: {result.output}"
     report_path = tmp_path / "out" / "report.json"
+    html_path = tmp_path / "out" / "report.html"
+    aaf_path = tmp_path / "out" / "markers.aaf"
     assert report_path.exists()
+    assert html_path.exists()
+    assert not aaf_path.exists()
     data = json.loads(report_path.read_text())
     assert data["schema_version"] == 1
     assert data["spec"]["name"] == "ebu_r128"
     assert data["files"][0]["role"] == "primary"
+    assert "report.json" in result.output
+    assert "report.html" in result.output
+    assert "No exportable timed markers" in result.output
+    assert "<html" in html_path.read_text(encoding="utf-8").lower()
 
 
 def test_loudness_hot_file_fails(pink_stereo_10s_hot: Path, tmp_path: Path) -> None:
@@ -62,6 +70,9 @@ def test_json_only_is_parseable(pink_stereo_10s: Path, tmp_path: Path) -> None:
     assert result.exit_code in (0, 1)
     data = json.loads(result.output)
     assert data["schema_version"] == 1
+    assert not (tmp_path / "out" / "report.json").exists()
+    assert not (tmp_path / "out" / "report.html").exists()
+    assert not (tmp_path / "out" / "markers.aaf").exists()
 
 
 def test_channel_mismatch_exits_two(pink_stereo_10s: Path, tmp_path: Path) -> None:
