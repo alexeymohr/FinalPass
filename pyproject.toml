@@ -25,9 +25,9 @@ dependencies = [
     "rich>=13.7",
     "scipy>=1.12",
     "soundfile>=0.12.1",
-    # packaging <26.1 pin: 26.1 is <7 days old (2026-04-14). Remove after
-    # 2026-04-21 when 26.1 ages in.
-    "packaging<26.1",
+    # Temporary 26.1 hold removed on 2026-04-22 after the release aged past
+    # the 7-day supply-chain window and the suite stayed green.
+    "packaging>=26.0",
 ]
 
 [dependency-groups]

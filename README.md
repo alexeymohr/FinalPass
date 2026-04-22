@@ -1,13 +1,14 @@
 # FinalPass
 
-Delivery QC CLI for post-production sound. Phase 6 ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, and conditional AAF marker export for timed null/M&E flags.
+Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
 
-**Status: Phase 6 complete.** `loudness`, standalone `null`, standalone `me`, and `all` with auto-null / auto-M&E are implemented. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
+**Status: Phase 7 release candidate.** `loudness`, standalone `null`, standalone `me`, and `all` with auto-null / auto-M&E are implemented. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
 
 ## Install (dev)
 
 ```
 uv sync
+uv run finalpass --version
 uv run finalpass --help
 ```
 
@@ -16,6 +17,7 @@ Python 3.11+. WAV/BWF input.
 ## Commands
 
 ```
+uv run finalpass --version
 uv run finalpass specs list
 uv run finalpass specs show <name>
 uv run finalpass loudness <file>... --spec <name> [--dx <file>] [--out <dir>] [--json-only] [--fps <rate>]
@@ -40,6 +42,12 @@ uv run finalpass all <folder> --spec <name> [--out <dir>] [--json-only] [--fps <
 ```
 
 Exit codes: `0` all pass, `1` failures found, `2` tool error.
+
+## Examples / smoke flow
+
+See [examples/README.md](examples/README.md) for the deterministic delivery
+generator, disposable smoke outputs under `examples/out/`, and representative
+`loudness`, `null`, `me`, and `all` commands.
 
 ## Artifacts
 
@@ -130,11 +138,9 @@ together under `MYSHOW`.
 Override the patterns with `--patterns path/to/patterns.yaml` (same top-level
 keys as [_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml)).
 
-## Scope — v0.1
+## Scope — v0.1 release candidate
 
-**Current (through Phase 5):** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with conservative auto-null plus auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + terminal summary.
-
-**Later in v0.1:** AAF markers.
+**Current:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with conservative auto-null plus auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + conditional timed-marker AAF export + terminal summary.
 
 **Out (non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Speech recognition, transcription, diarization, or ML/VAD. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification — FinalPass measures, it does not bless.
 

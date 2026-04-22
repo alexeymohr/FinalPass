@@ -10,6 +10,12 @@ build/
 # Generated example deliveries (re-create with: uv run python examples/_generate.py)
 examples/delivery_two_episodes/
 examples/*.wav
+examples/out/
 
 # Local finalpass outputs
 finalpass-report/
+
+# Local research / planning artifacts (not part of the v0.1 release surface)
+AAF_MARKER_IMPORT_FINDINGS.md
+resources/
+specs/PHASE_7_SPEC.MD

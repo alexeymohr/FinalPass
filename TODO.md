@@ -1,14 +1,10 @@
-# TODO — Deferred to later phases
+# TODO — Deferred beyond the v0.1 release candidate
 
 Features outside the current phase's spec go here, not into the code.
 
-## Phase 7 — Polish
-- `examples/` — fixture folders with reference reports.
-- CI.
-- Tagged v0.1 release.
-- `rich` table path wrapping: long paths wrap across lines in the loudness
-  table. Polish in Phase 7 (truncate middle, or drop into a separate header
-  line).
+## Manual release step after acceptance
+- Create the local `v0.1.0` tag only after human sign-off. The exact command
+  lives in `RELEASE_CHECKLIST.md`; do not automate it in normal phase work.
 
 ## Phase 2 — design decisions
 
@@ -85,7 +81,7 @@ Features outside the current phase's spec go here, not into the code.
   - No synthetic markers are created for loudness-only failures, group errors, or skipped checks.
 - **One run, one marker track.**
   - Each CLI run writes at most one `markers.aaf`.
-  - The exported AAF is a top-level `CompositionMob` with one event/marker track containing `DescriptiveMarker` objects.
+  - The exported AAF is a top-level `CompositionMob` with one marker track containing timed comment markers plus minimal timeline guide slots for Pro Tools import.
 - **Marker placement uses exact edit-rate math from samples.**
   - Placement comes from persisted sample positions and the shared timecode helper path.
   - The CLI still exposes only `--fps`, so FinalPass formats persisted timecode strings in non-drop notation while placing AAF markers at the exact rational edit rate.
@@ -109,6 +105,7 @@ Features outside the current phase's spec go here, not into the code.
   because 2.13.x was released within the 7-day supply-chain hold window.
   Review after **2026-04-27** — drop the upper bound if 2.13.x has aged in
   cleanly and nothing newer is fresh.
-- **`packaging<26.1`** (currently resolving to 26.0): pinned on 2026-04-20
-  because 26.1 was <7 days old. Review after **2026-04-21** — drop the upper
-  bound if 26.1 is fine.
+- **`packaging` hold review completed on 2026-04-22.**
+  - The temporary `packaging<26.1` upper bound was removed after 26.1 aged
+    past the 7-day supply-chain window and the release-normalization suite
+    stayed green.

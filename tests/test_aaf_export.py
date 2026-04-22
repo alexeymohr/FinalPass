@@ -56,18 +56,26 @@ def _read_marker_aaf(path: Path) -> dict[str, object]:
     with aaf2.open(str(path), "r") as handle:
         composition = next(handle.content.compositionmobs())
         slot = next(slot for slot in composition.slots if type(slot).__name__ == "EventMobSlot")
+        timeline_slot_types = [type(candidate).__name__ for candidate in composition.slots]
         markers = [
             {
+                "type": type(marker).__name__,
                 "position": marker["Position"].value,
                 "length": marker["Length"].value,
-                "name": marker.get("CommentMarkerAnnotationList").value,
-                "comment": marker.get("Comment").value,
+                "title": marker.get("Comment").value,
+                "annotation": marker.get("CommentMarkerAnnotationList").value,
                 "time": marker.get("CommentMarkerTime").value,
+                "user_comments": {
+                    tag["Name"].value: tag["Value"].value for tag in marker.get("UserComments").value
+                }
+                if marker.get("UserComments") is not None
+                else {},
             }
             for marker in slot.segment.components
         ]
         return {
             "composition_name": composition.name,
+            "slot_types": timeline_slot_types,
             "slot_name": slot.name,
             "edit_rate": str(slot.edit_rate),
             "markers": markers,
@@ -92,13 +100,19 @@ def test_standalone_null_failing_case_writes_aaf(tmp_path: Path) -> None:
     parsed = _read_marker_aaf(aaf_path)
     assert parsed["slot_name"] == "FinalPass Markers"
     assert parsed["edit_rate"] == "24000/1001"
+    assert parsed["slot_types"] == ["TimelineMobSlot", "TimelineMobSlot", "EventMobSlot"]
     markers = parsed["markers"]
     assert markers
-    assert all("[NULL]" in marker["comment"] for marker in markers)
+    assert all(marker["type"] == "CommentMarker" for marker in markers)
+    assert all("[NULL]" in marker["title"] for marker in markers)
+    assert all(marker["title"] == marker["annotation"] for marker in markers)
     positions = [marker["position"] for marker in markers]
     assert positions == sorted(positions)
     assert positions[0] > 0
-    assert all(marker["length"] >= 1 for marker in markers)
+    assert all(marker["length"] >= 0 for marker in markers)
+    assert all(marker["user_comments"]["Comment"] == marker["title"] for marker in markers)
+    assert all(marker["user_comments"]["Label"] == "[1] FAIL: null mismatch" for marker in markers)
+    assert all("[NULL]" in marker["user_comments"]["Detail"] for marker in markers)
 
 
 def test_standalone_me_failing_case_writes_aaf(tmp_path: Path) -> None:
@@ -122,9 +136,12 @@ def test_standalone_me_failing_case_writes_aaf(tmp_path: Path) -> None:
     parsed = _read_marker_aaf(aaf_path)
     markers = parsed["markers"]
     assert markers
-    assert all("[ME]" in marker["comment"] for marker in markers)
-    assert any("corr=" in marker["comment"] for marker in markers)
-    assert all(marker["name"] == "ME" for marker in markers)
+    assert all("[ME]" in marker["title"] for marker in markers)
+    assert all(marker["title"] == marker["annotation"] for marker in markers)
+    assert all(marker["user_comments"]["Comment"] == marker["title"] for marker in markers)
+    assert all(marker["user_comments"]["Label"] == "[1] FAIL: dialog bleed" for marker in markers)
+    assert all("[ME]" in marker["user_comments"]["Detail"] for marker in markers)
+    assert any("corr=" in marker["annotation"] for marker in markers)
 
 
 @pytest.mark.parametrize("command_name", ["null", "me"])
@@ -173,13 +190,15 @@ def test_all_run_writes_combined_aaf(tmp_path: Path) -> None:
     parsed = _read_marker_aaf(aaf_path)
     markers = parsed["markers"]
     assert markers
-    assert all(
-        marker["comment"].startswith("[NULL]") or marker["comment"].startswith("[ME]")
-        for marker in markers
-    )
-    assert any("S01E04" in marker["comment"] for marker in markers)
-    assert not any("[LOUDNESS]" in marker["comment"] for marker in markers)
-    assert all(marker["name"].startswith("S01E04 ") for marker in markers)
+    assert [marker["user_comments"]["Label"] for marker in markers] == [
+        "[1] FAIL: null mismatch",
+        "[2] FAIL: dialog bleed",
+    ]
+    assert all(marker["user_comments"]["Comment"] == marker["title"] for marker in markers)
+    assert all(marker["title"] == marker["annotation"] for marker in markers)
+    assert any("S01E04" in marker["title"] for marker in markers)
+    assert not any("[LOUDNESS]" in marker["title"] for marker in markers)
+    assert all("Detail" in marker["user_comments"] for marker in markers)
 
 
 def test_json_only_writes_no_aaf(tmp_path: Path) -> None:

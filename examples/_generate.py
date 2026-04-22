@@ -1,4 +1,4 @@
-"""Generate a tiny Phase 4-ready delivery folder for manual FinalPass runs.
+"""Generate a deterministic example delivery for manual FinalPass runs.
 
 Run from the repo root::
 
@@ -13,6 +13,7 @@ deterministic dialogue bleed into the M&E stem.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import sys
 
@@ -24,14 +25,23 @@ from tests.audio_cases import build_two_episodes
 
 
 def main() -> None:
-    root = Path(__file__).parent / "delivery_two_episodes"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(__file__).parent / "delivery_two_episodes",
+        help="Directory to populate with the deterministic example delivery.",
+    )
+    args = parser.parse_args()
+
+    root = args.output
     build_two_episodes(
         root,
         hot_e04_pm=True,
         e04_null_defect=True,
         e04_me_bleed_defect=True,
     )
-    print(f"Wrote Phase 4 example delivery to {root}")
+    print(f"Wrote deterministic example delivery to {root}")
 
 
 if __name__ == "__main__":

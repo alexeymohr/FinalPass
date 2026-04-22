@@ -20,6 +20,7 @@ from pathlib import Path
 import click
 import soundfile as sf
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from . import (
@@ -276,25 +277,7 @@ def _validate_homogeneous_sample_rate(files) -> None:
 def _render_table(report: Report) -> None:
     _out_console.print(f"[bold]{report.spec.display_name}[/bold]  [dim]({report.spec.source})[/dim]")
     for fr in report.files:
-        title = f"{fr.path}  [dim]{fr.role} · {fr.channel_count}ch · {fr.sample_rate}Hz · {fr.bit_depth}-bit · {fr.duration_seconds:.1f}s[/dim]"
-        table = Table(title=title, show_lines=False, title_justify="left")
-        table.add_column("metric", style="cyan")
-        table.add_column("measured", justify="right")
-        table.add_column("target / limit", justify="right")
-        table.add_column("pass")
-        for c in fr.checks:
-            measured = "—" if c.measured is None else f"{c.measured:.1f}"
-            target_limit = _format_target_limit(c)
-            if c.skipped:
-                status = f"[dim]— (skipped: {c.reason})[/dim]"
-            elif c.pass_:
-                status = "[green]PASS[/green]"
-            else:
-                status = "[red]FAIL[/red]"
-            if c.error and not c.skipped:
-                status += f" [dim]({c.error})[/dim]"
-            table.add_row(c.metric, measured, target_limit, status)
-        _out_console.print(table)
+        _render_file_checks(fr)
     color = "green" if report.summary.overall_pass else "red"
     s = report.summary
     skipped_suffix = f", {s.skipped} skipped" if s.skipped else ""
@@ -311,6 +294,46 @@ def _format_target_limit(c) -> str:
     if c.limit is not None:
         return f"≤ {c.limit}"
     return "—"
+
+
+def _render_file_checks(fr: FileReport) -> None:
+    _out_console.print(_file_summary_heading(fr))
+    _out_console.print(_file_path_line(fr), soft_wrap=True)
+    _out_console.print(_checks_table(fr))
+
+
+def _file_summary_heading(fr: FileReport) -> str:
+    basename = escape(Path(fr.path).name)
+    meta = escape(
+        f"{fr.role} · {fr.channel_count}ch · {fr.sample_rate}Hz · "
+        f"{fr.bit_depth}-bit · {fr.duration_seconds:.1f}s"
+    )
+    return f"[bold]{basename}[/bold]  [dim]{meta}[/dim]"
+
+
+def _file_path_line(fr: FileReport) -> str:
+    return f"[dim]path:[/dim] {escape(fr.path)}"
+
+
+def _checks_table(fr: FileReport) -> Table:
+    table = Table(show_lines=False)
+    table.add_column("metric", style="cyan")
+    table.add_column("measured", justify="right")
+    table.add_column("target / limit", justify="right")
+    table.add_column("pass")
+    for c in fr.checks:
+        measured = "—" if c.measured is None else f"{c.measured:.1f}"
+        target_limit = _format_target_limit(c)
+        if c.skipped:
+            status = f"[dim]— (skipped: {c.reason})[/dim]"
+        elif c.pass_:
+            status = "[green]PASS[/green]"
+        else:
+            status = "[red]FAIL[/red]"
+        if c.error and not c.skipped:
+            status += f" [dim]({c.error})[/dim]"
+        table.add_row(c.metric, measured, target_limit, status)
+    return table
 
 
 def _write_report_artifacts(
@@ -1308,7 +1331,7 @@ def _format_stem_strategy(strategy: str | None) -> str:
 
 def _render_all_report(report: AllReport) -> None:
     _out_console.print(f"[bold]{report.spec.display_name}[/bold]  [dim]({report.spec.source})[/dim]")
-    _out_console.print(f"[dim]folder:[/dim] {report.folder}")
+    _out_console.print(f"[dim]folder:[/dim] {escape(report.folder)}", soft_wrap=True)
 
     for g in report.groups:
         status_color = "green" if g.group_summary.overall_pass else "red"
@@ -1319,28 +1342,7 @@ def _render_all_report(report: AllReport) -> None:
             _out_console.print(f"  [red]{err.type}:[/red] {err.message}")
 
         for fr in g.files:
-            title = (
-                f"{fr.path}  [dim]{fr.role} · {fr.channel_count}ch · "
-                f"{fr.sample_rate}Hz · {fr.bit_depth}-bit · {fr.duration_seconds:.1f}s[/dim]"
-            )
-            table = Table(title=title, show_lines=False, title_justify="left")
-            table.add_column("metric", style="cyan")
-            table.add_column("measured", justify="right")
-            table.add_column("target / limit", justify="right")
-            table.add_column("pass")
-            for c in fr.checks:
-                measured = "—" if c.measured is None else f"{c.measured:.1f}"
-                target_limit = _format_target_limit(c)
-                if c.skipped:
-                    status = f"[dim]— (skipped: {c.reason})[/dim]"
-                elif c.pass_:
-                    status = "[green]PASS[/green]"
-                else:
-                    status = "[red]FAIL[/red]"
-                if c.error and not c.skipped:
-                    status += f" [dim]({c.error})[/dim]"
-                table.add_row(c.metric, measured, target_limit, status)
-            _out_console.print(table)
+            _render_file_checks(fr)
 
         if g.null_test is not None:
             nt = g.null_test

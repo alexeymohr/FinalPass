@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
 from pathlib import Path
 
 from click.testing import CliRunner
 
+from finalpass import __version__
 from finalpass.cli import main
 
 
@@ -140,3 +142,34 @@ def test_unknown_spec_exits_two(pink_stereo_10s: Path, tmp_path: Path) -> None:
     ])
     assert result.exit_code == 2
     assert "no_such_spec" in result.output or "Unknown spec" in result.output
+
+
+def test_version_flag_matches_package_metadata() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["--version"])
+    assert result.exit_code == 0
+    assert __version__ in result.output
+    assert importlib.metadata.version("finalpass") == __version__
+
+
+def test_loudness_terminal_output_shows_full_input_path_on_separate_line(
+    pink_stereo_10s: Path,
+    tmp_path: Path,
+) -> None:
+    source_bytes = pink_stereo_10s.read_bytes()
+    nested = tmp_path / "very" / "long" / "path" / "for" / "terminal" / "polish"
+    nested.mkdir(parents=True, exist_ok=True)
+    target = nested / pink_stereo_10s.name
+    target.write_bytes(source_bytes)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness",
+        str(target),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+    ])
+    assert result.exit_code in (0, 1), result.output
+    assert target.name in result.output
+    assert "path:" in result.output
+    assert str(target) in result.output

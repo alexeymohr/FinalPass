@@ -130,7 +130,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "packaging", specifier = "<26.1" },
+    { name = "packaging", specifier = ">=26.0" },
     { name = "pyaaf2", specifier = "==1.7.1" },
     { name = "pydantic", specifier = ">=2.6,<2.13" },
     { name = "pyloudnorm", specifier = ">=0.1.1" },

@@ -7,7 +7,7 @@ This module exports only already-persisted timed flags from the ``null`` and
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TypeAlias
 
@@ -17,9 +17,11 @@ from .timecode import frame_rate_info, sample_to_edit_units
 
 try:  # pragma: no cover - exercised by integration tests
     import aaf2
+    from aaf2 import components as component_module
     from aaf2.rational import AAFRational
 except ImportError:  # pragma: no cover - explicit tool error path
     aaf2 = None
+    component_module = None
     AAFRational = None
 
 ExportableReport: TypeAlias = Report | NullReport | MEReport | AllReport
@@ -90,7 +92,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                     )
                 )
 
-    return sorted(
+    candidates = sorted(
         candidates,
         key=lambda candidate: (
             candidate.start_edit_unit,
@@ -99,39 +101,84 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
             candidate.metric,
         ),
     )
+    return [
+        replace(
+            candidate,
+            name=f"[{index}] FAIL: {_short_failure_label(candidate)}",
+        )
+        for index, candidate in enumerate(candidates, start=1)
+    ]
 
 
 def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: float) -> None:
-    """Write a minimal top-level marker AAF."""
+    """Write a Pro Tools-friendly AAF with a marker lane on a real composition."""
     if not candidates:
         return
-    if aaf2 is None or AAFRational is None:
+    if aaf2 is None or AAFRational is None or component_module is None:
         raise AAFExportError(
             "AAF export requires the pyaaf2 package (import path: aaf2)."
         )
 
-    edit_rate = frame_rate_info(fps).edit_rate
+    rate_info = frame_rate_info(fps)
+    edit_rate = rate_info.edit_rate
+    timeline_length = _timeline_length_edit_units(candidates)
     try:
         with aaf2.open(str(path), "w") as handle:
             composition = handle.create.CompositionMob(EXPORT_TRACK_NAME)
             composition.usage = "Usage_TopLevel"
             handle.content.mobs.append(composition)
 
-            slot = handle.create.EventMobSlot(1)
-            slot.name = EXPORT_TRACK_NAME
-            slot.edit_rate = AAFRational(edit_rate.numerator, edit_rate.denominator)
-            sequence = handle.create.Sequence(media_kind="DescriptiveMetadata")
-            slot.segment = sequence
-            composition.slots.append(slot)
+            edit_rate_value = AAFRational(edit_rate.numerator, edit_rate.denominator)
+
+            timecode_slot = composition.create_timeline_slot(
+                edit_rate=edit_rate_value,
+                slot_id=1,
+            )
+            timecode_slot.name = "Timecode"
+            timecode_slot.origin = 0
+            timecode_segment = handle.create.Timecode(length=timeline_length)
+            timecode_segment.start = 0
+            timecode_segment.fps = rate_info.nominal_fps
+            timecode_segment.drop = rate_info.drop_frame
+            timecode_slot.segment = timecode_segment
+
+            audio_slot = composition.create_timeline_slot(
+                edit_rate=edit_rate_value,
+                slot_id=2,
+            )
+            audio_slot.name = "Marker Guide"
+            audio_slot.origin = 0
+            audio_slot["PhysicalTrackNumber"].value = 1
+            audio_sequence = handle.create.Sequence(media_kind="sound")
+            audio_sequence["Components"].value = []
+            audio_sequence.components.append(
+                handle.create.Filler(media_kind="sound", length=timeline_length)
+            )
+            audio_slot.segment = audio_sequence
+
+            marker_slot = handle.create.EventMobSlot()
+            marker_slot.slot_id = 2001
+            marker_slot.name = EXPORT_TRACK_NAME
+            marker_slot.edit_rate = edit_rate_value
+            marker_slot["EventSlotOrigin"].value = 0
+            marker_sequence = handle.create.Sequence()
+            marker_sequence["Components"].value = []
+            marker_sequence["DataDefinition"].value = handle.dictionary.lookup_datadef(
+                "DescriptiveMetadata"
+            )
+            marker_slot.segment = marker_sequence
+            composition.slots.append(marker_slot)
 
             for candidate in candidates:
-                marker = handle.create.DescriptiveMarker()
-                marker["Position"].value = candidate.start_edit_unit
-                marker["Length"].value = max(1, candidate.length_edit_units)
-                marker["Comment"].value = candidate.comment
-                marker["CommentMarkerAnnotationList"].value = candidate.name
-                marker["CommentMarkerTime"].value = candidate.start_tc
-                sequence.components.append(marker)
+                marker = _create_comment_marker(
+                    handle,
+                    candidate.start_edit_unit,
+                    max(0, candidate.length_edit_units),
+                    candidate.name,
+                    candidate.comment,
+                    candidate.start_tc,
+                )
+                marker_sequence.components.append(marker)
     except Exception as exc:  # pragma: no cover - exercised via CLI/tests
         raise AAFExportError(f"Could not write markers.aaf: {exc}") from exc
 
@@ -186,3 +233,86 @@ def _format_metric_value(flag: FlaggedRegion) -> str:
     if flag.metric == "dialog_bleed_score":
         return f"{flag.value:.2f}"
     return f"{flag.value:.1f}"
+
+
+def _short_failure_label(candidate: MarkerCandidate) -> str:
+    if candidate.code == "NULL":
+        return "null mismatch"
+    if candidate.code == "ME":
+        return "dialog bleed"
+    return candidate.metric.replace("_", " ").lower()
+
+
+def _timeline_length_edit_units(candidates: list[MarkerCandidate]) -> int:
+    if not candidates:
+        return 1
+    return max(
+        1,
+        max(
+            candidate.start_edit_unit + max(1, candidate.length_edit_units)
+            for candidate in candidates
+        ),
+    )
+
+
+def _create_comment_marker(
+    handle,
+    position: int,
+    length: int,
+    title: str,
+    comment: str,
+    start_tc: str,
+):
+    marker = component_module.CommentMarker.__new__(component_module.CommentMarker)
+    marker.root = handle
+    component_module.Component.__init__(
+        marker,
+        media_kind="DescriptiveMetadata",
+        length=max(0, length),
+    )
+    try:
+        marker.name = title
+    except Exception:
+        pass
+
+    marker["Position"].value = position
+    marker["Comment"].value = comment
+    marker["CommentMarkerTime"].value = start_tc
+
+    try:
+        marker["Annotation"].value = comment
+    except Exception:
+        pass
+    try:
+        marker["UserComments"].append(
+            _create_string_tagged_value(handle, "Comment", comment)
+        )
+        marker["UserComments"].append(
+            _create_string_tagged_value(handle, "Label", title)
+        )
+        marker["UserComments"].append(
+            _create_string_tagged_value(handle, "Detail", comment)
+        )
+    except Exception:
+        pass
+    try:
+        marker["CommentMarkerAnnotationList"].value = comment
+    except Exception:
+        pass
+    try:
+        marker["CommentMarkerAttributeList"].append(
+            _create_string_tagged_value(handle, "_ATN_CRM_COM", comment)
+        )
+        marker["CommentMarkerAttributeList"].append(
+            _create_string_tagged_value(handle, "Label", title)
+        )
+    except Exception:
+        pass
+    return marker
+
+
+def _create_string_tagged_value(handle, name: str, value: str):
+    tag = handle.create.TaggedValue()
+    tag.name = name
+    tag.encode_value(value, handle.dictionary.lookup_typedef("aafString"))
+    return tag
