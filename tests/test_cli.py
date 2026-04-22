@@ -14,7 +14,7 @@ def test_specs_list_contains_all_bundled() -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["specs", "list"])
     assert result.exit_code == 0
-    for name in ("ebu_r128", "netflix_stereo", "netflix_51", "streaming_-14"):
+    for name in ("atsc_a85", "ebu_r128", "netflix_stereo", "netflix_51", "streaming_-14"):
         assert name in result.output
 
 

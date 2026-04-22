@@ -146,6 +146,7 @@ keys as [_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml)).
 
 ## Bundled specs (Phase 1)
 
+- `atsc_a85` — stereo, −24 LKFS ±2, TP −2 dBTP, LRA ≤ 18 (ATSC A/85 content-exchange target; current official version is A/85:2013 with Corrigendum No. 1, approved 2021; LRA cap is a FinalPass convention).
 - `ebu_r128` — stereo, −23 LUFS ±0.5 (R128 pre-produced), TP −1 dBTP, LRA ≤ 18 (convention).
 - `netflix_stereo` — stereo, −27 LKFS ±2, TP −2 dBTP, dialog-anchored, LRA ≤ 18.
 - `netflix_51` — 5.1, same targets, dialog-anchored.
