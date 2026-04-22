@@ -46,6 +46,7 @@
           <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(report.printmaster.channel_config_actual, report.printmaster.channel_count) }}</div></div>
           <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">{{ report.printmaster.duration_seconds|fmt_seconds(2) }}</div></div>
         </div>
+        {{ macros.source_provenance(report.printmaster) }}
       </div>
       <section class="card card-muted">
         <h3>Stems</h3>
@@ -61,6 +62,9 @@
               <td>{{ stem.bit_depth }}-bit</td>
               <td>{{ channel_display(stem.channel_config_actual, stem.channel_count) }}</td>
               <td>{{ stem.duration_seconds|fmt_seconds(2) }}</td>
+            </tr>
+            <tr>
+              <td colspan="5">{{ macros.source_provenance(stem) }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -113,6 +117,7 @@
           <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(report.me_file.channel_config_actual, report.me_file.channel_count) }}</div></div>
           <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">{{ report.me_file.duration_seconds|fmt_seconds(2) }}</div></div>
         </div>
+        {{ macros.source_provenance(report.me_file) }}
       </div>
       <div class="card card-muted">
         <h3>DX file</h3>
@@ -123,6 +128,7 @@
           <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(report.dx_file.channel_config_actual, report.dx_file.channel_count) }}</div></div>
           <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">{{ report.dx_file.duration_seconds|fmt_seconds(2) }}</div></div>
         </div>
+        {{ macros.source_provenance(report.dx_file) }}
       </div>
     </div>
   </section>

@@ -1,8 +1,8 @@
 # FinalPass
 
-Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
+Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
 
-**Status: Phase 7 release candidate.** `loudness`, standalone `null`, standalone `me`, and `all` with auto-null / auto-M&E are implemented. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
+**Status: Phase 7 release candidate plus SM-3 logical-asset `all` support.** `loudness`, standalone `null`, standalone `me`, and `all` with auto-null / auto-M&E are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` now discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
 
 ## Install (dev)
 
@@ -43,6 +43,11 @@ uv run finalpass all <folder> --spec <name> [--out <dir>] [--json-only] [--fps <
 
 Exit codes: `0` all pass, `1` failures found, `2` tool error.
 
+Standalone input note:
+- `finalpass loudness`, `finalpass null`, and `finalpass me` accept either an interleaved WAV/BWF path or a seed path to one member of a canonical split-mono family in the same directory.
+- Supported split layouts are stereo `L/R`, 5.1 `L/R/C/LFE/Ls/Rs`, and 7.1 `L/R/C/LFE/Ls/Rs/Lss/Rss`.
+- `finalpass all` now does folder-level logical-asset discovery too. Interleaved files remain supported, but explicit split-mono families are assembled in memory, grouped by logical asset, and selected by actual layout for the chosen spec.
+
 ## Examples / smoke flow
 
 See [examples/README.md](examples/README.md) for the deterministic delivery
@@ -75,11 +80,13 @@ AAF export stays intentionally narrow in v0.1:
 
 ### `finalpass all` quickstart
 
-Point it at a folder. FinalPass classifies each WAV by role (PM, DX, MX, FX,
-M&E, optional), groups files by episode/reel/fallback identifier, runs the
-loudness pass on each group, auto-runs the null pass when a group has a
-reconstructable stem set, and auto-runs the M&E bleed heuristic when a group
-has both `dx` and `me`.
+Point it at a folder. FinalPass first discovers logical assets, so one
+interleaved multichannel file is one asset and one valid split-mono family is
+also one asset. It then classifies those logical assets by role (PM, DX, MX,
+FX, M&E, optional), groups them by episode/reel/fallback identifier, selects
+the correct presentation for the chosen spec, runs the loudness pass on each
+group, auto-runs the null pass when a group has a reconstructable stem set,
+and auto-runs the M&E bleed heuristic when a group has both `dx` and `me`.
 
 ```
 uv run python examples/_generate.py          # synthesize a two-episode delivery
@@ -102,13 +109,13 @@ Use standalone `finalpass me` when you want to tune the speech-band, gate, or
 threshold settings directly.
 
 Schema versions:
-- `finalpass loudness` emits `schema_version: 1`
-- `finalpass null` emits `schema_version: 1`
-- `finalpass me` emits `schema_version: 1`
-- `finalpass all` emits `schema_version: 5` with `groups[].null_test`,
-  `groups[].me_check`,
-  `unclassified[]`, `command: "all"`, `folder`, and per-file
-  `channel_config_hint`/`channel_config_actual`
+- `finalpass loudness` emits `schema_version: 2`
+- `finalpass null` emits `schema_version: 2`
+- `finalpass me` emits `schema_version: 2`
+- `finalpass all` emits `schema_version: 6` with `groups[].assets[]`,
+  `groups[].null_test`, `groups[].me_check`, `unclassified[]`,
+  `discovery_errors[]`, `command: "all"`, `folder`, and honest split-mono
+  provenance on measured file reports
 
 ### Filename conventions
 
@@ -140,7 +147,7 @@ keys as [_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml)).
 
 ## Scope — v0.1 release candidate
 
-**Current:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with conservative auto-null plus auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + conditional timed-marker AAF export + terminal summary.
+**Current:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a single asset or checked operation). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Interleaved assets plus canonical split stereo / 5.1 / 7.1 logical assets. Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with logical-asset selection plus conservative auto-null/auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + conditional timed-marker AAF export + terminal summary.
 
 **Out (non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Speech recognition, transcription, diarization, or ML/VAD. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification — FinalPass measures, it does not bless.
 

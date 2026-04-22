@@ -6,29 +6,49 @@ Features outside the current phase's spec go here, not into the code.
 - Create the local `v0.1.0` tag only after human sign-off. The exact command
   lives in `RELEASE_CHECKLIST.md`; do not automate it in normal phase work.
 
+## Split-mono follow-up
+
+- **SM-1 + SM-2 landed the ingest foundation plus standalone wiring.**
+  - `src/finalpass/assets.py` now discovers logical assets, validates canonical
+    stereo / 5.1 / 7.1 split-mono families, assembles valid families in memory,
+    and resolves seed-member paths to full logical assets.
+  - standalone `loudness` / `null` / `me` now resolve either interleaved files
+    or seed-member split-mono paths and persist standalone provenance.
+- **SM-3 landed the logical-asset `all` redesign.**
+  - `finalpass all` now discovers folder contents as logical assets rather than
+    raw files, keeps mixed presentations inside one editorial group, selects
+    target-layout assets by actual layout, and persists `groups[].assets[]`
+    plus v6 measured-file provenance.
+  - explicit split-looking incomplete families now surface as discovery errors
+    on the `all` path instead of silently masquerading as mono assets.
+- **Still deferred beyond SM-3:**
+  - wizard / TUI guidance over the logical-asset model
+  - any CLI surface redesign beyond the current commands
+
 ## Phase 2 — design decisions
 
 - **Open question #1 (Report model)** resolved **separate models**, not unified.
-  - Phase 1 (`finalpass loudness`) emits `Report` at `schema_version: 1` with
+  - Phase 1 (`finalpass loudness`) originally emitted `Report` at
+    `schema_version: 1` with
     `summary: Summary` (no `groups_*` fields).
   - The integrated folder path now emits `AllReport` at `schema_version: 5`
     with `groups[]`, `groups[].null_test`, `groups[].me_check`, `unclassified[]`, `command`,
     `folder`, and `summary: AllSummary` (which has `groups_total/passed/failed`
     on top of the Phase 1 totals).
   - `FileReport`, `Measurements`, `CheckResult` are shared between both reports.
-  - **Why not unified**: PHASE_2_SPEC.md says "Phase 1's schema_version: 1
-    output from the `loudness` subcommand stays at 1 — don't retrofit it".
+  - **Why not unified**: Phase 2 explicitly forbade retrofitting the original
+    Phase 1 `loudness` shape.
     A unified model with optional `groups`/`unclassified`/`groups_*` fields
     would either force those keys into Phase 1 JSON as `null`s (retrofit) or
     force serialization tricks like `exclude_none=True` — which would also
     drop `measured: null` on skipped checks and break the Phase 1 golden.
-    Separate classes make the version contract obvious and keep the Phase 1
-    golden untouched.
+    Separate classes made the version contract obvious and kept the original
+    Phase 1 golden untouched; SM-2 later bumped only the standalone schemas.
 
 ## Phase 3 — design decisions
 
 - **Standalone null got its own schema.**
-  - `finalpass null` emits `NullReport` at `schema_version: 1`.
+  - `finalpass null` emitted `NullReport` at `schema_version: 1` through Phase 7.
   - `finalpass all` bumps to `schema_version: 4` and adds `groups[].null_test`
     rather than retrofitting the Phase 1 `loudness` shape.
 - **Auto-null stays conservative.**
@@ -45,7 +65,7 @@ Features outside the current phase's spec go here, not into the code.
 ## Phase 4 — design decisions
 
 - **Standalone M&E got its own schema.**
-  - `finalpass me` emits `MEReport` at `schema_version: 1`.
+  - `finalpass me` emitted `MEReport` at `schema_version: 1` through Phase 7.
   - `finalpass all` bumps to `schema_version: 5` and adds `groups[].me_check`
     without retrofitting the Phase 1 or Phase 3 standalone shapes.
 - **Auto-M&E is deliberately narrow.**
@@ -73,6 +93,45 @@ Features outside the current phase's spec go here, not into the code.
   - `report.json` remains the stable machine contract.
   - `report.html` is rendered in-memory first, then the JSON/HTML pair is written.
   - `--json-only` still writes no files.
+
+## Split-mono Phase SM-2 — design decisions
+
+- **Standalone provenance bumped the standalone schemas only.**
+  - `finalpass loudness`, `finalpass null`, and `finalpass me` now emit
+    `schema_version: 2`.
+  - `finalpass all` stays at `schema_version: 5` and does not gain any of the
+    standalone split-mono provenance fields in SM-2.
+- **One standalone ingest seam builds on SM-1.**
+  - `src/finalpass/standalone_ingest.py` resolves interleaved paths and
+    split-family seed paths through `assets.py`; the standalone commands do not
+    duplicate sibling-family resolution logic.
+- **Canonical path stays representative; full source provenance is explicit.**
+  - Standalone reports keep `path` as the canonical/representative display path.
+  - Split/interleaved truth lives in `source_kind`, `source_paths`,
+    `member_legs`, and `presentation_label`.
+- **`all` remains intentionally untouched.**
+  - Folder-level logical-asset discovery, grouping, and schema redesign are
+    still deferred beyond SM-2.
+
+## Split-mono Phase SM-3 — design decisions
+
+- **`all` is now asset-first, not raw-file-first.**
+  - Folder discovery runs through `assets.py` plus the new
+    `src/finalpass/all_assets.py` seam.
+  - Interleaved files and canonical split families become one logical asset
+    each; invalid explicit split families surface separately as discovery
+    errors.
+- **Mixed presentations stay in inventory instead of acting like duplicates.**
+  - Duplicate-role failures on `all` now apply only within the chosen target
+    layout.
+  - Alternate-layout PM/DX/MX/FX/ME assets remain visible in `groups[].assets[]`
+    with selection notes and `used_by` provenance.
+- **Dialog loudness keeps the earlier fallback, but timed analysis stays strict.**
+  - `dialog_lufs` prefers a target-layout DX asset.
+  - If none exists, one alternate-layout DX may be used for dialog loudness
+    only.
+  - Null and M&E still require layout-compatible target assets; alternate DX is
+    never reused for timed analysis.
 
 ## Phase 6 — design decisions
 

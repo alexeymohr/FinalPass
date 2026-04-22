@@ -25,6 +25,8 @@ def _normalize(report: dict) -> dict:
     report.pop("run_started_at", None)
     for f in report.get("files", []):
         f["path"] = Path(f["path"]).name  # keep only basename
+        if "source_paths" in f:
+            f["source_paths"] = [Path(path).name for path in f["source_paths"]]
     return report
 
 
@@ -76,13 +78,35 @@ def _normalize_all(report: dict) -> dict:
     report.pop("run_started_at", None)
     report.pop("folder", None)  # absolute path varies with tmp_path
     for g in report.get("groups", []):
+        for asset in g.get("assets", []):
+            asset["asset_id"] = _normalize_asset_id(asset["asset_id"])
+            asset["path"] = Path(asset["path"]).name
+            asset["source_paths"] = [Path(path).name for path in asset.get("source_paths", [])]
         for f in g.get("files", []):
             f["path"] = Path(f["path"]).name
+            f["source_paths"] = [Path(path).name for path in f.get("source_paths", [])]
     for f in report.get("files", []):
         f["path"] = Path(f["path"]).name
+        f["source_paths"] = [Path(path).name for path in f.get("source_paths", [])]
     for u in report.get("unclassified", []):
         u["path"] = Path(u["path"]).name
+        u["source_paths"] = [Path(path).name for path in u.get("source_paths", [])]
+    for issue in report.get("discovery_errors", []):
+        issue["path"] = Path(issue["path"]).name if issue["path"] else issue["path"]
+        issue["source_paths"] = [Path(path).name for path in issue.get("source_paths", [])]
     return report
+
+
+def _normalize_asset_id(value: str) -> str:
+    if value.startswith("interleaved::"):
+        return f"interleaved::{Path(value.split('::', 1)[1]).name}"
+    if value.startswith("split_mono::"):
+        prefix, body = value.split("::", 1)
+        parts = body.split("|")
+        if parts:
+            parts[0] = Path(parts[0]).name
+        return f"{prefix}::{'|'.join(parts)}"
+    return value
 
 
 def test_golden_all_two_episodes(tmp_path: Path) -> None:

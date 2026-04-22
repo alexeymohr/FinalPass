@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 from typing import Literal
+import warnings
 
 import numpy as np
 import pyloudnorm as pyln
@@ -76,6 +77,8 @@ def _finite_or_none(value: float) -> float | None:
 def _integrated(data: np.ndarray, sr: int) -> tuple[float | None, str | None]:
     if data.shape[0] < 3 * sr:
         return None, "file_too_short_for_integrated"
+    if data.ndim == 2 and data.shape[1] > 5:
+        return _integrated_extended(data, sr)
     meter = pyln.Meter(sr)
     value = meter.integrated_loudness(data)
     cleaned = _finite_or_none(value)
@@ -87,6 +90,8 @@ def _integrated(data: np.ndarray, sr: int) -> tuple[float | None, str | None]:
 def _lra(data: np.ndarray, sr: int) -> tuple[float | None, str | None]:
     if data.shape[0] < 3 * sr:
         return None, "file_too_short_for_integrated"
+    if data.ndim == 2 and data.shape[1] > 5:
+        return _lra_extended(data, sr)
     meter = pyln.Meter(sr)
     try:
         value = meter.loudness_range(data)
@@ -201,6 +206,97 @@ def _weights_for_channels(n_channels: int) -> list[float]:
             f"Unsupported channel count for BS.1770 weighting: {n_channels}"
         )
     return _CHANNEL_WEIGHTS[n_channels]
+
+
+def _apply_k_weighting(data: np.ndarray, sr: int) -> np.ndarray:
+    weighted = data.copy()
+    for filter_stage in _make_meter(sr)._filters.values():
+        for ch in range(weighted.shape[1]):
+            weighted[:, ch] = filter_stage.apply_filter(weighted[:, ch])
+    return weighted
+
+
+def _blockwise_bs1770_loudness(
+    weighted: np.ndarray,
+    *,
+    sr: int,
+    block_size: float,
+    overlap: float,
+    gains: list[float],
+) -> list[float]:
+    num_channels = weighted.shape[1]
+    num_samples = weighted.shape[0]
+    step = 1.0 - overlap
+    duration = num_samples / sr
+    num_blocks = int(np.round(((duration - block_size) / (block_size * step))) + 1)
+    if num_blocks <= 0:
+        return []
+
+    z = np.zeros((num_channels, num_blocks), dtype=np.float64)
+    for i in range(num_channels):
+        for j in range(num_blocks):
+            lower = int(block_size * (j * step) * sr)
+            upper = int(block_size * (j * step + 1) * sr)
+            z[i, j] = (1.0 / (block_size * sr)) * np.sum(np.square(weighted[lower:upper, i]))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        return [
+            -0.691 + 10.0 * np.log10(np.sum([gains[i] * z[i, j] for i in range(num_channels)]))
+            for j in range(num_blocks)
+        ]
+
+
+def _integrated_extended(data: np.ndarray, sr: int) -> tuple[float | None, str | None]:
+    gains = _weights_for_channels(data.shape[1])
+    weighted = _apply_k_weighting(data, sr)
+    blockwise = _blockwise_bs1770_loudness(
+        weighted,
+        sr=sr,
+        block_size=0.4,
+        overlap=0.75,
+        gains=gains,
+    )
+    gated = [value for value in blockwise if value >= ABS_GATE_LUFS]
+    if not gated:
+        return None, "silent_or_below_gate"
+
+    z_avg_gated_power = np.sum(np.power(10.0, np.divide(np.array(gated) + 0.691, 10.0))) / len(gated)
+    relative_threshold = -0.691 + 10.0 * np.log10(z_avg_gated_power) - 10.0
+    doubly_gated = [value for value in gated if value > relative_threshold]
+    if not doubly_gated:
+        return None, "silent_or_below_gate"
+
+    gated_power = np.sum(np.power(10.0, np.divide(np.array(doubly_gated) + 0.691, 10.0))) / len(doubly_gated)
+    integrated = -0.691 + 10.0 * np.log10(gated_power)
+    return _finite_or_none(integrated), (None if math.isfinite(integrated) else "silent_or_below_gate")
+
+
+def _lra_extended(data: np.ndarray, sr: int) -> tuple[float | None, str | None]:
+    gains = _weights_for_channels(data.shape[1])
+    padded = np.vstack([data, np.zeros((int(round(1.5 * sr)), data.shape[1]), dtype=np.float64)])
+    weighted = _apply_k_weighting(padded, sr)
+    blockwise = _blockwise_bs1770_loudness(
+        weighted,
+        sr=sr,
+        block_size=3.0,
+        overlap=0.97,
+        gains=gains,
+    )
+    if not blockwise:
+        return None, "lra_undefined_signal_too_quiet"
+    absolute_gated = [value for value in blockwise if value >= ABS_GATE_LUFS]
+    if not absolute_gated:
+        return None, "lra_undefined_signal_too_quiet"
+
+    power = np.sum(np.power(10.0, np.divide(absolute_gated, 10.0))) / len(absolute_gated)
+    relative_threshold = 10.0 * np.log10(power) - 20.0
+    relative_gated = [value for value in absolute_gated if value >= relative_threshold]
+    if not relative_gated:
+        return None, "lra_undefined_signal_too_quiet"
+
+    lra = float(np.percentile(relative_gated, 95) - np.percentile(relative_gated, 10))
+    return _finite_or_none(lra), (None if math.isfinite(lra) else "lra_undefined_signal_too_quiet")
 
 
 def measure(audio: AudioFile) -> LoudnessMeasurement:

@@ -13,6 +13,25 @@ PM_TARGET_DBFS = -23.0
 ROLE_TOKEN = {"pm": "PM", "dx": "DX", "mx": "MX", "fx": "FX", "me": "ME"}
 ME_BAND_LOW_HZ = 200.0
 ME_BAND_HIGH_HZ = 4000.0
+SPLIT_LEG_ORDERS = {
+    "stereo": ["L", "R"],
+    "5.1": ["L", "R", "C", "LFE", "Ls", "Rs"],
+    "7.1": ["L", "R", "C", "LFE", "Ls", "Rs", "Lss", "Rss"],
+}
+PRESENTATION_TOKEN = {
+    "stereo": "LtRt",
+    "5.1": "5.1",
+    "7.1": "7.1",
+}
+ROLE_STEM_TOKEN = {
+    "pm": "Comp",
+    "dx": "DX",
+    "mx": "MX",
+    "fx": "FX",
+    "me": "ME",
+    "opt": "OPT",
+    "unknown": "MYSTERY",
+}
 
 
 def pink_noise(n_samples: int, n_channels: int, seed: int) -> np.ndarray:
@@ -229,3 +248,79 @@ def build_two_episodes(
         me_bleed_defect=e04_me_bleed_defect,
     )
     return root
+
+
+def write_split_role(
+    root: Path,
+    group_id: str,
+    role: str,
+    layout: str,
+    data: np.ndarray,
+    *,
+    presentation_token: str | None = None,
+    subtype: str = "PCM_24",
+    stem_token: str | None = None,
+) -> dict[str, Path]:
+    presentation_token = presentation_token or PRESENTATION_TOKEN[layout]
+    stem_token = stem_token or ROLE_STEM_TOKEN[role]
+    legs = SPLIT_LEG_ORDERS[layout]
+    assert data.ndim == 2
+    assert data.shape[1] == len(legs)
+    out: dict[str, Path] = {}
+    for index, leg in enumerate(legs):
+        path = root / f"SHOW_{group_id}_{stem_token}_{presentation_token}.{leg}.wav"
+        out[leg] = write_audio(path, data[:, [index]], subtype=subtype)
+    return out
+
+
+def build_split_group(
+    root: Path,
+    group_id: str,
+    *,
+    layout: str = "5.1",
+    write_roles: tuple[str, ...] = ("pm", "dx", "mx", "fx"),
+    pm_gain_db: float = 0.0,
+    null_defect: bool = False,
+    me_mode: str = "sum",
+    me_bleed_defect: bool = False,
+    me_bleed_gain: float = 0.60,
+    base_seed: int = SEED,
+    seconds: float = SECONDS,
+    presentation_token: str | None = None,
+    role_presentation_tokens: dict[str, str] | None = None,
+    role_stem_tokens: dict[str, str] | None = None,
+) -> dict[str, dict[str, Path]]:
+    role_presentation_tokens = role_presentation_tokens or {}
+    role_stem_tokens = role_stem_tokens or {}
+    n_channels = len(SPLIT_LEG_ORDERS[layout])
+    data = exact_sum_components(seconds=seconds, n_channels=n_channels, base_seed=base_seed)
+    gain = 10 ** (pm_gain_db / 20.0)
+    for key in data:
+        data[key] = data[key] * gain
+
+    if null_defect:
+        start = int(round(5.0 * SR))
+        end = int(round(7.0 * SR))
+        data["pm"][start:end] = data["pm"][start:end] - data["fx"][start:end]
+
+    if "me" in write_roles and me_mode == "independent":
+        data["me"] = independent_me_from_dx(
+            data["dx"],
+            base_seed=base_seed,
+            bleed_region=(5.0, 7.0) if me_bleed_defect else None,
+            bleed_gain=me_bleed_gain,
+        )
+
+    out: dict[str, dict[str, Path]] = {}
+    for role in write_roles:
+        source_key = role if role in data else "mx"
+        out[role] = write_split_role(
+            root,
+            group_id,
+            role,
+            layout,
+            data[source_key],
+            presentation_token=role_presentation_tokens.get(role, presentation_token),
+            stem_token=role_stem_tokens.get(role),
+        )
+    return out

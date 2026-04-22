@@ -42,7 +42,7 @@ def test_loudness_pass_exits_zero(pink_stereo_10s: Path, tmp_path: Path) -> None
     assert html_path.exists()
     assert not aaf_path.exists()
     data = json.loads(report_path.read_text())
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == 2
     assert data["spec"]["name"] == "ebu_r128"
     assert data["files"][0]["role"] == "primary"
     assert "report.json" in result.output
@@ -71,7 +71,7 @@ def test_json_only_is_parseable(pink_stereo_10s: Path, tmp_path: Path) -> None:
     ])
     assert result.exit_code in (0, 1)
     data = json.loads(result.output)
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == 2
     assert not (tmp_path / "out" / "report.json").exists()
     assert not (tmp_path / "out" / "report.html").exists()
     assert not (tmp_path / "out" / "markers.aaf").exists()
@@ -88,9 +88,7 @@ def test_channel_mismatch_exits_two(pink_stereo_10s: Path, tmp_path: Path) -> No
     assert "5.1" in result.output or "6 ch" in result.output
 
 
-def test_loudness_v1_does_not_leak_phase2_fields(pink_stereo_10s: Path, tmp_path: Path) -> None:
-    """schema_version:1 output must not include channel_config_hint/actual —
-    those are Phase 2+ FileReport fields and should be excluded on serialize."""
+def test_loudness_v2_includes_standalone_provenance_fields(pink_stereo_10s: Path, tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(main, [
         "loudness", str(pink_stereo_10s),
@@ -100,10 +98,12 @@ def test_loudness_v1_does_not_leak_phase2_fields(pink_stereo_10s: Path, tmp_path
     ])
     assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 1
-    for f in data["files"]:
-        assert "channel_config_hint" not in f
-        assert "channel_config_actual" not in f
+    assert data["schema_version"] == 2
+    file_report = data["files"][0]
+    assert file_report["source_kind"] == "interleaved"
+    assert file_report["source_paths"] == [str(pink_stereo_10s.resolve())]
+    assert file_report["member_legs"] == []
+    assert file_report["channel_config_actual"] == "stereo"
 
 
 def test_silent_file_skips_lra_and_fails_integrated(silent_stereo_5s: Path, tmp_path: Path) -> None:

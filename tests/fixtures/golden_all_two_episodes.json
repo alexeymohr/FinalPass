@@ -1,6 +1,6 @@
 {
   "finalpass_version": "0.1.0",
-  "schema_version": 5,
+  "schema_version": 6,
   "spec": {
     "name": "ebu_r128",
     "display_name": "EBU R128 \u2014 stereo (pre-produced)",
@@ -11,6 +11,95 @@
   "groups": [
     {
       "group_id": "S01E03",
+      "assets": [
+        {
+          "asset_id": "interleaved::SHOW_S01E03_DX_STEREO.wav",
+          "role": "dx",
+          "path": "SHOW_S01E03_DX_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_DX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "null",
+            "me"
+          ],
+          "selection_note": "selected_for_target_layout"
+        },
+        {
+          "asset_id": "interleaved::SHOW_S01E03_FX_STEREO.wav",
+          "role": "fx",
+          "path": "SHOW_S01E03_FX_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_FX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "null"
+          ],
+          "selection_note": "selected_for_target_layout"
+        },
+        {
+          "asset_id": "interleaved::SHOW_S01E03_ME_STEREO.wav",
+          "role": "me",
+          "path": "SHOW_S01E03_ME_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_ME_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "me"
+          ],
+          "selection_note": "selected_for_target_layout"
+        },
+        {
+          "asset_id": "interleaved::SHOW_S01E03_MX_STEREO.wav",
+          "role": "mx",
+          "path": "SHOW_S01E03_MX_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_MX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "null"
+          ],
+          "selection_note": "selected_for_target_layout"
+        },
+        {
+          "asset_id": "interleaved::SHOW_S01E03_PM_STEREO.wav",
+          "role": "pm",
+          "path": "SHOW_S01E03_PM_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_PM_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "pm_loudness",
+            "null"
+          ],
+          "selection_note": "selected_for_target_layout"
+        }
+      ],
       "files": [
         {
           "path": "SHOW_S01E03_PM_STEREO.wav",
@@ -63,7 +152,13 @@
           ],
           "errors": [],
           "channel_config_hint": "stereo",
-          "channel_config_actual": "stereo"
+          "channel_config_actual": "stereo",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_PM_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo"
         }
       ],
       "null_test": {
@@ -126,6 +221,95 @@
     },
     {
       "group_id": "S01E04",
+      "assets": [
+        {
+          "asset_id": "interleaved::SHOW_S01E04_DX_STEREO.wav",
+          "role": "dx",
+          "path": "SHOW_S01E04_DX_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_DX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "null",
+            "me"
+          ],
+          "selection_note": "selected_for_target_layout"
+        },
+        {
+          "asset_id": "interleaved::SHOW_S01E04_FX_STEREO.wav",
+          "role": "fx",
+          "path": "SHOW_S01E04_FX_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_FX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "null"
+          ],
+          "selection_note": "selected_for_target_layout"
+        },
+        {
+          "asset_id": "interleaved::SHOW_S01E04_ME_STEREO.wav",
+          "role": "me",
+          "path": "SHOW_S01E04_ME_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_ME_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "me"
+          ],
+          "selection_note": "selected_for_target_layout"
+        },
+        {
+          "asset_id": "interleaved::SHOW_S01E04_MX_STEREO.wav",
+          "role": "mx",
+          "path": "SHOW_S01E04_MX_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_MX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "null"
+          ],
+          "selection_note": "selected_for_target_layout"
+        },
+        {
+          "asset_id": "interleaved::SHOW_S01E04_PM_STEREO.wav",
+          "role": "pm",
+          "path": "SHOW_S01E04_PM_STEREO.wav",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_PM_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "channel_config_actual": "stereo",
+          "channel_config_hint": "stereo",
+          "used_by": [
+            "pm_loudness",
+            "null"
+          ],
+          "selection_note": "selected_for_target_layout"
+        }
+      ],
       "files": [
         {
           "path": "SHOW_S01E04_PM_STEREO.wav",
@@ -178,7 +362,13 @@
           ],
           "errors": [],
           "channel_config_hint": "stereo",
-          "channel_config_actual": "stereo"
+          "channel_config_actual": "stereo",
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_PM_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo"
         }
       ],
       "null_test": {
@@ -292,7 +482,13 @@
       ],
       "errors": [],
       "channel_config_hint": "stereo",
-      "channel_config_actual": "stereo"
+      "channel_config_actual": "stereo",
+      "source_kind": "interleaved",
+      "source_paths": [
+        "SHOW_S01E03_PM_STEREO.wav"
+      ],
+      "member_legs": [],
+      "presentation_label": "Stereo"
     },
     {
       "path": "SHOW_S01E04_PM_STEREO.wav",
@@ -345,10 +541,17 @@
       ],
       "errors": [],
       "channel_config_hint": "stereo",
-      "channel_config_actual": "stereo"
+      "channel_config_actual": "stereo",
+      "source_kind": "interleaved",
+      "source_paths": [
+        "SHOW_S01E04_PM_STEREO.wav"
+      ],
+      "member_legs": [],
+      "presentation_label": "Stereo"
     }
   ],
   "unclassified": [],
+  "discovery_errors": [],
   "summary": {
     "groups_total": 2,
     "groups_passed": 2,

@@ -43,8 +43,10 @@ def test_me_independent_content_passes(tmp_path: Path) -> None:
     ])
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == 2
     assert data["command"] == "me"
+    assert data["me_file"]["source_kind"] == "interleaved"
+    assert data["me_file"]["source_paths"] == [str(files["me"].resolve())]
     assert data["me_check"]["pass"] is True
     assert data["me_check"]["flags"] == []
     assert data["summary"]["overall_pass"] is True

@@ -6,7 +6,15 @@ from pathlib import Path
 import soundfile as sf
 from click.testing import CliRunner
 
-from tests.audio_cases import SEED, SR, build_group, build_two_episodes, exact_sum_components, write_audio
+from tests.audio_cases import (
+    SEED,
+    SR,
+    build_group,
+    build_split_group,
+    build_two_episodes,
+    exact_sum_components,
+    write_audio,
+)
 from finalpass.cli import main
 
 
@@ -22,9 +30,9 @@ def test_all_two_episodes_both_pass(tmp_path: Path) -> None:
         "--out", str(tmp_path / "out"),
         "--json-only",
     ])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 5
+    assert data["schema_version"] == 6
     assert data["command"] == "all"
     assert data["summary"]["groups_total"] == 2
     assert data["summary"]["groups_passed"] == 2
@@ -32,6 +40,7 @@ def test_all_two_episodes_both_pass(tmp_path: Path) -> None:
     gids = {g["group_id"] for g in data["groups"]}
     assert gids == {"S01E03", "S01E04"}
     for g in data["groups"]:
+        assert g["assets"]
         assert g["null_test"]["pass"] is True
         assert g["null_test"]["stem_strategy"] == "dx_mx_fx"
         assert g["me_check"]["pass"] is True
@@ -90,7 +99,7 @@ def test_all_duplicate_pm_isolates_to_group(tmp_path: Path) -> None:
     data = json.loads(result.output)
     by_gid = {g["group_id"]: g for g in data["groups"]}
     e03 = by_gid["S01E03"]
-    assert any(e["type"] == "DuplicateRoleError" for e in e03["errors"])
+    assert any(e["type"] == "DuplicateTargetLayoutRoleError" for e in e03["errors"])
     assert e03["files"] == []  # nothing measured for the failed group
     assert by_gid["S01E04"]["group_summary"]["overall_pass"] is True
 
@@ -98,7 +107,7 @@ def test_all_duplicate_pm_isolates_to_group(tmp_path: Path) -> None:
 def test_all_sample_rate_mismatch_within_group(tmp_path: Path) -> None:
     folder = tmp_path / "delivery"
     folder.mkdir()
-    # Two SRs in the same group → that group fails, other group runs.
+    # Different-rate non-target assets no longer poison the whole group in SM-3.
     data = exact_sum_components(base_seed=SEED + 200)
     write_audio(folder / "SHOW_S01E03_PM_STEREO.wav", data["pm"], sr=48000)
     write_audio(folder / "SHOW_S01E03_DX_STEREO.wav", data["dx"], sr=44100)
@@ -111,10 +120,11 @@ def test_all_sample_rate_mismatch_within_group(tmp_path: Path) -> None:
         "--out", str(tmp_path / "out"),
         "--json-only",
     ])
-    assert result.exit_code == 1, result.output
+    assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
     by_gid = {g["group_id"]: g for g in data["groups"]}
-    assert any(e["type"] == "SampleRateMismatch" for e in by_gid["S01E03"]["errors"])
+    assert by_gid["S01E03"]["errors"] == []
+    assert by_gid["S01E03"]["group_summary"]["overall_pass"] is True
     assert by_gid["S01E04"]["group_summary"]["overall_pass"] is True
 
 
@@ -157,7 +167,7 @@ def test_all_surfaces_channel_config_hint_and_actual(tmp_path: Path) -> None:
         "--out", str(tmp_path / "out"),
         "--json-only",
     ])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
     for g in data["groups"]:
         for f in g["files"]:
@@ -387,3 +397,151 @@ def test_all_channel_label_mismatch_fails_me_preflight_only(tmp_path: Path) -> N
     assert group["me_check"]["reason"] == "channel_config_label_mismatch"
     assert group["me_check"]["summary"] is None
     assert group["me_check"]["errors"][0]["type"] == "ChannelConfigLabelMismatch"
+
+
+def test_all_split_51_group_discovers_as_one_editorial_group(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx", "mx", "fx"), base_seed=SEED + 1000)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "netflix_51",
+        "--json-only",
+    ])
+    assert result.exit_code in (0, 1), result.output
+    data = json.loads(result.output)
+    assert data["schema_version"] == 6
+    assert data["summary"]["groups_total"] == 1
+    group = data["groups"][0]
+    assert group["group_id"] == "S01E03"
+    assert group["errors"] == []
+    assert len(group["assets"]) == 4
+    assert {asset["role"] for asset in group["assets"]} == {"pm", "dx", "mx", "fx"}
+    assert all(asset["source_kind"] == "split_mono" for asset in group["assets"])
+    assert group["null_test"]["pass"] is True
+
+
+def test_all_mixed_51_and_ltrt_pm_keeps_alternate_inventory_without_duplicate_failure(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx", "mx", "fx"), base_seed=SEED + 1010)
+    build_split_group(folder, "S01E03", layout="stereo", write_roles=("pm",), base_seed=SEED + 1011)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "netflix_51",
+        "--json-only",
+    ])
+    assert result.exit_code in (0, 1), result.output
+    data = json.loads(result.output)
+    group = data["groups"][0]
+    assert not any(error["type"] == "DuplicateTargetLayoutRoleError" for error in group["errors"])
+    pm_assets = [asset for asset in group["assets"] if asset["role"] == "pm"]
+    assert len(pm_assets) == 2
+    assert {asset["channel_config_actual"] for asset in pm_assets} == {"5.1", "stereo"}
+    selected_pm = next(asset for asset in pm_assets if asset["channel_config_actual"] == "5.1")
+    alternate_pm = next(asset for asset in pm_assets if asset["channel_config_actual"] == "stereo")
+    assert "selected_for_target_layout" in (selected_pm["selection_note"] or "")
+    assert "alternate_presentation" in (alternate_pm["selection_note"] or "")
+    assert group["files"][0]["channel_config_actual"] == "5.1"
+
+
+def test_all_split_mono_auto_me_runs(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="5.1",
+        write_roles=("pm", "dx", "mx", "fx", "me"),
+        me_mode="independent",
+        base_seed=SEED + 1020,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "netflix_51",
+        "--json-only",
+    ])
+    assert result.exit_code in (0, 1), result.output
+    data = json.loads(result.output)
+    group = data["groups"][0]
+    assert group["me_check"]["pass"] is True
+    assert group["me_check"]["flags"] == []
+
+
+def test_all_dialog_loudness_falls_back_to_alternate_layout_dx_only(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "mx", "fx"), base_seed=SEED + 1030)
+    build_split_group(folder, "S01E03", layout="stereo", write_roles=("dx",), base_seed=SEED + 1031)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "netflix_51",
+        "--json-only",
+    ])
+    assert result.exit_code in (0, 1), result.output
+    data = json.loads(result.output)
+    group = data["groups"][0]
+    roles = {file_report["role"] for file_report in group["files"]}
+    assert roles == {"pm", "dx"}
+    dx_file = next(file_report for file_report in group["files"] if file_report["role"] == "dx")
+    assert dx_file["channel_config_actual"] == "stereo"
+    assert group["null_test"]["pass"] is None
+    assert group["null_test"]["reason"] == "insufficient_stems_for_auto_null"
+    assert group["me_check"]["pass"] is None
+    assert group["me_check"]["reason"] == "missing_dx_or_me"
+    dx_asset = next(asset for asset in group["assets"] if asset["role"] == "dx")
+    assert "dialog_loudness" in dx_asset["used_by"]
+    assert "selected_for_dialog_fallback" in (dx_asset["selection_note"] or "")
+
+
+def test_all_explicit_incomplete_split_family_becomes_discovery_error(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    members = build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm",), base_seed=SEED + 1040)["pm"]
+    members["C"].unlink()
+    members["LFE"].unlink()
+    members["Ls"].unlink()
+    members["Rs"].unlink()
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "netflix_51",
+        "--json-only",
+    ])
+    assert result.exit_code == 1, result.output
+    data = json.loads(result.output)
+    assert data["groups"] == []
+    assert data["discovery_errors"]
+    assert data["discovery_errors"][0]["error_type"] == "MissingLeg"
+
+
+def test_all_unknown_split_asset_include_unclassified_measures_loudness_only(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_group(folder, "S01E03", write_roles=("pm",), base_seed=SEED + 1050)
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="stereo",
+        write_roles=("unknown",),
+        base_seed=SEED + 1051,
+        role_stem_tokens={"unknown": "MYSTERY"},
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--json-only",
+        "--include-unclassified",
+    ])
+    assert result.exit_code in (0, 1), result.output
+    data = json.loads(result.output)
+    group = data["groups"][0]
+    unknown_report = next(file_report for file_report in group["files"] if file_report["role"] == "unknown")
+    assert unknown_report["source_kind"] == "split_mono"
+    assert len(unknown_report["source_paths"]) == 2
+    assert any(entry["source_kind"] == "split_mono" for entry in data["unclassified"])

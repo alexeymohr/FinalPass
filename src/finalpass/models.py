@@ -1,9 +1,9 @@
 """Pydantic v2 models for the on-disk JSON reports.
 
-Phase 1's ``loudness`` command emits schema v1, Phase 3's ``null`` command
-emits schema v1, Phase 4's ``me`` command emits schema v1, and the integrated
-``all`` command emits schema v5. Kept separate from :mod:`finalpass.specs` so
-the spec input schema and the report output schemas can evolve independently.
+SM-2 bumps standalone reports to schema v2 so they can persist split-mono
+provenance, while the integrated ``all`` command stays at schema v5. Kept
+separate from :mod:`finalpass.specs` so the spec input schema and the report
+output schemas can evolve independently.
 """
 
 from __future__ import annotations
@@ -71,6 +71,19 @@ class FileReport(BaseModel):
     # JSON output so schema_version:1 stays shape-stable.
     channel_config_hint: str | None = None
     channel_config_actual: str | None = None
+    source_kind: Literal["interleaved", "split_mono"] | None = None
+    source_paths: list[str] = Field(default_factory=list)
+    member_legs: list[str] = Field(default_factory=list)
+    presentation_label: str | None = None
+
+
+class StandaloneFileReport(FileReport):
+    model_config = ConfigDict(extra="forbid")
+
+    source_kind: Literal["interleaved", "split_mono"]
+    source_paths: list[str]
+    member_legs: list[str]
+    presentation_label: str | None = None
 
 
 class Summary(BaseModel):
@@ -84,11 +97,7 @@ class Summary(BaseModel):
 
 
 class Report(BaseModel):
-    """Phase 1 `loudness` command report — `schema_version == 1`.
-
-    Kept deliberately separate from :class:`AllReport` (Phase 2) so Phase 1
-    JSON shape never gains Phase 2-only fields.
-    """
+    """SM-2 `loudness` command report — `schema_version == 2`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -98,7 +107,7 @@ class Report(BaseModel):
     run_started_at: str
     spec: SpecRef
     fps: float
-    files: list[FileReport]
+    files: list[StandaloneFileReport]
     summary: Summary
 
 
@@ -164,6 +173,10 @@ class AnalysisInputFile(BaseModel):
     channel_count: int
     channel_config_actual: str | None = None
     duration_seconds: float
+    source_kind: Literal["interleaved", "split_mono"]
+    source_paths: list[str]
+    member_legs: list[str]
+    presentation_label: str | None = None
 
 
 # Back-compat alias for the existing standalone `null` path.
@@ -213,10 +226,27 @@ class GroupSummary(BaseModel):
     overall_pass: bool
 
 
+class AssetInventoryEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str
+    role: FileRole
+    path: str
+    source_kind: Literal["interleaved", "split_mono"]
+    source_paths: list[str]
+    member_legs: list[str]
+    presentation_label: str | None = None
+    channel_config_actual: str
+    channel_config_hint: str | None = None
+    used_by: list[str] = Field(default_factory=list)
+    selection_note: str | None = None
+
+
 class Group(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     group_id: str
+    assets: list[AssetInventoryEntry] = Field(default_factory=list)
     files: list[FileReport]
     null_test: AutoNullTestResult | None = None
     me_check: MECheckResult | None = None
@@ -228,7 +258,22 @@ class UnclassifiedEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     path: str
+    source_kind: Literal["interleaved", "split_mono"]
+    source_paths: list[str]
+    member_legs: list[str] = Field(default_factory=list)
+    presentation_label: str | None = None
     reason: str
+
+
+class DiscoveryIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    source_paths: list[str]
+    error_type: str
+    message: str
+    family_key: str | None = None
+    group_hint: str | None = None
 
 
 class AllSummary(BaseModel):
@@ -245,7 +290,7 @@ class AllSummary(BaseModel):
 
 
 class AllReport(BaseModel):
-    """Phase 4 `all` command report — `schema_version == 5`."""
+    """SM-3 `all` command report — `schema_version == 6`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -260,11 +305,12 @@ class AllReport(BaseModel):
     groups: list[Group]
     files: list[FileReport]
     unclassified: list[UnclassifiedEntry]
+    discovery_errors: list[DiscoveryIssue] = Field(default_factory=list)
     summary: AllSummary
 
 
 class NullReport(BaseModel):
-    """Phase 3 standalone `null` command report — `schema_version == 1`."""
+    """SM-2 standalone `null` command report — `schema_version == 2`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -281,7 +327,7 @@ class NullReport(BaseModel):
 
 
 class MEReport(BaseModel):
-    """Phase 4 standalone `me` command report — `schema_version == 1`."""
+    """SM-2 standalone `me` command report — `schema_version == 2`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

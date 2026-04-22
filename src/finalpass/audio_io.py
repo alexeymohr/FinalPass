@@ -6,6 +6,7 @@ callers never have to branch on mono-vs-multichannel or integer-vs-float.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -43,12 +44,23 @@ class AudioFile(BaseModel):
         return int(self.data.shape[0])
 
 
+@dataclass(frozen=True)
+class AudioHeader:
+    path: Path
+    sample_rate: int
+    sample_count: int
+    bit_depth: int | None
+    subtype: str | None
+    channel_count: int
+    duration_seconds: float
+
+
 def channel_config_from_count(n_channels: int) -> str | None:
     """Map a raw channel count to the supported FinalPass channel label."""
     return _CHANNEL_CONFIG_FROM_COUNT.get(n_channels)
 
 
-def read_wav(path: Path) -> AudioFile:
+def probe_wav(path: Path) -> AudioHeader:
     path = Path(path)
     if not path.exists():
         raise AudioFormatError(f"{path} does not exist.")
@@ -63,23 +75,38 @@ def read_wav(path: Path) -> AudioFile:
             subtype = f.subtype
             sr = f.samplerate
             channels = f.channels
-        data, sr_check = sf.read(str(path), dtype="float64", always_2d=True)
+            frames = len(f)
+            duration = frames / float(sr) if sr > 0 else 0.0
     except RuntimeError as exc:
         raise AudioFormatError(f"Could not read {path}: {exc}") from exc
-
-    if sr_check != sr:
-        raise AudioFormatError(
-            f"{path}: samplerate mismatch between header ({sr}) and read ({sr_check})."
-        )
-
-    bit_depth = _SUBTYPE_BIT_DEPTH.get(subtype, 0)
-    duration = data.shape[0] / float(sr) if sr > 0 else 0.0
-
-    return AudioFile(
+    return AudioHeader(
         path=path.resolve(),
-        data=data,
         sample_rate=sr,
-        bit_depth=bit_depth,
+        sample_count=frames,
+        bit_depth=_SUBTYPE_BIT_DEPTH.get(subtype),
+        subtype=subtype,
         channel_count=channels,
         duration_seconds=duration,
+    )
+
+
+def read_wav(path: Path) -> AudioFile:
+    header = probe_wav(path)
+    try:
+        data, sr_check = sf.read(str(header.path), dtype="float64", always_2d=True)
+    except RuntimeError as exc:
+        raise AudioFormatError(f"Could not read {header.path}: {exc}") from exc
+
+    if sr_check != header.sample_rate:
+        raise AudioFormatError(
+            f"{header.path}: samplerate mismatch between header ({header.sample_rate}) and read ({sr_check})."
+        )
+
+    return AudioFile(
+        path=header.path,
+        data=data,
+        sample_rate=header.sample_rate,
+        bit_depth=header.bit_depth or 0,
+        channel_count=header.channel_count,
+        duration_seconds=header.duration_seconds,
     )

@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import click
-import soundfile as sf
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
@@ -31,13 +30,15 @@ from . import (
     __version__,
 )
 from . import aaf_export
-from .audio_io import AudioFile, channel_config_from_count, read_wav
-from .classify import (
-    ClassifiedFile,
-    FolderScan,
-    load_config,
-    scan_folder,
+from .all_assets import (
+    AssetFolderScan,
+    ClassifiedLogicalAsset,
+    discover_folder_assets,
+    read_classified_audio,
+    to_classified_file,
 )
+from .audio_io import AudioFile, channel_config_from_count, read_wav
+from .classify import ClassifiedFile, load_config
 from .errors import (
     AAFExportError,
     AlignmentError,
@@ -57,8 +58,11 @@ from .loudness import check, measure
 from .models import (
     AllReport,
     AllSummary,
+    AssetInventoryEntry,
     AutoNullTestResult,
+    DiscoveryIssue,
     FileReport,
+    FileRole,
     Group,
     MECheckResult,
     MEReport,
@@ -68,6 +72,7 @@ from .models import (
     NullTestResult,
     Report,
     SpecRef,
+    StandaloneFileReport,
     Summary,
     UnclassifiedEntry,
 )
@@ -82,17 +87,16 @@ from .me_check import (
     DEFAULT_ME_ME_FLOOR_DBFS,
     DEFAULT_ME_WINDOW_MS,
     analyze_me,
-    describe_audio as describe_me_audio,
 )
 from .null_test import (
     DEFAULT_NULL_HOP_MS,
     DEFAULT_NULL_THRESHOLD_DBFS,
     DEFAULT_NULL_WINDOW_MS,
     analyze_null,
-    describe_audio as describe_null_audio,
 )
 from .report import render_report_html
 from .specs import Spec, list_bundled, load_spec
+from .standalone_ingest import describe_analysis_input, resolve_standalone_asset
 
 _err_console = Console(stderr=True)
 _out_console = Console()
@@ -118,15 +122,7 @@ def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, 
         _err_console.print(f"[red]error:[/red] {exc}")
         sys.exit(2)
 
-    # Schema v1 deliberately omits channel_config_hint/actual (Phase 2+ fields).
-    # See models.FileReport for the rationale.
-    payload = report.model_dump_json(
-        indent=2,
-        by_alias=True,
-        exclude={
-            "files": {"__all__": {"channel_config_hint", "channel_config_actual"}}
-        },
-    )
+    payload = report.model_dump_json(indent=2, by_alias=True)
 
     if json_only:
         click.echo(payload)
@@ -183,8 +179,11 @@ def specs_show_cmd(name: str) -> None:
 def _run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | None, fps: float) -> Report:
     spec, source, _ = load_spec(spec_name)
 
-    primary_audio = [read_wav(f) for f in files]
-    dx_audio = read_wav(dx_file) if dx_file is not None else None
+    primary_inputs = [resolve_standalone_asset(f) for f in files]
+    dx_input = resolve_standalone_asset(dx_file) if dx_file is not None else None
+
+    primary_audio = [resolved.audio for resolved in primary_inputs]
+    dx_audio = dx_input.audio if dx_input is not None else None
 
     _validate_channels(primary_audio, spec)
     if dx_audio is not None:
@@ -192,12 +191,13 @@ def _run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | No
 
     _validate_homogeneous_sample_rate([*primary_audio, *( [dx_audio] if dx_audio else [] )])
 
-    file_reports: list[FileReport] = []
-    for audio in primary_audio:
+    file_reports: list[StandaloneFileReport] = []
+    for resolved in primary_inputs:
+        audio = resolved.audio
         m = measure(audio)
         cs = check(m, spec, role="primary")
-        file_reports.append(FileReport(
-            path=str(audio.path),
+        file_reports.append(StandaloneFileReport(
+            path=str(resolved.logical_asset.canonical_path),
             role="primary",
             sample_rate=audio.sample_rate,
             bit_depth=audio.bit_depth,
@@ -206,18 +206,25 @@ def _run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | No
             measurements=m.as_measurements(),
             checks=cs,
             errors=m.errors,
+            channel_config_hint=resolved.logical_asset.channel_config_hint,
+            channel_config_actual=resolved.logical_asset.channel_config_actual,
+            source_kind=resolved.logical_asset.source_kind,
+            source_paths=[str(path) for path in resolved.logical_asset.source_paths],
+            member_legs=list(resolved.logical_asset.member_legs),
+            presentation_label=resolved.logical_asset.presentation_label,
         ))
 
-    if dx_audio is not None:
+    if dx_input is not None:
         if spec.dialog_lufs is None:
             _err_console.print(
                 "[yellow]warning:[/yellow] --dx provided but spec has no dialog_lufs target; ignoring."
             )
         else:
+            dx_audio = dx_input.audio
             m = measure(dx_audio)
             cs = check(m, spec, role="dx")
-            file_reports.append(FileReport(
-                path=str(dx_audio.path),
+            file_reports.append(StandaloneFileReport(
+                path=str(dx_input.logical_asset.canonical_path),
                 role="dx",
                 sample_rate=dx_audio.sample_rate,
                 bit_depth=dx_audio.bit_depth,
@@ -226,6 +233,12 @@ def _run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | No
                 measurements=m.as_measurements(),
                 checks=cs,
                 errors=m.errors,
+                channel_config_hint=dx_input.logical_asset.channel_config_hint,
+                channel_config_actual=dx_input.logical_asset.channel_config_actual,
+                source_kind=dx_input.logical_asset.source_kind,
+                source_paths=[str(path) for path in dx_input.logical_asset.source_paths],
+                member_legs=list(dx_input.logical_asset.member_legs),
+                presentation_label=dx_input.logical_asset.presentation_label,
             ))
 
     all_checks = [c for fr in file_reports for c in fr.checks]
@@ -445,8 +458,10 @@ def _run_null(
     hop_ms: float,
     threshold_dbfs: float,
 ) -> NullReport:
-    pm_audio = read_wav(pm)
-    stem_audios = [read_wav(stem) for stem in stems]
+    pm_input = resolve_standalone_asset(pm)
+    stem_inputs = [resolve_standalone_asset(stem) for stem in stems]
+    pm_audio = pm_input.audio
+    stem_audios = [resolved.audio for resolved in stem_inputs]
     analysis = analyze_null(
         pm_audio,
         stem_audios,
@@ -475,8 +490,8 @@ def _run_null(
         run_id=run_id,
         run_started_at=now.isoformat().replace("+00:00", "Z"),
         fps=fps,
-        printmaster=describe_null_audio(pm_audio),
-        stems=[describe_null_audio(audio) for audio in stem_audios],
+        printmaster=describe_analysis_input(pm_input),
+        stems=[describe_analysis_input(resolved) for resolved in stem_inputs],
         null_test=null_test,
         summary=Summary(
             total_checks=1,
@@ -599,8 +614,10 @@ def _run_me(
     dx_gate_dbfs: float,
     me_floor_dbfs: float,
 ) -> MEReport:
-    me_audio = read_wav(me_file)
-    dx_audio = read_wav(dx_file)
+    me_input = resolve_standalone_asset(me_file)
+    dx_input = resolve_standalone_asset(dx_file)
+    me_audio = me_input.audio
+    dx_audio = dx_input.audio
     analysis = analyze_me(
         me_audio,
         dx_audio,
@@ -640,8 +657,8 @@ def _run_me(
         run_id=run_id,
         run_started_at=now.isoformat().replace("+00:00", "Z"),
         fps=fps,
-        me_file=describe_me_audio(me_audio),
-        dx_file=describe_me_audio(dx_audio),
+        me_file=describe_analysis_input(me_input),
+        dx_file=describe_analysis_input(dx_input),
         me_check=me_check,
         summary=Summary(
             total_checks=1,
@@ -800,11 +817,11 @@ def _run_all(
     cfg = load_config(patterns_path)
 
     try:
-        scan: FolderScan = scan_folder(folder, cfg)
+        scan: AssetFolderScan = discover_folder_assets(folder, cfg)
     except AmbiguousClassificationError:
-        raise  # caller converts to exit 2
+        raise
 
-    if not scan.groups and not scan.unclassified:
+    if not scan.groups and not scan.discovery_errors and not scan.unclassified:
         raise NoAudioFilesError(
             f"No WAV/BWF files found in {folder}. "
             "Provide a folder containing at least one .wav file."
@@ -813,10 +830,10 @@ def _run_all(
     groups_out: list[Group] = []
     flat_files: list[FileReport] = []
 
-    for group_id, classified in scan.groups.items():
+    for group_id, classified_assets in scan.groups.items():
         group = _process_group(
             group_id=group_id,
-            classified=classified,
+            classified_assets=classified_assets,
             spec=spec,
             include_unclassified=include_unclassified,
             fps=fps,
@@ -835,22 +852,22 @@ def _run_all(
         groups_out.append(group)
         flat_files.extend(group.files)
 
-    # Any filename whose role was "unknown" is always recorded in
-    # `unclassified[]`, even when --include-unclassified added it to a group's
-    # measured `files[]`. This preserves a single place to see what wasn't
-    # classifiable.
     unclassified = [
-        UnclassifiedEntry(path=str(u.path), reason=u.reason)
-        for u in scan.unclassified
+        _unclassified_entry(asset, reason="no_role_pattern_match")
+        for asset in scan.unclassified
+    ]
+    discovery_errors = [
+        _discovery_issue(error)
+        for error in scan.discovery_errors
     ]
 
     total_checks = sum(g.group_summary.total_checks for g in groups_out)
     passed = sum(g.group_summary.passed for g in groups_out)
     failed = sum(g.group_summary.failed for g in groups_out)
     skipped = sum(g.group_summary.skipped for g in groups_out)
-    groups_passed = sum(1 for g in groups_out if g.group_summary.overall_pass and not g.errors)
+    groups_passed = sum(1 for g in groups_out if g.group_summary.overall_pass)
     groups_failed = len(groups_out) - groups_passed
-    overall_pass = failed == 0 and groups_failed == 0
+    overall_pass = failed == 0 and groups_failed == 0 and not discovery_errors
 
     summary = AllSummary(
         groups_total=len(groups_out),
@@ -877,6 +894,7 @@ def _run_all(
         groups=groups_out,
         files=flat_files,
         unclassified=unclassified,
+        discovery_errors=discovery_errors,
         summary=summary,
     )
 
@@ -884,7 +902,7 @@ def _run_all(
 def _process_group(
     *,
     group_id: str,
-    classified: list[ClassifiedFile],
+    classified_assets: list[ClassifiedLogicalAsset],
     spec: Spec,
     include_unclassified: bool,
     fps: float,
@@ -900,118 +918,137 @@ def _process_group(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> Group:
-    """Validate group cardinality, measure the files that make sense for this
-    spec, and roll the per-file results up into a :class:`Group`."""
     errors: list[GroupError] = []
+    used_by: dict[str, list[str]] = {asset.logical_asset.asset_id: [] for asset in classified_assets}
+    selection_notes: dict[str, str | None] = {asset.logical_asset.asset_id: None for asset in classified_assets}
+    target_layout = _target_layout_for_spec(spec)
+    role_to_assets: dict[FileRole, list[ClassifiedLogicalAsset]] = {}
+    for asset in classified_assets:
+        role_to_assets.setdefault(asset.role, []).append(asset)
 
-    # Cardinality: at most one of each role; the PM role is special-cased below.
-    role_to_files: dict[str, list[ClassifiedFile]] = {}
-    for cf in classified:
-        role_to_files.setdefault(cf.role, []).append(cf)
+    pm_asset, _, pm_alternates = _select_target_layout_asset(
+        group_id=group_id,
+        role="pm",
+        assets=role_to_assets.get("pm", []),
+        target_layout=target_layout,
+        errors=errors,
+        selection_notes=selection_notes,
+        required=True,
+        missing_type="MissingTargetLayoutPrintmaster",
+    )
+    dx_target, _, dx_alternates = _select_target_layout_asset(
+        group_id=group_id,
+        role="dx",
+        assets=role_to_assets.get("dx", []),
+        target_layout=target_layout,
+        errors=errors,
+        selection_notes=selection_notes,
+        required=False,
+    )
+    mx_target, _, _ = _select_target_layout_asset(
+        group_id=group_id,
+        role="mx",
+        assets=role_to_assets.get("mx", []),
+        target_layout=target_layout,
+        errors=errors,
+        selection_notes=selection_notes,
+        required=False,
+    )
+    fx_target, _, _ = _select_target_layout_asset(
+        group_id=group_id,
+        role="fx",
+        assets=role_to_assets.get("fx", []),
+        target_layout=target_layout,
+        errors=errors,
+        selection_notes=selection_notes,
+        required=False,
+    )
+    me_target, _, _ = _select_target_layout_asset(
+        group_id=group_id,
+        role="me",
+        assets=role_to_assets.get("me", []),
+        target_layout=target_layout,
+        errors=errors,
+        selection_notes=selection_notes,
+        required=False,
+    )
 
-    for role, files in role_to_files.items():
-        if role == "unknown":
-            continue
-        if len(files) > 1:
-            names = ", ".join(f.path.name for f in files)
+    selected_target_assets: dict[FileRole, ClassifiedLogicalAsset] = {}
+    for role, asset in (
+        ("pm", pm_asset),
+        ("dx", dx_target),
+        ("mx", mx_target),
+        ("fx", fx_target),
+        ("me", me_target),
+    ):
+        if asset is not None:
+            selected_target_assets[role] = asset
+
+    if pm_asset is not None:
+        _mark_used(used_by, pm_asset, "pm_loudness")
+
+    dialog_dx: ClassifiedLogicalAsset | None = None
+    if spec.dialog_lufs is not None:
+        if dx_target is not None:
+            dialog_dx = dx_target
+            _mark_used(used_by, dx_target, "dialog_loudness")
+        elif len(dx_alternates) == 1:
+            dialog_dx = dx_alternates[0]
+            _mark_used(used_by, dialog_dx, "dialog_loudness")
+            _append_selection_note(selection_notes, dialog_dx, "selected_for_dialog_fallback")
+        elif len(dx_alternates) > 1:
             errors.append(GroupError(
-                type="DuplicateRoleError",
-                message=f"group {group_id!r} has {len(files)} files classified as {role!r}: {names}",
+                type="DialogFallbackAmbiguity",
+                message=(
+                    f"group {group_id!r} has no target-layout DX asset for {target_layout}, "
+                    f"and {len(dx_alternates)} alternate-layout DX assets compete for dialog fallback."
+                ),
             ))
+            for asset in dx_alternates:
+                _append_selection_note(selection_notes, asset, "dialog_fallback_ambiguous")
 
-    pm_files = role_to_files.get("pm", [])
-    if len(pm_files) == 0:
-        errors.append(GroupError(
-            type="MissingPrintmaster",
-            message=f"group {group_id!r} has no PM (printmaster) file; loudness pass has no primary target.",
-        ))
-
-    if errors:
-        return Group(
-            group_id=group_id,
-            files=[],
-            group_summary=GroupSummary(total_checks=0, passed=0, failed=0, skipped=0, overall_pass=False),
-            errors=errors,
-        )
-
-    # Probe sample rates for every classified file in the group (not just the
-    # ones we'll measure). SR homogeneity is a group-level property — if the
-    # Dx is at 44.1 k while the PM is at 48 k, the downstream null test will
-    # be nonsense regardless of whether this phase loads the Dx audio.
-    rates: dict[str, int] = {}
-    for cf in classified:
-        try:
-            rates[cf.path.name] = sf.info(str(cf.path)).samplerate
-        except RuntimeError as exc:
-            errors.append(GroupError(
-                type="AudioFormatError",
-                message=f"{cf.path.name}: could not read audio header: {exc}",
-            ))
-    if errors:
-        return Group(
-            group_id=group_id,
-            files=[],
-            group_summary=GroupSummary(total_checks=0, passed=0, failed=0, skipped=0, overall_pass=False),
-            errors=errors,
-        )
-    distinct_rates = set(rates.values())
-    if len(distinct_rates) > 1:
-        detail = ", ".join(f"{name}={sr}Hz" for name, sr in rates.items())
-        errors.append(GroupError(
-            type="SampleRateMismatch",
-            message=f"group {group_id!r} has mixed sample rates: {detail}",
-        ))
-        return Group(
-            group_id=group_id,
-            files=[],
-            group_summary=GroupSummary(total_checks=0, passed=0, failed=0, skipped=0, overall_pass=False),
-            errors=errors,
-        )
-
-    # Resolve which files actually get measured in Phase 2.
-    targets: list[tuple[ClassifiedFile, str]] = []
-    pm = pm_files[0]
-    targets.append((pm, "pm"))
-
-    dx_files = role_to_files.get("dx", [])
-    if spec.dialog_lufs is not None and dx_files:
-        targets.append((dx_files[0], "dx"))
-
+    unknown_assets = role_to_assets.get("unknown", [])
     if include_unclassified:
-        for cf in role_to_files.get("unknown", []):
-            targets.append((cf, "unknown"))
-
-    audios: list[tuple[ClassifiedFile, str, AudioFile]] = []
-    try:
-        for cf, role in targets:
-            audios.append((cf, role, read_wav(cf.path)))
-    except FinalPassError as exc:
-        errors.append(GroupError(type=exc.__class__.__name__, message=str(exc)))
-        return Group(
-            group_id=group_id,
-            files=[],
-            group_summary=GroupSummary(total_checks=0, passed=0, failed=0, skipped=0, overall_pass=False),
-            errors=errors,
-        )
+        for asset in unknown_assets:
+            _mark_used(used_by, asset, "unknown_loudness")
+            _append_selection_note(selection_notes, asset, "selected_for_loudness_only")
+    else:
+        for asset in unknown_assets:
+            _append_selection_note(selection_notes, asset, "unknown_skipped")
 
     file_reports: list[FileReport] = []
-    for cf, role, audio in audios:
+    measure_targets: list[tuple[ClassifiedLogicalAsset, FileRole]] = []
+    if pm_asset is not None:
+        measure_targets.append((pm_asset, "pm"))
+    if dialog_dx is not None:
+        measure_targets.append((dialog_dx, "dx"))
+    if include_unclassified:
+        measure_targets.extend((asset, "unknown") for asset in unknown_assets)
+
+    for asset, role in measure_targets:
         try:
-            fr = _measure_classified_file(audio, spec, role, hint=cf.channel_config_hint)
+            audio = read_classified_audio(asset)
+            fr = _measure_asset_file(asset, audio, spec, role)
         except ChannelMismatchError as exc:
             errors.append(GroupError(type="ChannelMismatchError", message=str(exc)))
+            continue
+        except FinalPassError as exc:
+            errors.append(GroupError(type=exc.__class__.__name__, message=str(exc)))
             continue
         file_reports.append(fr)
 
     null_test = _run_group_null_test(
-        role_to_files=role_to_files,
+        printmaster=pm_asset,
+        selected_assets=selected_target_assets,
+        used_by=used_by,
         fps=fps,
         window_ms=null_window_ms,
         hop_ms=null_hop_ms,
         threshold_dbfs=null_threshold_dbfs,
     )
     me_check = _run_group_me_check(
-        role_to_files=role_to_files,
+        selected_assets=selected_target_assets,
+        used_by=used_by,
         fps=fps,
         window_ms=me_window_ms,
         hop_ms=me_hop_ms,
@@ -1022,6 +1059,12 @@ def _process_group(
         dx_gate_dbfs=me_dx_gate_dbfs,
         me_floor_dbfs=me_me_floor_dbfs,
     )
+
+    inventory = [
+        _inventory_entry(asset, used_by=used_by[asset.logical_asset.asset_id], selection_note=selection_notes[asset.logical_asset.asset_id])
+        for asset in classified_assets
+    ]
+    inventory.sort(key=lambda item: (item.role, item.path.lower()))
 
     all_checks = [c for fr in file_reports for c in fr.checks]
     passed = sum(1 for c in all_checks if c.pass_ is True)
@@ -1051,6 +1094,7 @@ def _process_group(
 
     return Group(
         group_id=group_id,
+        assets=inventory,
         files=file_reports,
         null_test=null_test,
         me_check=me_check,
@@ -1059,18 +1103,12 @@ def _process_group(
     )
 
 
-def _measure_classified_file(audio: AudioFile, spec: Spec, role: str, *, hint: str | None) -> FileReport:
-    """Measure one file in a group. ``role`` drives which checks run:
-
-    - ``"pm"`` → spec.channel_config must match; runs integrated/TP/LRA.
-    - ``"dx"`` → no channel-config check; runs a single ``dialog_lufs`` check.
-    - ``"unknown"`` (only reached with --include-unclassified) → no channel
-      check; runs integrated/TP/LRA against the general spec targets.
-
-    ``hint`` is the classifier's filename-derived channel_config guess; it is
-    recorded on the :class:`FileReport` alongside the actual channel_config
-    derived from the audio header. Phase 3 will cross-check the two.
-    """
+def _measure_asset_file(
+    asset: ClassifiedLogicalAsset,
+    audio: AudioFile,
+    spec: Spec,
+    role: FileRole,
+) -> FileReport:
     if role == "pm":
         _validate_channels([audio], spec)
         check_role = "primary"
@@ -1092,21 +1130,41 @@ def _measure_classified_file(audio: AudioFile, spec: Spec, role: str, *, hint: s
         measurements=m.as_measurements(),
         checks=cs,
         errors=m.errors,
-        channel_config_hint=hint,
-        channel_config_actual=channel_config_from_count(audio.channel_count),
+        channel_config_hint=asset.channel_config_hint,
+        channel_config_actual=asset.logical_asset.channel_config_actual,
+        source_kind=asset.logical_asset.source_kind,
+        source_paths=[str(path) for path in asset.logical_asset.source_paths],
+        member_legs=list(asset.logical_asset.member_legs),
+        presentation_label=asset.logical_asset.presentation_label,
     )
 
 
 def _run_group_null_test(
     *,
-    role_to_files: dict[str, list[ClassifiedFile]],
+    printmaster: ClassifiedLogicalAsset | None,
+    selected_assets: dict[FileRole, ClassifiedLogicalAsset],
+    used_by: dict[str, list[str]],
     fps: float,
     window_ms: float,
     hop_ms: float,
     threshold_dbfs: float,
 ) -> AutoNullTestResult:
-    pm = role_to_files["pm"][0]
-    strategy, selected_roles, stems = _select_auto_null_stems(role_to_files)
+    if printmaster is None:
+        return AutoNullTestResult(
+            **{"pass": None},
+            skipped=True,
+            reason="missing_target_layout_printmaster",
+            stem_strategy=None,
+            selected_roles=[],
+            window_ms=window_ms,
+            hop_ms=hop_ms,
+            threshold_dbfs=threshold_dbfs,
+            summary=None,
+            flags=[],
+            errors=[],
+        )
+
+    strategy, selected_roles, stems = _select_auto_null_stems(selected_assets)
     if strategy is None:
         return AutoNullTestResult(
             **{"pass": None},
@@ -1123,9 +1181,12 @@ def _run_group_null_test(
         )
 
     try:
-        pm_audio = read_wav(pm.path)
-        stem_audios = [read_wav(cf.path) for cf in stems]
-        _validate_channel_label_hints([(pm, pm_audio), *zip(stems, stem_audios)])
+        _mark_used(used_by, printmaster, "null")
+        for stem in stems:
+            _mark_used(used_by, stem, "null")
+        pm_audio = read_classified_audio(printmaster)
+        stem_audios = [read_classified_audio(asset) for asset in stems]
+        _validate_channel_label_hints([(printmaster, pm_audio), *zip(stems, stem_audios)])
         analysis = analyze_null(
             pm_audio,
             stem_audios,
@@ -1167,7 +1228,8 @@ def _run_group_null_test(
 
 def _run_group_me_check(
     *,
-    role_to_files: dict[str, list[ClassifiedFile]],
+    selected_assets: dict[FileRole, ClassifiedLogicalAsset],
+    used_by: dict[str, list[str]],
     fps: float,
     window_ms: float,
     hop_ms: float,
@@ -1178,9 +1240,9 @@ def _run_group_me_check(
     dx_gate_dbfs: float,
     me_floor_dbfs: float,
 ) -> MECheckResult:
-    dx_files = role_to_files.get("dx", [])
-    me_files = role_to_files.get("me", [])
-    if not dx_files or not me_files:
+    dx_asset = selected_assets.get("dx")
+    me_asset = selected_assets.get("me")
+    if dx_asset is None or me_asset is None:
         return MECheckResult(
             **{"pass": None},
             skipped=True,
@@ -1199,12 +1261,12 @@ def _run_group_me_check(
             errors=[],
         )
 
-    dx_file = dx_files[0]
-    me_file = me_files[0]
     try:
-        dx_audio = read_wav(dx_file.path)
-        me_audio = read_wav(me_file.path)
-        _validate_channel_label_hints([(dx_file, dx_audio), (me_file, me_audio)])
+        _mark_used(used_by, dx_asset, "me")
+        _mark_used(used_by, me_asset, "me")
+        dx_audio = read_classified_audio(dx_asset)
+        me_audio = read_classified_audio(me_asset)
+        _validate_channel_label_hints([(dx_asset, dx_audio), (me_asset, me_audio)])
         analysis = analyze_me(
             me_audio,
             dx_audio,
@@ -1257,26 +1319,143 @@ def _run_group_me_check(
     )
 
 
-def _select_auto_null_stems(role_to_files: dict[str, list[ClassifiedFile]]) -> tuple[str | None, list[str], list[ClassifiedFile]]:
-    if all(role_to_files.get(role) for role in ("dx", "mx", "fx")):
-        return "dx_mx_fx", ["dx", "mx", "fx"], [role_to_files["dx"][0], role_to_files["mx"][0], role_to_files["fx"][0]]
-    if all(role_to_files.get(role) for role in ("dx", "me")):
-        return "dx_me", ["dx", "me"], [role_to_files["dx"][0], role_to_files["me"][0]]
+def _select_auto_null_stems(
+    selected_assets: dict[FileRole, ClassifiedLogicalAsset],
+) -> tuple[str | None, list[str], list[ClassifiedLogicalAsset]]:
+    if all(selected_assets.get(role) is not None for role in ("dx", "mx", "fx")):
+        return "dx_mx_fx", ["dx", "mx", "fx"], [selected_assets["dx"], selected_assets["mx"], selected_assets["fx"]]
+    if all(selected_assets.get(role) is not None for role in ("dx", "me")):
+        return "dx_me", ["dx", "me"], [selected_assets["dx"], selected_assets["me"]]
     return None, [], []
 
 
-def _validate_channel_label_hints(items: list[tuple[ClassifiedFile, AudioFile]]) -> None:
-    for classified, audio in items:
-        hint = classified.channel_config_hint
+def _validate_channel_label_hints(items: list[tuple[ClassifiedLogicalAsset, AudioFile]]) -> None:
+    for asset, audio in items:
+        hint = asset.channel_config_hint
         if hint is None:
             continue
-        actual = channel_config_from_count(audio.channel_count)
+        actual = asset.logical_asset.channel_config_actual
         if hint == actual:
             continue
         actual_label = actual if actual is not None else f"unsupported {audio.channel_count}ch"
         raise ChannelConfigLabelMismatch(
             f"{audio.path.name} hints {hint} but header is {actual_label}."
         )
+
+
+def _target_layout_for_spec(spec: Spec) -> str:
+    return spec.channel_config
+
+
+def _select_target_layout_asset(
+    *,
+    group_id: str,
+    role: FileRole,
+    assets: list[ClassifiedLogicalAsset],
+    target_layout: str,
+    errors: list[GroupError],
+    selection_notes: dict[str, str | None],
+    required: bool,
+    missing_type: str | None = None,
+) -> tuple[ClassifiedLogicalAsset | None, list[ClassifiedLogicalAsset], list[ClassifiedLogicalAsset]]:
+    matching = [asset for asset in assets if asset.logical_asset.channel_config_actual == target_layout]
+    alternates = [asset for asset in assets if asset.logical_asset.channel_config_actual != target_layout]
+
+    for asset in alternates:
+        _append_selection_note(selection_notes, asset, "alternate_presentation")
+
+    if len(matching) == 1:
+        _append_selection_note(selection_notes, matching[0], "selected_for_target_layout")
+        return matching[0], matching, alternates
+
+    if len(matching) == 0:
+        if required:
+            errors.append(GroupError(
+                type=missing_type or "MissingTargetLayoutRole",
+                message=f"group {group_id!r} has no {role!r} asset matching target layout {target_layout!r}.",
+            ))
+        return None, matching, alternates
+
+    names = ", ".join(asset.logical_asset.canonical_path.name for asset in matching)
+    errors.append(GroupError(
+        type="DuplicateTargetLayoutRoleError",
+        message=(
+            f"group {group_id!r} has {len(matching)} {role!r} assets in target layout "
+            f"{target_layout!r}: {names}"
+        ),
+    ))
+    for asset in matching:
+        _append_selection_note(selection_notes, asset, "duplicate_target_layout")
+    return None, matching, alternates
+
+
+def _append_selection_note(
+    selection_notes: dict[str, str | None],
+    asset: ClassifiedLogicalAsset,
+    note: str,
+) -> None:
+    asset_id = asset.logical_asset.asset_id
+    current = selection_notes.get(asset_id)
+    if current is None:
+        selection_notes[asset_id] = note
+    elif note not in current.split("; "):
+        selection_notes[asset_id] = f"{current}; {note}"
+
+
+def _mark_used(
+    used_by: dict[str, list[str]],
+    asset: ClassifiedLogicalAsset,
+    purpose: str,
+) -> None:
+    purposes = used_by[asset.logical_asset.asset_id]
+    if purpose not in purposes:
+        purposes.append(purpose)
+
+
+def _inventory_entry(
+    asset: ClassifiedLogicalAsset,
+    *,
+    used_by: list[str],
+    selection_note: str | None,
+) -> AssetInventoryEntry:
+    logical_asset = asset.logical_asset
+    return AssetInventoryEntry(
+        asset_id=logical_asset.asset_id,
+        role=asset.role,
+        path=str(logical_asset.canonical_path),
+        source_kind=logical_asset.source_kind,
+        source_paths=[str(path) for path in logical_asset.source_paths],
+        member_legs=list(logical_asset.member_legs),
+        presentation_label=logical_asset.presentation_label,
+        channel_config_actual=logical_asset.channel_config_actual,
+        channel_config_hint=asset.channel_config_hint,
+        used_by=list(used_by),
+        selection_note=selection_note,
+    )
+
+
+def _unclassified_entry(asset: ClassifiedLogicalAsset, *, reason: str) -> UnclassifiedEntry:
+    logical_asset = asset.logical_asset
+    return UnclassifiedEntry(
+        path=str(logical_asset.canonical_path),
+        source_kind=logical_asset.source_kind,
+        source_paths=[str(path) for path in logical_asset.source_paths],
+        member_legs=list(logical_asset.member_legs),
+        presentation_label=logical_asset.presentation_label,
+        reason=reason,
+    )
+
+
+def _discovery_issue(error) -> DiscoveryIssue:
+    paths = [str(path) for path in error.paths]
+    return DiscoveryIssue(
+        path=paths[0] if paths else (error.family_key or ""),
+        source_paths=paths,
+        error_type=error.type,
+        message=error.message,
+        family_key=error.family_key,
+        group_hint=error.group_hint,
+    )
 
 
 def _analysis_reason(exc: FinalPassError) -> str:
@@ -1333,6 +1512,15 @@ def _render_all_report(report: AllReport) -> None:
     _out_console.print(f"[bold]{report.spec.display_name}[/bold]  [dim]({report.spec.source})[/dim]")
     _out_console.print(f"[dim]folder:[/dim] {escape(report.folder)}", soft_wrap=True)
 
+    if report.discovery_errors:
+        _out_console.print("\n[red]Discovery errors:[/red]")
+        for issue in report.discovery_errors:
+            scope = f" [{issue.group_hint}]" if issue.group_hint else ""
+            _out_console.print(f"  [red]{issue.error_type}{scope}:[/red] {issue.message}")
+            if issue.source_paths:
+                for path in issue.source_paths:
+                    _out_console.print(f"    [dim]{path}[/dim]")
+
     for g in report.groups:
         status_color = "green" if g.group_summary.overall_pass else "red"
         header = f"[{status_color}]●[/{status_color}] [bold]{g.group_id}[/bold]"
@@ -1340,6 +1528,17 @@ def _render_all_report(report: AllReport) -> None:
 
         for err in g.errors:
             _out_console.print(f"  [red]{err.type}:[/red] {err.message}")
+
+        if g.assets:
+            _out_console.print("  [dim]Assets:[/dim]")
+            for asset in g.assets:
+                used_by = ",".join(asset.used_by) if asset.used_by else "—"
+                note = asset.selection_note or "—"
+                _out_console.print(
+                    "    "
+                    f"{asset.role:<7} {asset.channel_config_actual:<6} {asset.source_kind:<11} "
+                    f"{Path(asset.path).name}  [dim]used:[/dim] {used_by}  [dim]note:[/dim] {note}"
+                )
 
         for fr in g.files:
             _render_file_checks(fr)
@@ -1408,9 +1607,9 @@ def _render_all_report(report: AllReport) -> None:
         )
 
     if report.unclassified:
-        _out_console.print("\n[dim]Unclassified (skipped):[/dim]")
+        _out_console.print("\n[dim]Unclassified logical assets:[/dim]")
         for u in report.unclassified:
-            _out_console.print(f"  [dim]{u.path} — {u.reason}[/dim]")
+            _out_console.print(f"  [dim]{u.path} — {u.reason} ({u.source_kind})[/dim]")
 
     s = report.summary
     color = "green" if s.overall_pass else "red"

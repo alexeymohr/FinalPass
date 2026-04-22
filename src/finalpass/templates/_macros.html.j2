@@ -84,6 +84,7 @@
     <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(file_report.channel_config_actual, file_report.channel_count) }}</div></div>
     <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">{{ file_report.duration_seconds|fmt_seconds(2) }}</div></div>
   </div>
+  {{ source_provenance(file_report) }}
   <div>
     <h4>Measurements</h4>
     {{ measurements_table(file_report.measurements) }}
@@ -103,6 +104,31 @@
   </div>
   {% endif %}
 </section>
+{%- endmacro %}
+
+{% macro source_provenance(item) -%}
+  {% if item.source_kind is defined %}
+  <div>
+    <h4>Source provenance</h4>
+    <div class="meta-grid">
+      <div class="stat"><div class="stat-label">Source kind</div><div class="stat-value">{{ item.source_kind }}</div></div>
+      <div class="stat"><div class="stat-label">Presentation</div><div class="stat-value">{{ item.presentation_label or "—" }}</div></div>
+      <div class="stat"><div class="stat-label">Member legs</div><div class="stat-value">{{ item.member_legs|join(", ") if item.member_legs else "—" }}</div></div>
+      <div class="stat">
+        <div class="stat-label">Source members</div>
+        <div class="stat-value mono">
+          {% if item.source_paths %}
+            {% for path in item.source_paths %}
+            <div>{{ path }}</div>
+            {% endfor %}
+          {% else %}
+            —
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 {%- endmacro %}
 
 {% macro flagged_timeline(lane, title, fill_class='flag') -%}

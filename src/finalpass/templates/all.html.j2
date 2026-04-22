@@ -21,17 +21,39 @@
   ]) }}
 </section>
 
-{% if report.unclassified %}
-<section class="card">
-  <h2>Unclassified files</h2>
+{% if report.discovery_errors %}
+<section class="card card-muted">
+  <h2>Discovery errors</h2>
   <table>
     <thead>
-      <tr><th>Path</th><th>Reason</th></tr>
+      <tr><th>Path</th><th>Group hint</th><th>Error</th><th>Detail</th></tr>
+    </thead>
+    <tbody>
+      {% for issue in report.discovery_errors %}
+      <tr>
+        <td class="mono">{{ issue.path }}</td>
+        <td>{{ issue.group_hint or "—" }}</td>
+        <td>{{ issue.error_type }}</td>
+        <td>{{ issue.message }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if report.unclassified %}
+<section class="card">
+  <h2>Unclassified logical assets</h2>
+  <table>
+    <thead>
+      <tr><th>Path</th><th>Source kind</th><th>Reason</th></tr>
     </thead>
     <tbody>
       {% for entry in report.unclassified %}
       <tr>
         <td class="mono">{{ entry.path }}</td>
+        <td>{{ entry.source_kind }}</td>
         <td>{{ entry.reason }}</td>
       </tr>
       {% endfor %}
@@ -44,7 +66,7 @@
 <section class="group-block">
   <div class="card">
     <h2>{{ group.group_id }}</h2>
-    {{ macros.summary_stats([
+  {{ macros.summary_stats([
       ("Verdict", macros.badge(group.group_summary.overall_pass|verdict_label(false), group.group_summary.overall_pass|verdict_class(false))),
       ("Total checks", group.group_summary.total_checks),
       ("Passed", group.group_summary.passed),
@@ -54,6 +76,36 @@
   </div>
 
   {{ macros.errors_block(group.errors) }}
+
+  {% if group.assets %}
+  <section class="card">
+    <h3>Logical assets</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th>Path</th>
+          <th>Layout</th>
+          <th>Source kind</th>
+          <th>Used by</th>
+          <th>Selection</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for asset in group.assets %}
+        <tr>
+          <td>{{ asset.role }}</td>
+          <td class="mono">{{ asset.path }}</td>
+          <td>{{ asset.channel_config_actual }}</td>
+          <td>{{ asset.source_kind }}</td>
+          <td>{{ asset.used_by|join(", ") if asset.used_by else "—" }}</td>
+          <td>{{ asset.selection_note or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
 
   {% if group.files %}
   <section class="card">

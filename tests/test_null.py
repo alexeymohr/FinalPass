@@ -33,8 +33,10 @@ def test_null_exact_sum_passes(tmp_path: Path) -> None:
     ])
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == 2
     assert data["command"] == "null"
+    assert data["printmaster"]["source_kind"] == "interleaved"
+    assert data["printmaster"]["source_paths"] == [str(files["pm"].resolve())]
     assert data["null_test"]["pass"] is True
     assert data["null_test"]["flags"] == []
     assert data["summary"]["overall_pass"] is True
