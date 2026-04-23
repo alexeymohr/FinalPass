@@ -36,7 +36,7 @@ def test_wizard_all_flow_succeeds_on_split_folder(tmp_path: Path) -> None:
     result = runner.invoke(
         main,
         ["wizard", "--out", str(out_dir)],
-        input=f"{folder}\n1\n1\n2\n1\n1\n1\n3\n",
+        input=f"{folder}\n1\n1\n1\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
     report_path = out_dir / "report.json"
@@ -335,7 +335,7 @@ def test_wizard_resume_after_restart_uses_populated_prep_buckets(tmp_path: Path)
     assert second.exit_code == 0, second.output
     assert "I found an existing FinalPass prep layout." in second.output
     payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["files"][0]["source_kind"] == "split_mono"
 
 
@@ -369,7 +369,7 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
     result = runner.invoke(
         main,
         ["wizard", str(folder), "--out", str(out_dir)],
-        input="1\n3\n1\n1\n1\n3\n",
+        input="1\n4\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
     assert "Mode: prep" in result.output
