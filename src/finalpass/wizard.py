@@ -37,6 +37,7 @@ from .null_test import (
 from .presentation import asset_menu_label, logical_asset_display_name, source_summary
 from .prep_folders import PrepLayout, PrepScanResult, create_prep_layout, detect_prep_layout, scan_prep_layout
 from .specs import Spec, list_bundled, load_spec
+from .terminal_spinner import processing_spinner
 from .wizard_io import Choice, WizardBack, WizardQuit, choose_many, choose_one, print_section, prompt_text
 
 WizardAction = Literal["job_menu", "choose_folder", "exit"]
@@ -1001,9 +1002,13 @@ def _review_and_confirm(lines: list[str]) -> None:
 
 def _execute_report_job(*, job_name: str, out_dir: Path, summary_builder, runner) -> JobExecutionResult:
     try:
-        report = runner()
-        payload = report.model_dump_json(indent=2, by_alias=True)
-        written = write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+        with processing_spinner(
+            f"Running {job_name}...",
+            stream=click.get_text_stream("stdout"),
+        ):
+            report = runner()
+            payload = report.model_dump_json(indent=2, by_alias=True)
+            written = write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
     except FinalPassError as exc:
         return JobExecutionResult(
             job_name=job_name,

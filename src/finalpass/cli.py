@@ -53,6 +53,7 @@ from .presentation import (
     verdict_explainer,
 )
 from .specs import list_bundled, load_spec
+from .terminal_spinner import processing_spinner
 from .wizard import run_wizard
 
 _err_console = Console(stderr=True)
@@ -81,12 +82,17 @@ def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, 
                 "[yellow]warning:[/yellow] --dx provided but spec has no dialog_lufs target; ignoring."
             )
             effective_dx = None
-        report = execute_loudness(files=files, spec_name=spec_name, dx_file=effective_dx, fps=fps)
+        report, payload, written = _execute_direct_job(
+            runner=lambda: execute_loudness(files=files, spec_name=spec_name, dx_file=effective_dx, fps=fps),
+            message="Running loudness...",
+            out_dir=out_dir,
+            json_only=json_only,
+        )
     except FinalPassError as exc:
         _err_console.print(f"[red]error:[/red] {exc}")
         sys.exit(2)
 
-    _finalize_run(report, out_dir=out_dir, json_only=json_only, renderer=_render_loudness_report)
+    _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_loudness_report)
 
 
 @main.group("specs")
@@ -147,19 +153,24 @@ def wizard_cmd(folder: Path | None, out_dir: Path, fps: float) -> None:
 @click.option("--threshold-dbfs", type=float, default=DEFAULT_NULL_THRESHOLD_DBFS, show_default=True, help="Flag windows whose residual RMS exceeds this dBFS threshold.")
 def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, fps: float, window_ms: float, hop_ms: float, threshold_dbfs: float) -> None:
     try:
-        report = execute_null(
-            pm=pm,
-            stems=stems,
-            fps=fps,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            threshold_dbfs=threshold_dbfs,
+        report, payload, written = _execute_direct_job(
+            runner=lambda: execute_null(
+                pm=pm,
+                stems=stems,
+                fps=fps,
+                window_ms=window_ms,
+                hop_ms=hop_ms,
+                threshold_dbfs=threshold_dbfs,
+            ),
+            message="Running null check...",
+            out_dir=out_dir,
+            json_only=json_only,
         )
     except FinalPassError as exc:
         _err_console.print(f"[red]error:[/red] {exc}")
         sys.exit(2)
 
-    _finalize_run(report, out_dir=out_dir, json_only=json_only, renderer=_render_null_report)
+    _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_null_report)
 
 
 @main.command("me")
@@ -192,24 +203,29 @@ def me_cmd(
     me_floor_dbfs: float,
 ) -> None:
     try:
-        report = execute_me(
-            me_file=me_file,
-            dx_file=dx_file,
-            fps=fps,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            band_low_hz=band_low_hz,
-            band_high_hz=band_high_hz,
-            corr_threshold=corr_threshold,
-            coherence_threshold=coherence_threshold,
-            dx_gate_dbfs=dx_gate_dbfs,
-            me_floor_dbfs=me_floor_dbfs,
+        report, payload, written = _execute_direct_job(
+            runner=lambda: execute_me(
+                me_file=me_file,
+                dx_file=dx_file,
+                fps=fps,
+                window_ms=window_ms,
+                hop_ms=hop_ms,
+                band_low_hz=band_low_hz,
+                band_high_hz=band_high_hz,
+                corr_threshold=corr_threshold,
+                coherence_threshold=coherence_threshold,
+                dx_gate_dbfs=dx_gate_dbfs,
+                me_floor_dbfs=me_floor_dbfs,
+            ),
+            message="Running M&E check...",
+            out_dir=out_dir,
+            json_only=json_only,
         )
     except FinalPassError as exc:
         _err_console.print(f"[red]error:[/red] {exc}")
         sys.exit(2)
 
-    _finalize_run(report, out_dir=out_dir, json_only=json_only, renderer=_render_me_report)
+    _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_me_report)
 
 
 @main.command("all")
@@ -252,50 +268,66 @@ def all_cmd(
     me_me_floor_dbfs: float,
 ) -> None:
     try:
-        report = execute_all(
-            folder=folder,
-            spec_name=spec_name,
-            patterns_path=patterns_path,
-            include_unclassified=include_unclassified,
-            fps=fps,
-            null_window_ms=null_window_ms,
-            null_hop_ms=null_hop_ms,
-            null_threshold_dbfs=null_threshold_dbfs,
-            me_window_ms=me_window_ms,
-            me_hop_ms=me_hop_ms,
-            me_band_low_hz=me_band_low_hz,
-            me_band_high_hz=me_band_high_hz,
-            me_corr_threshold=me_corr_threshold,
-            me_coherence_threshold=me_coherence_threshold,
-            me_dx_gate_dbfs=me_dx_gate_dbfs,
-            me_me_floor_dbfs=me_me_floor_dbfs,
+        report, payload, written = _execute_direct_job(
+            runner=lambda: execute_all(
+                folder=folder,
+                spec_name=spec_name,
+                patterns_path=patterns_path,
+                include_unclassified=include_unclassified,
+                fps=fps,
+                null_window_ms=null_window_ms,
+                null_hop_ms=null_hop_ms,
+                null_threshold_dbfs=null_threshold_dbfs,
+                me_window_ms=me_window_ms,
+                me_hop_ms=me_hop_ms,
+                me_band_low_hz=me_band_low_hz,
+                me_band_high_hz=me_band_high_hz,
+                me_corr_threshold=me_corr_threshold,
+                me_coherence_threshold=me_coherence_threshold,
+                me_dx_gate_dbfs=me_dx_gate_dbfs,
+                me_me_floor_dbfs=me_me_floor_dbfs,
+            ),
+            message="Running folder analysis...",
+            out_dir=out_dir,
+            json_only=json_only,
         )
     except FinalPassError as exc:
         _err_console.print(f"[red]error:[/red] {exc}")
         sys.exit(2)
 
-    _finalize_run(report, out_dir=out_dir, json_only=json_only, renderer=_render_all_report)
+    _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_all_report)
+
+
+def _execute_direct_job(
+    *,
+    runner,
+    message: str,
+    out_dir: Path,
+    json_only: bool,
+) -> tuple[Report | NullReport | MEReport | AllReport, str, WrittenArtifacts | None]:
+    with processing_spinner(message, stream=_err_console.file, enabled=not json_only):
+        report = runner()
+        payload = report.model_dump_json(indent=2, by_alias=True)
+        written = None
+        if not json_only:
+            written = persist_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+    return report, payload, written
 
 
 def _finalize_run(
     report: Report | NullReport | MEReport | AllReport,
     *,
-    out_dir: Path,
+    payload: str,
+    written: WrittenArtifacts | None,
     json_only: bool,
     renderer,
 ) -> None:
-    payload = report.model_dump_json(indent=2, by_alias=True)
-
     if json_only:
         click.echo(payload)
     else:
-        try:
-            renderer(report)
-            written = persist_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+        renderer(report)
+        if written is not None:
             _announce_written_artifacts(written)
-        except FinalPassError as exc:
-            _err_console.print(f"[red]error:[/red] {exc}")
-            sys.exit(2)
 
     sys.exit(0 if report.summary.overall_pass else 1)
 
