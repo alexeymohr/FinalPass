@@ -26,14 +26,15 @@
 {% if report.discovery_errors %}
 <section class="card card-muted">
   <h2>Discovery issues</h2>
+  <div class="table-scroll">
   <table>
     <thead>
-      <tr><th>Path</th><th>Group hint</th><th>Error</th><th>Detail</th></tr>
+      <tr><th>File</th><th>Group hint</th><th>Error</th><th>Detail</th></tr>
     </thead>
     <tbody>
       {% for issue in report.discovery_errors %}
       <tr>
-        <td class="mono">{{ issue.path }}</td>
+        <td class="filename">{{ issue.path|basename }}</td>
         <td>{{ display_group_name(issue.group_hint) if issue.group_hint else "—" }}</td>
         <td>{{ humanize_code(issue.error_type) }}</td>
         <td>{{ issue.message }}</td>
@@ -41,12 +42,14 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 {% endif %}
 
 {% if report.unclassified %}
 <section class="card">
   <h2>Unclassified logical assets</h2>
+  <div class="table-scroll">
   <table>
     <thead>
       <tr><th>Asset</th><th>Reason</th></tr>
@@ -57,13 +60,14 @@
         <td>
           <strong>{{ display_label(entry) }}</strong>
           <div class="muted">{{ source_summary(entry) }}</div>
-          <div class="mono">{{ entry.path }}</div>
+          <div class="filename">{{ entry.path|basename }}</div>
         </td>
         <td>{{ humanize_code(entry.reason) }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 {% endif %}
 
@@ -87,7 +91,15 @@
   {% if group.assets %}
   <section class="card">
     <h3>Logical assets</h3>
-    <table>
+    <div class="table-scroll">
+    <table class="asset-table">
+      <colgroup>
+        <col class="col-role">
+        <col>
+        <col class="col-layout">
+        <col class="col-used">
+        <col class="col-selection">
+      </colgroup>
       <thead>
         <tr>
           <th>Role</th>
@@ -102,17 +114,16 @@
         <tr>
           <td>{{ humanize_code(asset.role) }}</td>
           <td>
-            <strong>{{ display_label(asset) }}</strong>
+            <div class="asset-title">{{ display_label(asset) }}</div>
             <div class="muted">{{ source_summary(asset) }}</div>
             {% if asset.source_paths|length > 1 %}
-            <div class="muted">Source members:</div>
-            <div class="mono">
+            <div class="file-list" aria-label="Source members">
               {% for path in asset.source_paths %}
-              <div>{{ path }}</div>
+              <span class="file-chip">{{ path|basename }}</span>
               {% endfor %}
             </div>
             {% else %}
-            <div class="mono">{{ asset.path }}</div>
+            <div class="filename">{{ asset.path|basename }}</div>
             {% endif %}
           </td>
           <td>{{ asset.channel_config_actual }}</td>
@@ -122,12 +133,14 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </section>
   {% endif %}
 
   {% if group.files %}
   <section class="card">
     <h3>Measured assets</h3>
+    <div class="table-scroll">
     <table>
       <thead>
         <tr><th>Measured asset</th><th>Role</th><th>Sample rate</th><th>Bit depth</th><th>Channels</th><th>Duration</th></tr>
@@ -138,7 +151,7 @@
           <td>
             <strong>{{ display_label(file_report) }}</strong>
             <div class="muted">{{ source_summary(file_report) }}</div>
-            <div class="mono">{{ file_report.path }}</div>
+            <div class="filename">{{ file_report.path|basename }}</div>
           </td>
           <td>{{ humanize_code(file_report.role) }}</td>
           <td>{{ file_report.sample_rate }} Hz</td>
@@ -149,6 +162,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </section>
 
   {% for file_report in group.files %}

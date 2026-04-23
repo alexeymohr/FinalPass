@@ -42,7 +42,7 @@
         <h3>{{ display_label(report.printmaster) }}</h3>
         <p class="muted">{{ source_summary(report.printmaster) }}</p>
         <div class="meta-grid">
-          <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ report.printmaster.path }}</div></div>
+          <div class="stat"><div class="stat-label">File</div><div class="stat-value mono">{{ report.printmaster.path|basename }}</div></div>
           <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ report.printmaster.sample_rate }} Hz</div></div>
           <div class="stat"><div class="stat-label">Bit depth</div><div class="stat-value">{{ report.printmaster.bit_depth }}-bit</div></div>
           <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(report.printmaster.channel_config_actual, report.printmaster.channel_count) }}</div></div>
@@ -52,6 +52,7 @@
       </div>
       <section class="card card-muted">
         <h3>Stems</h3>
+        <div class="table-scroll">
         <table>
           <thead>
             <tr><th>Asset</th><th>Sample rate</th><th>Bit depth</th><th>Channels</th><th>Duration</th></tr>
@@ -62,7 +63,7 @@
               <td>
                 <strong>{{ display_label(stem) }}</strong>
                 <div class="muted">{{ source_summary(stem) }}</div>
-                <div class="mono">{{ stem.path }}</div>
+                <div class="filename">{{ stem.path|basename }}</div>
               </td>
               <td>{{ stem.sample_rate }} Hz</td>
               <td>{{ stem.bit_depth }}-bit</td>
@@ -75,6 +76,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   </section>
@@ -120,7 +122,7 @@
         <h3>{{ display_label(report.me_file) }}</h3>
         <p class="muted">{{ source_summary(report.me_file) }}</p>
         <div class="meta-grid">
-          <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ report.me_file.path }}</div></div>
+          <div class="stat"><div class="stat-label">File</div><div class="stat-value mono">{{ report.me_file.path|basename }}</div></div>
           <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ report.me_file.sample_rate }} Hz</div></div>
           <div class="stat"><div class="stat-label">Bit depth</div><div class="stat-value">{{ report.me_file.bit_depth }}-bit</div></div>
           <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(report.me_file.channel_config_actual, report.me_file.channel_count) }}</div></div>
@@ -132,7 +134,7 @@
         <h3>{{ display_label(report.dx_file) }}</h3>
         <p class="muted">{{ source_summary(report.dx_file) }}</p>
         <div class="meta-grid">
-          <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ report.dx_file.path }}</div></div>
+          <div class="stat"><div class="stat-label">File</div><div class="stat-value mono">{{ report.dx_file.path|basename }}</div></div>
           <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ report.dx_file.sample_rate }} Hz</div></div>
           <div class="stat"><div class="stat-label">Bit depth</div><div class="stat-value">{{ report.dx_file.bit_depth }}-bit</div></div>
           <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(report.dx_file.channel_config_actual, report.dx_file.channel_count) }}</div></div>

@@ -7,12 +7,14 @@
   <style>
     :root {
       color-scheme: light;
-      --bg: #f7f7f5;
+      --bg: #f6f7f4;
       --panel: #ffffff;
-      --panel-alt: #f1f2ee;
+      --panel-alt: #f2f4f0;
       --text: #1e2420;
       --muted: #5f6b63;
+      --muted-soft: #748078;
       --line: #d8ddd6;
+      --line-soft: #e7ebe5;
       --pass-bg: #dff2e4;
       --pass-text: #155d3b;
       --fail-bg: #f6d9d3;
@@ -28,16 +30,17 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: linear-gradient(180deg, #f3f4ef 0%, #fafaf8 100%);
+      background: var(--bg);
       color: var(--text);
       font-family: var(--sans);
       line-height: 1.45;
     }
-    main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 56px; }
-    h1, h2, h3 { margin: 0 0 12px; line-height: 1.15; }
+    main { max-width: 1280px; margin: 0 auto; padding: 32px 24px 56px; }
+    h1, h2, h3, h4 { margin: 0 0 12px; line-height: 1.15; }
     h1 { font-size: 2rem; }
     h2 { font-size: 1.25rem; margin-top: 24px; }
     h3 { font-size: 1rem; margin-top: 20px; }
+    h4 { font-size: 0.86rem; margin-top: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     p, ul { margin: 0 0 12px; }
     .eyebrow { margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; }
     .header {
@@ -51,11 +54,13 @@
     .card {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 18px 20px;
-      margin-bottom: 18px;
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
       box-shadow: 0 1px 0 rgba(16, 24, 40, 0.03);
     }
+    .card > h2:first-child,
+    .card > h3:first-child { margin-top: 0; }
     .card-muted { background: var(--panel-alt); }
     .badge {
       display: inline-flex;
@@ -72,12 +77,12 @@
     .badge-skipped { background: var(--skip-bg); color: var(--skip-text); }
     .summary-grid, .meta-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 12px;
     }
     .stat {
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 6px;
       padding: 12px 14px;
       background: #fcfcfb;
     }
@@ -88,11 +93,11 @@
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
-      font-size: 0.94rem;
+      font-size: 0.9rem;
     }
     th, td {
       border-top: 1px solid var(--line);
-      padding: 9px 10px;
+      padding: 10px 12px;
       vertical-align: top;
       text-align: left;
     }
@@ -102,13 +107,69 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
       background: #fbfbf9;
+      white-space: nowrap;
     }
     .mono { font-family: var(--mono); font-size: 0.92rem; }
     .muted { color: var(--muted); }
+    .soft { color: var(--muted-soft); }
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 760px; }
+    .compact-table td, .compact-table th { padding-top: 8px; padding-bottom: 8px; }
+    .asset-table { table-layout: fixed; }
+    .asset-table .col-role { width: 72px; }
+    .asset-table .col-layout { width: 92px; }
+    .asset-table .col-used { width: 140px; }
+    .asset-table .col-selection { width: 170px; }
+    .asset-title { font-weight: 700; }
+    .file-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .file-chip {
+      display: inline-flex;
+      max-width: 100%;
+      border: 1px solid var(--line-soft);
+      border-radius: 4px;
+      padding: 2px 6px;
+      background: #f7f8f5;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .source-registry table { margin-top: 8px; min-width: 1080px; }
+    .source-registry-list {
+      max-height: 260px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    .source-registry-list table { margin-top: 0; }
+    .source-registry-list th { position: sticky; top: 0; z-index: 1; }
+    .source-registry-list th:nth-child(1),
+    .source-registry-list td:nth-child(1) { width: 360px; }
+    .source-registry-list th:nth-child(2),
+    .source-registry-list td:nth-child(2) { width: 180px; }
+    .source-registry-list .filename { white-space: nowrap; }
+    .path-full {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .filename {
+      font-family: var(--mono);
+      font-size: 0.86rem;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
     .section-stack > * + * { margin-top: 14px; }
     .timeline {
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 6px;
       padding: 12px;
       background: #fcfcfb;
     }
@@ -119,15 +180,20 @@
       padding-left: 1.2rem;
     }
     .group-block {
-      border-top: 2px solid var(--line);
-      padding-top: 20px;
-      margin-top: 28px;
+      border-top: 1px solid var(--line);
+      padding-top: 24px;
+      margin-top: 32px;
     }
     .subsection { margin-top: 18px; }
     .artifact-list { margin: 0; padding-left: 1.2rem; }
     @media (max-width: 720px) {
       main { padding: 20px 14px 40px; }
       .header { grid-template-columns: 1fr; }
+      .card { padding: 16px; }
+      .asset-table .col-role,
+      .asset-table .col-layout,
+      .asset-table .col-used,
+      .asset-table .col-selection { width: auto; }
     }
   </style>
 </head>
@@ -155,6 +221,30 @@
         <div class="stat"><div class="stat-label">Artifacts</div><div class="stat-value">{% for artifact in artifacts %}<span class="mono">{{ artifact }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</div></div>
       </div>
     </section>
+
+    {% set source_paths = source_path_manifest(report) %}
+    {% if source_paths %}
+    <section class="card source-registry">
+      <h2>Source files</h2>
+      <p class="muted">{{ source_paths|length }} unique source file{% if source_paths|length != 1 %}s{% endif %}. Full paths are listed here once; the rest of the report uses filenames.</p>
+      <div class="source-registry-list">
+        <table class="compact-table">
+          <thead>
+            <tr><th>File</th><th>Folder</th><th>Full path</th></tr>
+          </thead>
+          <tbody>
+            {% for source in source_paths %}
+            <tr>
+              <td class="filename">{{ source.name }}</td>
+              <td class="soft">{{ source.folder|basename }}</td>
+              <td class="path-full">{{ source.path }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
 
     {% block body %}{% endblock %}
   </main>

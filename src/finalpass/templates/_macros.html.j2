@@ -78,7 +78,7 @@
   <h3>{{ display_label(file_report) }}</h3>
   <p class="muted">{{ source_summary(file_report) }}</p>
     <div class="meta-grid">
-      <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ file_report.path }}</div></div>
+      <div class="stat"><div class="stat-label">File</div><div class="stat-value mono">{{ file_report.path|basename }}</div></div>
     <div class="stat"><div class="stat-label">Role</div><div class="stat-value">{{ humanize_code(file_report.role) }}</div></div>
       <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ file_report.sample_rate }} Hz</div></div>
       <div class="stat"><div class="stat-label">Bit depth</div><div class="stat-value">{{ file_report.bit_depth }}-bit</div></div>
@@ -121,11 +121,13 @@
       <div class="stat"><div class="stat-label">Member legs</div><div class="stat-value">{{ item.member_legs|join(", ") if item.member_legs else "—" }}</div></div>
       <div class="stat">
         <div class="stat-label">Source members</div>
-        <div class="stat-value mono">
+        <div class="stat-value">
           {% if item.source_paths %}
+            <div class="file-list">
             {% for path in item.source_paths %}
-            <div>{{ path }}</div>
+              <span class="file-chip">{{ path|basename }}</span>
             {% endfor %}
+            </div>
           {% else %}
             —
           {% endif %}

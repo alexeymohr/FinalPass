@@ -55,6 +55,13 @@ class TimelineLane:
     rects: list[TimelineRect]
 
 
+@dataclass(frozen=True)
+class SourcePathEntry:
+    name: str
+    folder: str
+    path: str
+
+
 def render_report_html(
     report: RenderableReport,
     *,
@@ -101,6 +108,7 @@ def _environment() -> Environment:
         group_duration_seconds=_group_duration_seconds,
         group_sample_rate=_group_sample_rate,
         channel_display=_channel_display,
+        source_path_manifest=_source_path_manifest,
         blocking_issue_count=blocking_issue_count,
         display_label=logical_asset_display_name,
         display_group_name=display_group_name,
@@ -163,6 +171,61 @@ def _fmt_seconds(value: float | None, digits: int = 2) -> str:
 
 def _basename(value: str) -> str:
     return Path(value).name
+
+
+def _source_path_manifest(report: RenderableReport) -> list[SourcePathEntry]:
+    paths = list(dict.fromkeys(_source_paths_for_report(report)))
+    return [
+        SourcePathEntry(
+            name=Path(path).name,
+            folder=str(Path(path).parent),
+            path=str(path),
+        )
+        for path in paths
+    ]
+
+
+def _source_paths_for_report(report: RenderableReport) -> list[str]:
+    if isinstance(report, AllReport):
+        items = []
+        for group in report.groups:
+            items.extend(group.assets)
+            items.extend(group.files)
+        items.extend(report.files)
+        items.extend(report.unclassified)
+        items.extend(report.discovery_errors)
+        return [
+            source_path
+            for item in items
+            for source_path in _source_paths_for_item(item)
+        ]
+    if isinstance(report, Report):
+        return [
+            source_path
+            for file_report in report.files
+            for source_path in _source_paths_for_item(file_report)
+        ]
+    if isinstance(report, NullReport):
+        return [
+            source_path
+            for item in (report.printmaster, *report.stems)
+            for source_path in _source_paths_for_item(item)
+        ]
+    if isinstance(report, MEReport):
+        return [
+            source_path
+            for item in (report.me_file, report.dx_file)
+            for source_path in _source_paths_for_item(item)
+        ]
+    return []
+
+
+def _source_paths_for_item(item) -> list[str]:
+    paths = [str(path) for path in (getattr(item, "source_paths", []) or [])]
+    path = getattr(item, "path", None)
+    if path:
+        paths.append(str(path))
+    return paths
 
 
 def _verdict_label(value: bool | None, skipped: bool = False) -> str:
