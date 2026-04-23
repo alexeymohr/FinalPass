@@ -14,8 +14,7 @@ examples/out/
 
 # Local finalpass outputs
 finalpass-report/
+stems_to_test/
 
-# Local research / planning artifacts (not part of the v0.1 release surface)
-AAF_MARKER_IMPORT_FINDINGS.md
+# Local research / planning artifacts (not part of the shipped product surface)
 resources/
-specs/PHASE_7_SPEC.MD
