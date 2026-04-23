@@ -1,0 +1,26 @@
+name: atsc_a85_51
+display_name: "ATSC A/85 — 5.1 (content exchange)"
+integrated_lufs:
+  target: -24.0
+  tolerance: 2.0
+true_peak_max_dbtp: -2.0
+lra_max: 18.0
+channel_config: "5.1"
+notes: |
+  ATSC A/85 current official version — A/85:2013 with Corrigendum No. 1,
+  approved 11 February 2021.
+  Source: https://www.atsc.org/recommended-practice/a85-techniques-for-establishing-and-maintaining-audio-loudness-for-digital-television/
+  Current version listing: current version approved 11 February 2021.
+  ATSC's surround-program guidance covers measuring surround programming in its
+  multichannel format and in its 2-channel downmix; this preset is for the
+  direct 5.1 program measurement path. If your delivery also requires a stereo
+  downmix check, run that separately against the stereo A/85 preset.
+  For content delivery or exchange without metadata (and absent prior
+  arrangement), target loudness should be -24 LKFS with approximately ±2 dB
+  measurement variation considered acceptable. True peak should be kept below
+  -2 dBTP.
+  A/85 does not prescribe an LRA cap; the lra_max of 18 in this preset is a
+  FinalPass convention for flagging very wide-dynamic mixes, not an official
+  A/85 requirement.
+  Values are current best-public-knowledge targets; not an official platform
+  certification. Verify against your current delivery paperwork.

@@ -9,7 +9,7 @@ from finalpass.errors import SpecError
 from finalpass.specs import Spec, list_bundled, list_bundled_names, load_spec
 
 
-EXPECTED_BUNDLED = {"atsc_a85", "ebu_r128", "netflix_stereo", "netflix_51", "streaming_-14"}
+EXPECTED_BUNDLED = {"atsc_a85", "atsc_a85_51", "ebu_r128", "netflix_stereo", "netflix_51", "streaming_-14"}
 
 
 def test_list_bundled_names_contains_expected() -> None:
@@ -51,6 +51,17 @@ def test_atsc_a85_values() -> None:
     assert spec.true_peak_max_dbtp == -2.0
     assert spec.lra_max == 18.0
     assert spec.channel_config == "stereo"
+    assert spec.dialog_lufs is None
+
+
+def test_atsc_a85_51_values() -> None:
+    spec, source, _ = load_spec("atsc_a85_51")
+    assert source == "bundled"
+    assert spec.integrated_lufs.target == -24.0
+    assert spec.integrated_lufs.tolerance == 2.0
+    assert spec.true_peak_max_dbtp == -2.0
+    assert spec.lra_max == 18.0
+    assert spec.channel_config == "5.1"
     assert spec.dialog_lufs is None
 
 
