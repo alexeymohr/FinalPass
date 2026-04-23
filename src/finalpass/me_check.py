@@ -13,16 +13,16 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.signal import butter, coherence, correlate, sosfiltfilt
 
+from .analysis_window import prepare_analysis_window
 from .audio_io import AudioFile, channel_config_from_count
 from .errors import (
     AlignmentError,
     ChannelMismatchError,
     FinalPassError,
-    SampleCountMismatchError,
     SampleRateMismatchError,
     UnsupportedChannelConfigError,
 )
-from .models import AnalysisInputFile, FlaggedRegion, MECheckSummary
+from .models import AnalysisInputFile, AnalysisWindow, FlaggedRegion, MECheckSummary
 from .timecode import samples_to_tc
 
 DEFAULT_ME_WINDOW_MS = 500.0
@@ -47,6 +47,7 @@ _ALIGNMENT_ABSOLUTE_MIN = 0.25
 class MEAnalysis:
     summary: MECheckSummary
     flags: list[FlaggedRegion]
+    analysis_window: AnalysisWindow
 
 
 @dataclass(frozen=True)
@@ -103,9 +104,15 @@ def analyze_me(
         corr_threshold=corr_threshold,
         coherence_threshold=coherence_threshold,
     )
+    prepared_window = prepare_analysis_window(
+        [("M&E", me_file), ("DX", dx_file)],
+        fps=fps,
+        anchor_index=0,
+    )
+    me_windowed, dx_windowed = prepared_window.inputs
 
-    dx_signal = _downmix_to_analysis_signal(dx_file)
-    me_signal = _downmix_to_analysis_signal(me_file)
+    dx_signal = _downmix_to_analysis_signal(dx_windowed.data)
+    me_signal = _downmix_to_analysis_signal(me_windowed.data)
     dx_band = _band_limit(dx_signal, sample_rate=dx_file.sample_rate, low_hz=band_low_hz, high_hz=band_high_hz)
     me_band = _band_limit(me_signal, sample_rate=me_file.sample_rate, low_hz=band_low_hz, high_hz=band_high_hz)
 
@@ -123,6 +130,7 @@ def analyze_me(
         coherence_threshold=coherence_threshold,
         dx_gate_dbfs=dx_gate_dbfs,
         me_floor_dbfs=me_floor_dbfs,
+        start_sample_offset=me_windowed.start_sample,
     )
     flagged_windows = [
         window
@@ -148,7 +156,7 @@ def analyze_me(
         max_corr_abs=max((window.corr_abs for window in analyzed), default=0.0),
         max_coherence_mean=max((window.coherence_mean for window in analyzed), default=0.0),
     )
-    return MEAnalysis(summary=summary, flags=flags)
+    return MEAnalysis(summary=summary, flags=flags, analysis_window=prepared_window.analysis_window)
 
 
 def _validate_inputs(me_file: AudioFile, dx_file: AudioFile) -> None:
@@ -162,11 +170,6 @@ def _validate_inputs(me_file: AudioFile, dx_file: AudioFile) -> None:
     if len(channel_counts) > 1:
         detail = ", ".join(f"{audio.path.name}={audio.channel_count}ch" for audio in inputs)
         raise ChannelMismatchError(f"M&E inputs must share one channel count: {detail}")
-
-    sample_counts = {audio.sample_count for audio in inputs}
-    if len(sample_counts) > 1:
-        detail = ", ".join(f"{audio.path.name}={audio.sample_count} samples" for audio in inputs)
-        raise SampleCountMismatchError(f"M&E inputs must share one sample count: {detail}")
 
     for audio in inputs:
         if channel_config_from_count(audio.channel_count) is None:
@@ -209,19 +212,18 @@ def _validate_settings(
         )
 
 
-def _downmix_to_analysis_signal(audio: AudioFile) -> np.ndarray:
-    data = audio.data
-    if audio.channel_count == 1:
+def _downmix_to_analysis_signal(data: np.ndarray) -> np.ndarray:
+    channel_count = data.shape[1]
+    if channel_count == 1:
         return data[:, 0].astype(np.float64, copy=False)
-    if audio.channel_count == 2:
+    if channel_count == 2:
         return np.mean(data, axis=1, dtype=np.float64)
-    if audio.channel_count == 6:
+    if channel_count == 6:
         return np.mean(data[:, [0, 1, 2, 4, 5]], axis=1, dtype=np.float64)
-    if audio.channel_count == 8:
+    if channel_count == 8:
         return np.mean(data[:, [0, 1, 2, 4, 5, 6, 7]], axis=1, dtype=np.float64)
     raise UnsupportedChannelConfigError(
-        f"{audio.path.name}: unsupported channel count {audio.channel_count}. "
-        "FinalPass v0.1 supports mono, stereo, 5.1, and 7.1 only."
+        f"unsupported channel count {channel_count}. FinalPass v0.1 supports mono, stereo, 5.1, and 7.1 only."
     )
 
 
@@ -294,6 +296,7 @@ def _analyze_windows(
     coherence_threshold: float,
     dx_gate_dbfs: float,
     me_floor_dbfs: float,
+    start_sample_offset: int = 0,
 ) -> list[_WindowResult]:
     n_samples = int(dx_band.shape[0])
     window_samples = max(1, int(round(window_ms * sample_rate / 1000.0)))
@@ -355,7 +358,21 @@ def _analyze_windows(
                 gated_out=False,
             )
         )
-    return out
+    if start_sample_offset == 0:
+        return out
+    return [
+        _WindowResult(
+            start_sample=window.start_sample + start_sample_offset,
+            end_sample=window.end_sample + start_sample_offset,
+            dx_band_rms_dbfs=window.dx_band_rms_dbfs,
+            me_band_rms_dbfs=window.me_band_rms_dbfs,
+            corr_abs=window.corr_abs,
+            coherence_mean=window.coherence_mean,
+            dialog_bleed_score=window.dialog_bleed_score,
+            gated_out=window.gated_out,
+        )
+        for window in out
+    ]
 
 
 def _rms_dbfs(window: np.ndarray) -> float:

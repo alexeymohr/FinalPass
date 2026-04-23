@@ -1,6 +1,6 @@
 {
   "finalpass_version": "0.1.0",
-  "schema_version": 7,
+  "schema_version": 8,
   "spec": {
     "name": "ebu_r128",
     "display_name": "EBU R128 \u2014 stereo (pre-produced)",
@@ -176,6 +176,66 @@
           "max_residual_rms_dbfs": -137.22593772433493,
           "mean_residual_rms_dbfs": -137.24506668697092
         },
+        "analysis_window": {
+          "mode": "file_start",
+          "start_sample": 0,
+          "end_sample": 480000,
+          "start_tc": "00:00:00:00",
+          "end_tc": "00:00:10:00",
+          "duration_seconds": 10.0,
+          "tail_mos_threshold_dbfs": -80.0,
+          "tail_peak_threshold_dbfs": -60.0,
+          "inputs": [
+            {
+              "label": "Printmaster",
+              "path": "SHOW_S01E03_PM_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            },
+            {
+              "label": "Stem 1",
+              "path": "SHOW_S01E03_DX_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            },
+            {
+              "label": "Stem 2",
+              "path": "SHOW_S01E03_MX_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            },
+            {
+              "label": "Stem 3",
+              "path": "SHOW_S01E03_FX_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            }
+          ]
+        },
         "flags": [],
         "errors": [],
         "stem_strategy": "dx_mx_fx",
@@ -207,6 +267,42 @@
           "max_dialog_bleed_score": 0.07185904087903085,
           "max_corr_abs": 0.04670837657137005,
           "max_coherence_mean": 0.059560185568123224
+        },
+        "analysis_window": {
+          "mode": "file_start",
+          "start_sample": 0,
+          "end_sample": 480000,
+          "start_tc": "00:00:00:00",
+          "end_tc": "00:00:10:00",
+          "duration_seconds": 10.0,
+          "tail_mos_threshold_dbfs": -80.0,
+          "tail_peak_threshold_dbfs": -60.0,
+          "inputs": [
+            {
+              "label": "M&E",
+              "path": "SHOW_S01E03_ME_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            },
+            {
+              "label": "DX",
+              "path": "SHOW_S01E03_DX_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            }
+          ]
         },
         "flags": [],
         "errors": []
@@ -387,6 +483,66 @@
           "max_residual_rms_dbfs": -137.2185109577669,
           "mean_residual_rms_dbfs": -137.24926998328607
         },
+        "analysis_window": {
+          "mode": "file_start",
+          "start_sample": 0,
+          "end_sample": 480000,
+          "start_tc": "00:00:00:00",
+          "end_tc": "00:00:10:00",
+          "duration_seconds": 10.0,
+          "tail_mos_threshold_dbfs": -80.0,
+          "tail_peak_threshold_dbfs": -60.0,
+          "inputs": [
+            {
+              "label": "Printmaster",
+              "path": "SHOW_S01E04_PM_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            },
+            {
+              "label": "Stem 1",
+              "path": "SHOW_S01E04_DX_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            },
+            {
+              "label": "Stem 2",
+              "path": "SHOW_S01E04_MX_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            },
+            {
+              "label": "Stem 3",
+              "path": "SHOW_S01E04_FX_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            }
+          ]
+        },
         "flags": [],
         "errors": [],
         "stem_strategy": "dx_mx_fx",
@@ -418,6 +574,42 @@
           "max_dialog_bleed_score": 0.062349644424744464,
           "max_corr_abs": 0.040527268876083905,
           "max_coherence_mean": 0.05920309521029805
+        },
+        "analysis_window": {
+          "mode": "file_start",
+          "start_sample": 0,
+          "end_sample": 480000,
+          "start_tc": "00:00:00:00",
+          "end_tc": "00:00:10:00",
+          "duration_seconds": 10.0,
+          "tail_mos_threshold_dbfs": -80.0,
+          "tail_peak_threshold_dbfs": -60.0,
+          "inputs": [
+            {
+              "label": "M&E",
+              "path": "SHOW_S01E04_ME_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            },
+            {
+              "label": "DX",
+              "path": "SHOW_S01E04_DX_STEREO.wav",
+              "start_sample": 0,
+              "end_sample": 480000,
+              "ignored_head_samples": 0,
+              "ignored_tail_samples": 0,
+              "padded_tail_samples": 0,
+              "ignored_head_seconds": 0.0,
+              "ignored_tail_seconds": 0.0,
+              "padded_tail_seconds": 0.0
+            }
+          ]
         },
         "flags": [],
         "errors": []

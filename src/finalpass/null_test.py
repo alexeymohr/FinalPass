@@ -1,8 +1,9 @@
 """Stem-sum null analysis for Phase 3.
 
-The null pass is intentionally narrow: same-rate, same-length, same-channel-
-count stems are summed and subtracted from the printmaster. We flag windows
-whose residual RMS exceeds a dBFS threshold. If the material appears globally
+The null pass is intentionally narrow: same-rate, same-channel-count stems are
+reduced to a shared program window, summed, and subtracted from the
+printmaster. We flag windows whose residual RMS exceeds a dBFS threshold. If
+the material appears globally
 offset, we fail with an alignment error rather than auto-correcting it.
 """
 
@@ -13,17 +14,17 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.signal import correlate
 
+from .analysis_window import prepare_analysis_window
 from .audio_io import AudioFile, channel_config_from_count
 from .errors import (
     AlignmentError,
     ChannelMismatchError,
     FinalPassError,
-    SampleCountMismatchError,
     SampleRateMismatchError,
     UnsupportedChannelConfigError,
 )
-from .models import FlaggedRegion, NullInputFile, NullSummary
-from .timecode import samples_to_tc, tc_to_sample_start
+from .models import AnalysisWindow, FlaggedRegion, NullInputFile, NullSummary
+from .timecode import samples_to_tc
 
 DEFAULT_NULL_WINDOW_MS = 1000.0
 DEFAULT_NULL_HOP_MS = 100.0
@@ -31,7 +32,6 @@ DEFAULT_NULL_THRESHOLD_DBFS = -40.0
 NULL_DBFS_FLOOR = -300.0
 _NULL_LINEAR_FLOOR = 10 ** (NULL_DBFS_FLOOR / 20.0)
 _NULL_FLAG_DETAIL = "Residual exceeded threshold after summing stems against printmaster."
-_NULL_ANALYSIS_START_TC = "01:00:00:00"
 _ALIGNMENT_MAX_LAG_SECONDS = 0.25
 _ALIGNMENT_TARGET_POINTS = 12000
 _ALIGNMENT_RELATIVE_MARGIN = 1.01
@@ -41,6 +41,7 @@ _ALIGNMENT_RELATIVE_MARGIN = 1.01
 class NullAnalysis:
     summary: NullSummary
     flags: list[FlaggedRegion]
+    analysis_window: AnalysisWindow
 
 
 @dataclass(frozen=True)
@@ -80,22 +81,25 @@ def analyze_null(
     _validate_windowing(window_ms=window_ms, hop_ms=hop_ms)
     _validate_inputs(printmaster, stems)
 
-    stem_sum = np.sum(np.stack([stem.data for stem in stems], axis=0), axis=0)
-    _detect_alignment_error(printmaster.data, [stem.data for stem in stems], stem_sum, printmaster.sample_rate)
-
-    residual = printmaster.data - stem_sum
-    analysis_start_sample = _analysis_start_offset(
-        sample_rate=printmaster.sample_rate,
+    prepared_window = prepare_analysis_window(
+        [("Printmaster", printmaster), *((f"Stem {index}", stem) for index, stem in enumerate(stems, start=1))],
         fps=fps,
-        time_reference_samples=time_reference_samples,
-        sample_count=int(residual.shape[0]),
+        anchor_index=0,
     )
+    pm_windowed = prepared_window.inputs[0]
+    stem_windowed = list(prepared_window.inputs[1:])
+
+    stem_data = [stem.data for stem in stem_windowed]
+    stem_sum = np.sum(np.stack(stem_data, axis=0), axis=0)
+    _detect_alignment_error(pm_windowed.data, stem_data, stem_sum, printmaster.sample_rate)
+
+    residual = pm_windowed.data - stem_sum
     window_results = _window_residual_rms(
-        residual[analysis_start_sample:, :],
+        residual,
         sample_rate=printmaster.sample_rate,
         window_ms=window_ms,
         hop_ms=hop_ms,
-        start_sample_offset=analysis_start_sample,
+        start_sample_offset=pm_windowed.start_sample,
     )
     flags = _merge_flagged_windows(
         [w for w in window_results if w.residual_rms_dbfs > threshold_dbfs],
@@ -105,7 +109,7 @@ def analyze_null(
         threshold_dbfs=threshold_dbfs,
     )
     summary = _summarize_windows(window_results, threshold_dbfs=threshold_dbfs, flagged_regions=len(flags))
-    return NullAnalysis(summary=summary, flags=flags)
+    return NullAnalysis(summary=summary, flags=flags, analysis_window=prepared_window.analysis_window)
 
 
 def _validate_windowing(*, window_ms: float, hop_ms: float) -> None:
@@ -126,11 +130,6 @@ def _validate_inputs(printmaster: AudioFile, stems: list[AudioFile]) -> None:
     if len(channel_counts) > 1:
         detail = ", ".join(f"{audio.path.name}={audio.channel_count}ch" for audio in inputs)
         raise ChannelMismatchError(f"Null inputs must share one channel count: {detail}")
-
-    sample_counts = {audio.sample_count for audio in inputs}
-    if len(sample_counts) > 1:
-        detail = ", ".join(f"{audio.path.name}={audio.sample_count} samples" for audio in inputs)
-        raise SampleCountMismatchError(f"Null inputs must share one sample count: {detail}")
 
     for audio in inputs:
         if channel_config_from_count(audio.channel_count) is None:
@@ -230,19 +229,6 @@ def _window_residual_rms(
             residual_rms_dbfs=float(dbfs),
         ))
     return out
-
-
-def _analysis_start_offset(
-    *,
-    sample_rate: int,
-    fps: float,
-    time_reference_samples: int | None,
-    sample_count: int,
-) -> int:
-    if time_reference_samples is None:
-        return 0
-    minimum_time_reference_samples = tc_to_sample_start(_NULL_ANALYSIS_START_TC, sample_rate, fps)
-    return min(sample_count, max(0, minimum_time_reference_samples - time_reference_samples))
 
 
 def _summarize_windows(

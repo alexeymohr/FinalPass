@@ -34,6 +34,7 @@ from .errors import (
     ChannelMismatchError,
     FinalPassError,
     NoAudioFilesError,
+    ProgramWindowError,
     SampleCountMismatchError,
     SampleRateMismatchError,
     UnsupportedChannelConfigError,
@@ -207,6 +208,7 @@ def run_null(
             hop_ms=hop_ms,
             threshold_dbfs=threshold_dbfs,
             summary=analysis.summary,
+            analysis_window=analysis.analysis_window,
             flags=analysis.flags,
             errors=[],
         ),
@@ -282,6 +284,7 @@ def run_me(
             dx_gate_dbfs=dx_gate_dbfs,
             me_floor_dbfs=me_floor_dbfs,
             summary=analysis.summary,
+            analysis_window=analysis.analysis_window,
             flags=analysis.flags,
             errors=[],
         ),
@@ -1486,6 +1489,7 @@ def _run_group_null_test(
             hop_ms=hop_ms,
             threshold_dbfs=threshold_dbfs,
             summary=analysis.summary,
+            analysis_window=analysis.analysis_window,
             flags=analysis.flags,
             errors=[],
         ),
@@ -1583,6 +1587,7 @@ def _run_group_me_check(
             dx_gate_dbfs=dx_gate_dbfs,
             me_floor_dbfs=me_floor_dbfs,
             summary=analysis.summary,
+            analysis_window=analysis.analysis_window,
             flags=analysis.flags,
             errors=[],
         ),
@@ -1753,6 +1758,8 @@ def _analysis_reason(exc: FinalPassError) -> str:
         return "sample_rate_mismatch"
     if isinstance(exc, SampleCountMismatchError):
         return "sample_count_mismatch"
+    if isinstance(exc, ProgramWindowError):
+        return "program_window_error"
     if isinstance(exc, ChannelMismatchError):
         return "channel_count_mismatch"
     if isinstance(exc, UnsupportedChannelConfigError):

@@ -70,7 +70,7 @@ def test_wizard_all_flow_succeeds_on_split_folder(tmp_path: Path) -> None:
     assert report_path.exists()
     assert html_path.exists()
     payload = json.loads(report_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 7
+    assert payload["schema_version"] == 8
     assert payload["command"] == "all"
     assert "Folder summary:" in result.output
     assert "Job: all" in result.output
@@ -298,7 +298,7 @@ def test_wizard_discovery_errors_can_be_viewed_and_continue(tmp_path: Path) -> N
     assert result.exit_code == 0, result.output
     assert "Discovery errors:" in result.output
     payload = _read_payload(out_dir)
-    assert payload["schema_version"] == 7
+    assert payload["schema_version"] == 8
     assert payload["discovery_errors"]
 
 

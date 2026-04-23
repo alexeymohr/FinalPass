@@ -1,7 +1,7 @@
 """Pydantic v2 models for the on-disk JSON reports.
 
-SM-2 bumps standalone reports to schema v2 so they can persist split-mono
-provenance, while the integrated ``all`` command stays at schema v5. Kept
+SM-2 bumps standalone reports so they can persist split-mono provenance; later
+schemas add comparison-window provenance for null/M&E and richer all reports. Kept
 separate from :mod:`finalpass.specs` so the spec input schema and the report
 output schemas can evolve independently.
 """
@@ -136,6 +136,35 @@ class GroupError(BaseModel):
     message: str
 
 
+class AnalysisWindowInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    path: str
+    start_sample: int
+    end_sample: int
+    ignored_head_samples: int = 0
+    ignored_tail_samples: int = 0
+    padded_tail_samples: int = 0
+    ignored_head_seconds: float = 0.0
+    ignored_tail_seconds: float = 0.0
+    padded_tail_seconds: float = 0.0
+
+
+class AnalysisWindow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["whole_hour_time_reference", "file_start", "file_start_no_whole_hour"]
+    start_sample: int
+    end_sample: int
+    start_tc: str
+    end_tc: str
+    duration_seconds: float
+    tail_mos_threshold_dbfs: float
+    tail_peak_threshold_dbfs: float
+    inputs: list[AnalysisWindowInput]
+
+
 class NullSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -158,6 +187,7 @@ class NullTestResult(BaseModel):
     hop_ms: float
     threshold_dbfs: float
     summary: NullSummary | None = None
+    analysis_window: AnalysisWindow | None = None
     flags: list[FlaggedRegion] = Field(default_factory=list)
     errors: list[GroupError] = Field(default_factory=list)
 
@@ -222,6 +252,7 @@ class MECheckResult(BaseModel):
     dx_gate_dbfs: float
     me_floor_dbfs: float
     summary: MECheckSummary | None = None
+    analysis_window: AnalysisWindow | None = None
     flags: list[FlaggedRegion] = Field(default_factory=list)
     errors: list[GroupError] = Field(default_factory=list)
 
@@ -300,7 +331,7 @@ class AllSummary(BaseModel):
 
 
 class AllReport(BaseModel):
-    """SM-3 `all` command report — `schema_version == 7`."""
+    """SM-3 `all` command report — `schema_version == 8`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -320,7 +351,7 @@ class AllReport(BaseModel):
 
 
 class NullReport(BaseModel):
-    """SM-2 standalone `null` command report — `schema_version == 2`."""
+    """SM-2 standalone `null` command report — `schema_version == 3`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -337,7 +368,7 @@ class NullReport(BaseModel):
 
 
 class MEReport(BaseModel):
-    """SM-2 standalone `me` command report — `schema_version == 2`."""
+    """SM-2 standalone `me` command report — `schema_version == 3`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

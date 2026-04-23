@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from click.testing import CliRunner
+import numpy as np
 
 from finalpass.audio_io import read_wav
 from finalpass.cli import main
@@ -42,11 +43,12 @@ def test_null_exact_sum_passes(tmp_path: Path) -> None:
     ])
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == 3
     assert data["command"] == "null"
     assert data["printmaster"]["source_kind"] == "interleaved"
     assert data["printmaster"]["source_paths"] == [str(files["pm"].resolve())]
     assert data["null_test"]["pass"] is True
+    assert data["null_test"]["analysis_window"]["mode"] == "file_start"
     assert data["null_test"]["flags"] == []
     assert data["summary"]["overall_pass"] is True
 
@@ -212,19 +214,39 @@ def test_null_channel_count_mismatch_exits_two(tmp_path: Path) -> None:
     assert "channel count" in result.output.lower()
 
 
-def test_null_sample_count_mismatch_exits_two(tmp_path: Path) -> None:
+def test_null_sample_count_mismatch_with_signal_tail_exits_two(tmp_path: Path) -> None:
     root = tmp_path / "case"
     long = exact_sum_components(seconds=10.0, base_seed=SEED + 400)
-    short = exact_sum_components(seconds=8.0, base_seed=SEED + 401)
+    short = exact_sum_components(seconds=8.0, base_seed=SEED + 400)
     pm = write_audio(root / "PM.wav", long["pm"])
     dx = write_audio(root / "DX.wav", short["dx"])
-    mx = write_audio(root / "MX.wav", long["mx"])
-    fx = write_audio(root / "FX.wav", long["fx"])
+    mx = write_audio(root / "MX.wav", short["mx"])
+    fx = write_audio(root / "FX.wav", short["fx"])
 
     runner = CliRunner()
     result = runner.invoke(main, ["null", str(pm), str(dx), str(mx), str(fx)])
     assert result.exit_code == 2
-    assert "sample count" in result.output.lower() or "samples" in result.output.lower()
+    assert "sample count" in result.output.lower() or "comparable range" in result.output.lower()
+
+
+def test_null_sample_count_mismatch_with_mos_tail_is_cropped(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    data = exact_sum_components(seconds=8.0, base_seed=SEED + 410)
+    silent_tail = np.zeros((2 * SR, data["pm"].shape[1]), dtype=np.float64)
+    pm = write_audio(root / "PM.wav", np.vstack([data["pm"], silent_tail]))
+    dx = write_audio(root / "DX.wav", data["dx"])
+    mx = write_audio(root / "MX.wav", np.vstack([data["mx"], silent_tail]))
+    fx = write_audio(root / "FX.wav", np.vstack([data["fx"], silent_tail]))
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["null", str(pm), str(dx), str(mx), str(fx), "--json-only"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["null_test"]["pass"] is True
+    window = payload["null_test"]["analysis_window"]
+    assert window["duration_seconds"] == 10.0
+    assert window["inputs"][0]["ignored_tail_seconds"] == 0.0
+    assert window["inputs"][1]["padded_tail_seconds"] == 2.0
 
 
 def test_null_detected_global_offset_exits_two(tmp_path: Path) -> None:

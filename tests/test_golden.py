@@ -78,6 +78,8 @@ def _normalize_all(report: dict) -> dict:
     report.pop("run_started_at", None)
     report.pop("folder", None)  # absolute path varies with tmp_path
     for g in report.get("groups", []):
+        _normalize_analysis_window(g.get("null_test"))
+        _normalize_analysis_window(g.get("me_check"))
         for asset in g.get("assets", []):
             asset["asset_id"] = _normalize_asset_id(asset["asset_id"])
             asset["path"] = Path(asset["path"]).name
@@ -95,6 +97,16 @@ def _normalize_all(report: dict) -> dict:
         issue["path"] = Path(issue["path"]).name if issue["path"] else issue["path"]
         issue["source_paths"] = [Path(path).name for path in issue.get("source_paths", [])]
     return report
+
+
+def _normalize_analysis_window(result: dict | None) -> None:
+    if not result:
+        return
+    window = result.get("analysis_window")
+    if not window:
+        return
+    for item in window.get("inputs", []):
+        item["path"] = Path(item["path"]).name
 
 
 def _normalize_asset_id(value: str) -> str:

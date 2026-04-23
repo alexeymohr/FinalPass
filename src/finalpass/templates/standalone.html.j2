@@ -94,6 +94,7 @@
   </section>
   {% endif %}
 
+  {{ macros.analysis_window(report.null_test.analysis_window) }}
   {{ macros.flagged_timeline(timeline_lane(report.null_test.flags, sample_rate=report.printmaster.sample_rate, duration_seconds=report.printmaster.duration_seconds), "Flagged-region timeline") }}
 
   {% if report.null_test.flags %}
@@ -161,6 +162,7 @@
   </section>
   {% endif %}
 
+  {{ macros.analysis_window(report.me_check.analysis_window) }}
   {{ macros.flagged_timeline(timeline_lane(report.me_check.flags, sample_rate=report.me_file.sample_rate, duration_seconds=report.me_file.duration_seconds), "Flagged-region timeline") }}
 
   {% if report.me_check.flags %}

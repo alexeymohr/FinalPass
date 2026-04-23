@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 
 from click.testing import CliRunner
+import numpy as np
 
 from finalpass.audio_io import read_wav
 from finalpass.cli import main
 from finalpass.me_check import describe_audio as describe_me_audio
+from finalpass.timecode import tc_to_sample_start
 from tests.audio_cases import SEED, SR, me_check_components, shift_with_zeros, write_audio
 
 
@@ -46,11 +48,12 @@ def test_me_independent_content_passes(tmp_path: Path) -> None:
     ])
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == 3
     assert data["command"] == "me"
     assert data["me_file"]["source_kind"] == "interleaved"
     assert data["me_file"]["source_paths"] == [str(files["me"].resolve())]
     assert data["me_check"]["pass"] is True
+    assert data["me_check"]["analysis_window"]["mode"] == "file_start"
     assert data["me_check"]["flags"] == []
     assert data["summary"]["overall_pass"] is True
 
@@ -138,7 +141,7 @@ def test_me_channel_count_mismatch_exits_two(tmp_path: Path) -> None:
     assert "channel count" in result.output.lower()
 
 
-def test_me_sample_count_mismatch_exits_two(tmp_path: Path) -> None:
+def test_me_sample_count_mismatch_with_signal_tail_exits_two(tmp_path: Path) -> None:
     root = tmp_path / "case"
     long = me_check_components(seconds=10.0, base_seed=SEED + 400)
     short = me_check_components(seconds=8.0, base_seed=SEED + 401)
@@ -148,7 +151,49 @@ def test_me_sample_count_mismatch_exits_two(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["me", str(me), "--dx", str(dx)])
     assert result.exit_code == 2
-    assert "sample count" in result.output.lower() or "samples" in result.output.lower()
+    assert "sample count" in result.output.lower() or "comparable range" in result.output.lower()
+
+
+def test_me_sample_count_mismatch_with_mos_tail_is_cropped(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    data = me_check_components(seconds=8.0, base_seed=SEED + 410)
+    silent_tail = np.zeros((2 * SR, data["me"].shape[1]), dtype=np.float64)
+    me = write_audio(root / "ME.wav", np.vstack([data["me"], silent_tail]))
+    dx = write_audio(root / "DX.wav", data["dx"])
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["me", str(me), "--dx", str(dx), "--json-only"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["me_check"]["pass"] is True
+    window = payload["me_check"]["analysis_window"]
+    assert window["duration_seconds"] == 8.0
+    assert window["inputs"][0]["ignored_tail_seconds"] == 2.0
+    assert window["inputs"][1]["ignored_tail_seconds"] == 0.0
+
+
+def test_me_ignores_head_before_shared_whole_hour(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, 23.976)
+    data = me_check_components(
+        seconds=10.0,
+        base_seed=SEED + 420,
+        bleed_region=(1.0, 3.0),
+        bleed_gain=0.10,
+    )
+    me = write_audio(root / "ME.wav", data["me"], time_reference_samples=time_reference_samples)
+    dx = write_audio(root / "DX.wav", data["dx"], time_reference_samples=time_reference_samples)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["me", str(me), "--dx", str(dx), "--json-only"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["me_check"]["pass"] is True
+    assert payload["me_check"]["flags"] == []
+    window = payload["me_check"]["analysis_window"]
+    assert window["mode"] == "whole_hour_time_reference"
+    assert window["start_tc"] == "01:00:00:00"
+    assert 5.0 <= window["inputs"][0]["ignored_head_seconds"] <= 5.01
 
 
 def test_me_detected_global_offset_exits_two(tmp_path: Path) -> None:

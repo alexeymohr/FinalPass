@@ -172,9 +172,9 @@ In prep mode, FinalPass scans only the populated non-`Ignore` buckets under `Fin
 
 Schema versions:
 - `finalpass loudness` emits `schema_version: 3`
-- `finalpass null` emits `schema_version: 2`
-- `finalpass me` emits `schema_version: 2`
-- `finalpass all` emits `schema_version: 7` with `groups[].assets[]`,
+- `finalpass null` emits `schema_version: 3`
+- `finalpass me` emits `schema_version: 3`
+- `finalpass all` emits `schema_version: 8` with `groups[].assets[]`,
   `groups[].null_test`, `groups[].me_check`, `unclassified[]`,
   `discovery_errors[]`, `command: "all"`, `folder`, honest split-mono
   provenance on measured file reports, and timed loudness true-peak flags on
@@ -210,7 +210,7 @@ keys as [_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml)).
 
 ## Scope — v0.1 release candidate
 
-**Current:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a single asset or checked operation). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Interleaved assets plus canonical split stereo / 5.0 / 5.1 / 7.1 logical assets; 5.0 split stems are padded with silent LFE for 5.1 analysis while reports keep the real five-leg provenance. Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with logical-asset selection plus conservative auto-null/auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + conditional timed-marker AAF export + terminal summary.
+**Current:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a single asset or checked operation). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Interleaved assets plus canonical split stereo / 5.0 / 5.1 / 7.1 logical assets; 5.0 split stems are padded with silent LFE for 5.1 analysis while reports keep the real five-leg provenance. Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with logical-asset selection plus conservative auto-null/auto-M&E. Null and M&E comparisons derive a shared program window from a common whole-hour BWF timecode boundary when available, ignore pre-program material before that boundary, pad shorter inputs with silence inside the comparable range, and permit a uniquely longer overrun only when that extra tail is MOS. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + conditional timed-marker AAF export + terminal summary.
 
 **Out (non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Speech recognition, transcription, diarization, or ML/VAD. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification — FinalPass measures, it does not bless.
 

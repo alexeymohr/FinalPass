@@ -138,6 +138,39 @@
   {% endif %}
 {%- endmacro %}
 
+{% macro analysis_window(window) -%}
+  {% if window %}
+  <section class="card">
+    <h3>Comparison window</h3>
+    {{ summary_stats([
+      ("Start", window.start_tc),
+      ("End", window.end_tc),
+      ("Duration", window.duration_seconds|fmt_seconds(2)),
+      ("Mode", humanize_code(window.mode)),
+      ("Tail MOS gate", "%.1f dBFS RMS / %.1f dBFS peak"|format(window.tail_mos_threshold_dbfs, window.tail_peak_threshold_dbfs)),
+    ]) }}
+    <div class="table-scroll">
+    <table class="compact-table">
+      <thead>
+        <tr><th>Input</th><th>File</th><th>Ignored head</th><th>Ignored tail</th><th>Padded tail</th></tr>
+      </thead>
+      <tbody>
+        {% for input in window.inputs %}
+        <tr>
+          <td>{{ input.label }}</td>
+          <td class="filename">{{ input.path|basename }}</td>
+          <td>{{ input.ignored_head_seconds|fmt_seconds(2) }}</td>
+          <td>{{ input.ignored_tail_seconds|fmt_seconds(2) }}</td>
+          <td>{{ input.padded_tail_seconds|fmt_seconds(2) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  {% endif %}
+{%- endmacro %}
+
 {% macro flagged_timeline(lane, title, fill_class='flag') -%}
 <section class="card section-stack">
   <h3>{{ title }}</h3>

@@ -198,6 +198,7 @@
       ]) }}
     </section>
     {% endif %}
+    {{ macros.analysis_window(group.null_test.analysis_window) }}
     {% set anchor = group_anchor_file(group) %}
     {% if anchor %}
       {{ macros.flagged_timeline(timeline_lane(group.null_test.flags, sample_rate=group_sample_rate(group), duration_seconds=group_duration_seconds(group)), "Null flagged-region timeline") }}
@@ -240,6 +241,7 @@
       ]) }}
     </section>
     {% endif %}
+    {{ macros.analysis_window(group.me_check.analysis_window) }}
     {% set anchor = group_anchor_file(group) %}
     {% if anchor %}
       {{ macros.flagged_timeline(timeline_lane(group.me_check.flags, sample_rate=group_sample_rate(group), duration_seconds=group_duration_seconds(group)), "M&E flagged-region timeline") }}

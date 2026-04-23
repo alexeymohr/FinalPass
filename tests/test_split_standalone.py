@@ -117,7 +117,7 @@ def test_split_51_pm_and_stems_null_succeeds(tmp_path: Path) -> None:
     ])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["printmaster"]["source_kind"] == "split_mono"
     assert payload["printmaster"]["member_legs"] == ["L", "R", "C", "LFE", "Ls", "Rs"]
     assert all(stem["source_kind"] == "split_mono" for stem in payload["stems"])
@@ -183,7 +183,7 @@ def test_split_me_and_split_dx_succeed(tmp_path: Path) -> None:
     ])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["me_file"]["source_kind"] == "split_mono"
     assert payload["dx_file"]["source_kind"] == "split_mono"
     assert payload["me_check"]["pass"] is True

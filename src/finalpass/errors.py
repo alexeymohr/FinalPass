@@ -45,6 +45,10 @@ class SampleCountMismatchError(FinalPassError):
     """A set of files does not share one total sample count."""
 
 
+class ProgramWindowError(FinalPassError):
+    """Inputs cannot be reduced to one comparable program-time window."""
+
+
 class AlignmentError(FinalPassError):
     """A constant non-zero global offset was detected between inputs."""
 
