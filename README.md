@@ -1,8 +1,8 @@
 # FinalPass
 
-Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, a minimal folder-first terminal wizard, prep-folder guided filtering for messy deliveries, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
+Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, a minimal folder-first terminal wizard, prep-folder guided filtering for messy deliveries, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for exportable timed flags, example smoke flows, and CI.
 
-**Status: Phase 7 release candidate plus SM-6 prep-folder guided filtering.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, runs the same internal job/report pipeline as the direct commands, presents logical assets with polished split-mono labels instead of raw leg filenames wherever practical, and can create or resume a `FinalPass Prep/` layout so messy folders can be curated before analysis. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
+**Status: Phase 7 release candidate plus SM-6 prep-folder guided filtering.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, runs the same internal job/report pipeline as the direct commands, presents logical assets with polished split-mono labels instead of raw leg filenames wherever practical, and can create or resume a `FinalPass Prep/` layout so messy folders can be curated before analysis. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed flags from `null`, `me`, or loudness true-peak-over regions.
 
 ## Install (dev)
 
@@ -70,7 +70,7 @@ Normal runs always write these files to `--out` (default `./finalpass-report/`):
 
 Conditional artifact:
 
-- `markers.aaf` — written only when the run contains one or more timed `null` / `me` flagged regions.
+- `markers.aaf` — written only when the run contains one or more exportable timed flags.
 
 `--json-only` writes no files and emits JSON to stdout only.
 
@@ -80,9 +80,10 @@ Still not implemented:
 
 AAF export stays intentionally narrow in v0.1:
 
+- standalone `loudness` exports timed `files[].flags[]` for true-peak-over regions
 - standalone `null` exports `null_test.flags[]`
 - standalone `me` exports `me_check.flags[]`
-- `all` exports only `groups[].null_test.flags[]` and `groups[].me_check.flags[]`
+- `all` exports timed `groups[].files[].flags[]`, `groups[].null_test.flags[]`, and `groups[].me_check.flags[]`
 - no synthetic markers are created for loudness-only failures, group-level errors, or skipped checks
 
 ### `finalpass all` quickstart
@@ -167,13 +168,14 @@ Typical flow:
 In prep mode, FinalPass scans only the populated non-`Ignore` buckets under `FinalPass Prep/`. Files outside that prep root are ignored for wizard analysis.
 
 Schema versions:
-- `finalpass loudness` emits `schema_version: 2`
+- `finalpass loudness` emits `schema_version: 3`
 - `finalpass null` emits `schema_version: 2`
 - `finalpass me` emits `schema_version: 2`
-- `finalpass all` emits `schema_version: 6` with `groups[].assets[]`,
+- `finalpass all` emits `schema_version: 7` with `groups[].assets[]`,
   `groups[].null_test`, `groups[].me_check`, `unclassified[]`,
-  `discovery_errors[]`, `command: "all"`, `folder`, and honest split-mono
-  provenance on measured file reports
+  `discovery_errors[]`, `command: "all"`, `folder`, honest split-mono
+  provenance on measured file reports, and timed loudness true-peak flags on
+  measured file reports where present
 
 ### Filename conventions
 
@@ -183,7 +185,7 @@ of `_`, `-`, `.`.
 
 | Role | Accepted tokens |
 |---|---|
-| `pm` (printmaster) | `PM`, `PRINTMASTER`, `MIX`, `FINAL` |
+| `pm` (printmaster) | `PM`, `PRINTMASTER`, `MIX`, `FINAL`, `COMP` |
 | `dx` (dialog)      | `DX`, `DIA`, `DIALOG`, `DIALOGUE` |
 | `mx` (music)       | `MX`, `MUS`, `MUSIC` |
 | `fx` (effects)     | `FX`, `SFX`, `EFFECTS` |

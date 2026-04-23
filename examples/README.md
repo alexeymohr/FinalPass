@@ -169,6 +169,7 @@ Then:
 
 In SM-6 prep mode, FinalPass scans only files placed directly inside populated non-`Ignore` buckets. It does not recurse deeper inside those buckets yet, and it ignores files outside `FinalPass Prep/`.
 
-For `null`, `me`, and the integrated `all` run, `markers.aaf` is written only
-when the report contains exportable timed flags. The shipped example delivery
-is designed so the failing interleaved E04 case produces those timed flags.
+For any command, `markers.aaf` is written only when the report contains
+exportable timed flags. In the shipped example delivery, the failing
+interleaved E04 case produces those timed flags on the `me` and `all` smoke
+paths, while the passing loudness example does not.

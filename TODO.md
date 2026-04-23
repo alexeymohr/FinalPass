@@ -18,7 +18,7 @@ Features outside the current phase's spec go here, not into the code.
   - `finalpass all` now discovers folder contents as logical assets rather than
     raw files, keeps mixed presentations inside one editorial group, selects
     target-layout assets by actual layout, and persists `groups[].assets[]`
-    plus v6 measured-file provenance.
+    plus logical-asset measured-file provenance.
   - explicit split-looking incomplete families now surface as discovery errors
     on the `all` path instead of silently masquerading as mono assets.
 - **SM-4 landed the minimal guided wizard / job flow.**
@@ -55,10 +55,12 @@ Features outside the current phase's spec go here, not into the code.
   - Phase 1 (`finalpass loudness`) originally emitted `Report` at
     `schema_version: 1` with
     `summary: Summary` (no `groups_*` fields).
-  - The integrated folder path now emits `AllReport` at `schema_version: 5`
+  - The integrated folder path later evolved through the timed-analysis phases
+    and now emits `AllReport` at `schema_version: 7`
     with `groups[]`, `groups[].null_test`, `groups[].me_check`, `unclassified[]`, `command`,
-    `folder`, and `summary: AllSummary` (which has `groups_total/passed/failed`
-    on top of the Phase 1 totals).
+    `folder`, `discovery_errors[]`, measured-file provenance, timed loudness
+    `flags[]`, and `summary: AllSummary` (which has
+    `groups_total/passed/failed` on top of the Phase 1 totals).
   - `FileReport`, `Measurements`, `CheckResult` are shared between both reports.
   - **Why not unified**: Phase 2 explicitly forbade retrofitting the original
     Phase 1 `loudness` shape.
@@ -121,9 +123,13 @@ Features outside the current phase's spec go here, not into the code.
 ## Split-mono Phase SM-2 — design decisions
 
 - **Standalone provenance bumped the standalone schemas only.**
-  - `finalpass loudness`, `finalpass null`, and `finalpass me` now emit
-    `schema_version: 2`.
-  - `finalpass all` stays at `schema_version: 5` and does not gain any of the
+  - `finalpass null` and `finalpass me` now emit `schema_version: 2`.
+  - `finalpass loudness` later advanced to `schema_version: 3` when timed
+    true-peak-over `flags[]` were persisted on standalone file reports.
+  - `finalpass all` later advanced to `schema_version: 7` when the shared
+    measured-file shape gained the same timed loudness flags.
+  - The original SM-2 change itself did not alter the `all` report and did not
+    gain any of the
     standalone split-mono provenance fields in SM-2.
 - **One standalone ingest seam builds on SM-1.**
   - `src/finalpass/standalone_ingest.py` resolves interleaved paths and
@@ -160,7 +166,9 @@ Features outside the current phase's spec go here, not into the code.
 ## Phase 6 — design decisions
 
 - **AAF export stays timed-flags-only.**
-  - `markers.aaf` exports only persisted timed `null` / `me` `flags[]`.
+  - `markers.aaf` exports only persisted timed `flags[]`.
+  - That now includes timed loudness true-peak-over flags in addition to
+    `null` / `me`.
   - No synthetic markers are created for loudness-only failures, group errors, or skipped checks.
 - **One run, one marker track.**
   - Each CLI run writes at most one `markers.aaf`.

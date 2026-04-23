@@ -11,7 +11,7 @@ FinalPass v0.1.0 is the first release candidate of the OSS delivery-QC CLI.
 - Phase 3 standalone stem-sum null plus auto-null in `all`
 - Phase 4 standalone M&E dialogue-bleed checks plus auto-M&E in `all`
 - Phase 5 self-contained HTML report generation from persisted report models
-- Phase 6 conditional AAF marker export for timed `null` / `me` flags
+- Phase 6 conditional AAF marker export for exportable timed `null` / `me` / loudness true-peak flags
 - Phase 7 release polish:
   - `finalpass --version`
   - CI workflow
@@ -28,7 +28,7 @@ Normal runs write:
 
 Conditional artifact:
 
-- `markers.aaf` only when the run contains exportable timed `null` / `me` flags
+- `markers.aaf` only when the run contains exportable timed flags
 
 `--json-only` writes no files.
 
