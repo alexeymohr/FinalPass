@@ -97,6 +97,15 @@ from .null_test import (
 from .report import render_report_html
 from .specs import Spec, list_bundled, load_spec
 from .standalone_ingest import describe_analysis_input, resolve_standalone_asset
+from .jobs import (
+    WrittenArtifacts,
+    run_all as execute_all,
+    run_loudness as execute_loudness,
+    run_me as execute_me,
+    run_null as execute_null,
+    write_report_artifacts as persist_report_artifacts,
+)
+from .wizard import run_wizard
 
 _err_console = Console(stderr=True)
 _out_console = Console()
@@ -117,7 +126,14 @@ def main() -> None:
 @click.option("--fps", type=float, default=23.976, show_default=True, help="Frame rate (for downstream TC display).")
 def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, out_dir: Path, json_only: bool, fps: float) -> None:
     try:
-        report = _run_loudness(files=files, spec_name=spec_name, dx_file=dx_file, fps=fps)
+        effective_dx = dx_file
+        spec, _, _ = load_spec(spec_name)
+        if effective_dx is not None and spec.dialog_lufs is None:
+            _err_console.print(
+                "[yellow]warning:[/yellow] --dx provided but spec has no dialog_lufs target; ignoring."
+            )
+            effective_dx = None
+        report = execute_loudness(files=files, spec_name=spec_name, dx_file=effective_dx, fps=fps)
     except FinalPassError as exc:
         _err_console.print(f"[red]error:[/red] {exc}")
         sys.exit(2)
@@ -129,7 +145,8 @@ def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, 
     else:
         try:
             _render_table(report)
-            _write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+            written = persist_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+            _announce_written_artifacts(written)
         except FinalPassError as exc:
             _err_console.print(f"[red]error:[/red] {exc}")
             sys.exit(2)
@@ -174,6 +191,14 @@ def specs_show_cmd(name: str) -> None:
         _out_console.print("  notes:")
         for line in spec.notes.rstrip().splitlines():
             _out_console.print(f"    {line}")
+
+
+@main.command("wizard")
+@click.argument("folder", required=False, type=click.Path(path_type=Path))
+@click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
+@click.option("--fps", type=float, default=23.976, show_default=True, help="Frame rate used as the wizard default.")
+def wizard_cmd(folder: Path | None, out_dir: Path, fps: float) -> None:
+    run_wizard(folder=folder, out_dir=out_dir, fps=fps)
 
 
 def _run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | None, fps: float) -> Report:
@@ -349,6 +374,17 @@ def _checks_table(fr: FileReport) -> Table:
     return table
 
 
+def _announce_written_artifacts(written: WrittenArtifacts) -> None:
+    _out_console.print(f"\n[dim]Wrote[/dim] {written.json_path}")
+    _out_console.print(f"[dim]Wrote[/dim] {written.html_path}")
+    if written.aaf_path is None:
+        _out_console.print(
+            f"[dim]No exportable timed markers; did not write[/dim] {written.html_path.parent / 'markers.aaf'}"
+        )
+    else:
+        _out_console.print(f"[dim]Wrote[/dim] {written.aaf_path}")
+
+
 def _write_report_artifacts(
     *,
     report: Report | NullReport | MEReport | AllReport,
@@ -422,7 +458,7 @@ def _write_report_artifacts(
 @click.option("--threshold-dbfs", type=float, default=DEFAULT_NULL_THRESHOLD_DBFS, show_default=True, help="Flag windows whose residual RMS exceeds this dBFS threshold.")
 def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, fps: float, window_ms: float, hop_ms: float, threshold_dbfs: float) -> None:
     try:
-        report = _run_null(
+        report = execute_null(
             pm=pm,
             stems=stems,
             fps=fps,
@@ -441,7 +477,8 @@ def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, 
     else:
         try:
             _render_null_report(report)
-            _write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+            written = persist_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+            _announce_written_artifacts(written)
         except FinalPassError as exc:
             _err_console.print(f"[red]error:[/red] {exc}")
             sys.exit(2)
@@ -568,7 +605,7 @@ def me_cmd(
     me_floor_dbfs: float,
 ) -> None:
     try:
-        report = _run_me(
+        report = execute_me(
             me_file=me_file,
             dx_file=dx_file,
             fps=fps,
@@ -592,7 +629,8 @@ def me_cmd(
     else:
         try:
             _render_me_report(report)
-            _write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+            written = persist_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+            _announce_written_artifacts(written)
         except FinalPassError as exc:
             _err_console.print(f"[red]error:[/red] {exc}")
             sys.exit(2)
@@ -758,7 +796,7 @@ def all_cmd(
     me_me_floor_dbfs: float,
 ) -> None:
     try:
-        report = _run_all(
+        report = execute_all(
             folder=folder,
             spec_name=spec_name,
             patterns_path=patterns_path,
@@ -787,7 +825,8 @@ def all_cmd(
     else:
         try:
             _render_all_report(report)
-            _write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+            written = persist_report_artifacts(report=report, payload=payload, out_dir=out_dir)
+            _announce_written_artifacts(written)
         except FinalPassError as exc:
             _err_console.print(f"[red]error:[/red] {exc}")
             sys.exit(2)

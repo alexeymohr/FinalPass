@@ -21,8 +21,14 @@ Features outside the current phase's spec go here, not into the code.
     plus v6 measured-file provenance.
   - explicit split-looking incomplete families now surface as discovery errors
     on the `all` path instead of silently masquerading as mono assets.
-- **Still deferred beyond SM-3:**
-  - wizard / TUI guidance over the logical-asset model
+- **SM-4 landed the minimal guided wizard / job flow.**
+  - `finalpass wizard` now starts folder-first, presents logical assets instead
+    of raw mono legs, and can run `all`, standalone `loudness`, standalone
+    `null`, and standalone `me` through numbered menus while reusing the same
+    internal command runners and artifact-writing path as the direct CLI.
+- **Still deferred beyond SM-4:**
+  - saved presets / persistent wizard state
+  - advanced null / M&E tuning inside the wizard
   - any CLI surface redesign beyond the current commands
 
 ## Phase 2 — design decisions

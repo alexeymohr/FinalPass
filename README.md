@@ -1,8 +1,8 @@
 # FinalPass
 
-Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
+Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, a minimal folder-first terminal wizard, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
 
-**Status: Phase 7 release candidate plus SM-3 logical-asset `all` support.** `loudness`, standalone `null`, standalone `me`, and `all` with auto-null / auto-M&E are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` now discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
+**Status: Phase 7 release candidate plus SM-4 minimal wizard flow.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, and runs the same internal job/report pipeline as the direct commands. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
 
 ## Install (dev)
 
@@ -20,6 +20,7 @@ Python 3.11+. WAV/BWF input.
 uv run finalpass --version
 uv run finalpass specs list
 uv run finalpass specs show <name>
+uv run finalpass wizard [folder] [--out <dir>] [--fps <rate>]
 uv run finalpass loudness <file>... --spec <name> [--dx <file>] [--out <dir>] [--json-only] [--fps <rate>]
 uv run finalpass null <pm> <stems>... [--out <dir>] [--json-only] [--fps <rate>]
                                       [--window-ms <ms>] [--hop-ms <ms>] [--threshold-dbfs <dbfs>]
@@ -42,6 +43,10 @@ uv run finalpass all <folder> --spec <name> [--out <dir>] [--json-only] [--fps <
 ```
 
 Exit codes: `0` all pass, `1` failures found, `2` tool error.
+
+Wizard note:
+- `finalpass wizard` is a minimal guided terminal flow. It starts from a folder, presents logical assets rather than raw mono legs, and can run `all`, standalone `loudness`, standalone `null`, and standalone `me` end-to-end with numbered menus.
+- The wizard uses existing default null / M&E tuning only. Advanced parameter tuning still lives in the direct CLI commands.
 
 Standalone input note:
 - `finalpass loudness`, `finalpass null`, and `finalpass me` accept either an interleaved WAV/BWF path or a seed path to one member of a canonical split-mono family in the same directory.
