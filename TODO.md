@@ -35,9 +35,18 @@ Features outside the current phase's spec go here, not into the code.
     surfaces without changing report schemas.
   - maintainer docs now call out the shared-venv/worktree `PYTHONPATH=src`
     verification caveat.
-- **Still deferred beyond SM-5:**
+- **SM-6 landed prep-folder guided filtering in the wizard.**
+  - `finalpass wizard` can now create and auto-resume a fixed
+    `FinalPass Prep/` bucket layout for messy deliveries.
+  - prep mode scans only populated non-`Ignore` buckets and ignores files
+    outside the prep root without changing any report schema or analysis math.
+  - prep bucket hints feed existing logical-asset discovery and job execution
+    seams; direct `all` / standalone CLI commands remain unchanged.
+- **Still deferred beyond SM-6:**
   - saved presets / persistent wizard state
   - advanced null / M&E tuning inside the wizard
+  - Finder tags / color-label integration for prep
+  - customizable prep-bucket sets
   - any CLI surface redesign beyond the current commands
 
 ## Phase 2 — design decisions

@@ -18,6 +18,7 @@ from . import aaf_export
 from .all_assets import (
     AssetFolderScan,
     ClassifiedLogicalAsset,
+    discover_assets_from_paths,
     discover_folder_assets,
     read_classified_audio,
 )
@@ -62,6 +63,7 @@ from .me_check import (
     analyze_me,
 )
 from .null_test import analyze_null
+from .prep_folders import PrepBucketHint
 from .report import render_report_html
 from .specs import Spec, load_spec
 from .standalone_ingest import describe_analysis_input, resolve_standalone_asset
@@ -305,7 +307,92 @@ def run_all(
     spec, source, _ = load_spec(spec_name)
     cfg = load_config(patterns_path)
     scan: AssetFolderScan = discover_folder_assets(folder, cfg)
+    return run_all_from_scan(
+        folder=folder,
+        scan=scan,
+        spec=spec,
+        source=source,
+        include_unclassified=include_unclassified,
+        fps=fps,
+        null_window_ms=null_window_ms,
+        null_hop_ms=null_hop_ms,
+        null_threshold_dbfs=null_threshold_dbfs,
+        me_window_ms=me_window_ms,
+        me_hop_ms=me_hop_ms,
+        me_band_low_hz=me_band_low_hz,
+        me_band_high_hz=me_band_high_hz,
+        me_corr_threshold=me_corr_threshold,
+        me_coherence_threshold=me_coherence_threshold,
+        me_dx_gate_dbfs=me_dx_gate_dbfs,
+        me_me_floor_dbfs=me_me_floor_dbfs,
+    )
 
+
+def run_all_filtered(
+    *,
+    folder: Path,
+    paths: tuple[Path, ...],
+    path_hints: dict[Path, PrepBucketHint],
+    spec_name: str,
+    patterns_path: Path | None,
+    include_unclassified: bool,
+    fps: float,
+    null_window_ms: float,
+    null_hop_ms: float,
+    null_threshold_dbfs: float,
+    me_window_ms: float,
+    me_hop_ms: float,
+    me_band_low_hz: float,
+    me_band_high_hz: float,
+    me_corr_threshold: float,
+    me_coherence_threshold: float,
+    me_dx_gate_dbfs: float,
+    me_me_floor_dbfs: float,
+) -> AllReport:
+    spec, source, _ = load_spec(spec_name)
+    cfg = load_config(patterns_path)
+    scan = discover_assets_from_paths(paths, cfg, path_hints=path_hints)
+    return run_all_from_scan(
+        folder=folder,
+        scan=scan,
+        spec=spec,
+        source=source,
+        include_unclassified=include_unclassified,
+        fps=fps,
+        null_window_ms=null_window_ms,
+        null_hop_ms=null_hop_ms,
+        null_threshold_dbfs=null_threshold_dbfs,
+        me_window_ms=me_window_ms,
+        me_hop_ms=me_hop_ms,
+        me_band_low_hz=me_band_low_hz,
+        me_band_high_hz=me_band_high_hz,
+        me_corr_threshold=me_corr_threshold,
+        me_coherence_threshold=me_coherence_threshold,
+        me_dx_gate_dbfs=me_dx_gate_dbfs,
+        me_me_floor_dbfs=me_me_floor_dbfs,
+    )
+
+
+def run_all_from_scan(
+    *,
+    folder: Path,
+    scan: AssetFolderScan,
+    spec: Spec,
+    source: str,
+    include_unclassified: bool,
+    fps: float,
+    null_window_ms: float,
+    null_hop_ms: float,
+    null_threshold_dbfs: float,
+    me_window_ms: float,
+    me_hop_ms: float,
+    me_band_low_hz: float,
+    me_band_high_hz: float,
+    me_corr_threshold: float,
+    me_coherence_threshold: float,
+    me_dx_gate_dbfs: float,
+    me_me_floor_dbfs: float,
+) -> AllReport:
     if not scan.groups and not scan.discovery_errors and not scan.unclassified:
         raise NoAudioFilesError(
             f"No WAV/BWF files found in {folder}. "

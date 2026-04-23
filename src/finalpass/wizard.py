@@ -6,12 +6,13 @@ from typing import Literal
 
 import click
 
-from .all_assets import AssetFolderScan, ClassifiedLogicalAsset, discover_folder_assets
+from .all_assets import AssetFolderScan, ClassifiedLogicalAsset, discover_assets_from_paths, discover_folder_assets
 from .classify import load_config
 from .errors import FinalPassError
 from .jobs import (
     WrittenArtifacts,
     run_all,
+    run_all_filtered,
     run_loudness,
     run_me,
     run_null,
@@ -34,11 +35,13 @@ from .null_test import (
     DEFAULT_NULL_WINDOW_MS,
 )
 from .presentation import asset_menu_label, logical_asset_display_name, source_summary
+from .prep_folders import PrepLayout, PrepScanResult, create_prep_layout, detect_prep_layout, scan_prep_layout
 from .specs import Spec, list_bundled, load_spec
 from .wizard_io import Choice, WizardBack, WizardQuit, choose_many, choose_one, print_section, prompt_text
 
 WizardAction = Literal["job_menu", "choose_folder", "exit"]
 WizardStatus = Literal["PASS", "FAIL", "TOOL ERROR"]
+WizardMode = Literal["folder", "prep"]
 
 DEFAULT_OUTPUT_DIR = Path("./finalpass-report")
 COMMON_FPS_OPTIONS = [23.976, 24.0, 25.0, 29.97, 30.0]
@@ -48,6 +51,9 @@ COMMON_FPS_OPTIONS = [23.976, 24.0, 25.0, 29.97, 30.0]
 class FolderContext:
     folder: Path
     scan: AssetFolderScan
+    mode: WizardMode = "folder"
+    prep_scan: PrepScanResult | None = None
+    prep_root: Path | None = None
 
     @property
     def asset_count(self) -> int:
@@ -91,7 +97,7 @@ def run_wizard(*, folder: Path | None, out_dir: Path, fps: float) -> None:
 
             current_folder = folder_context.folder
             while True:
-                action = _job_menu()
+                action = _job_menu(folder_context)
                 if action == "choose_folder":
                     current_folder = None
                     break
@@ -128,8 +134,8 @@ def _choose_folder_context(initial_folder: Path | None) -> FolderContext | None:
                 return None
             candidate = Path(raw).expanduser()
 
-        context, error_message = _scan_folder(candidate)
-        if context is None:
+        resolved_folder, error_message = _resolve_folder(candidate)
+        if resolved_folder is None:
             click.echo(f"Folder error: {error_message}")
             next_action = choose_one(
                 "Choose an option:",
@@ -142,6 +148,62 @@ def _choose_folder_context(initial_folder: Path | None) -> FolderContext | None:
             )
             if next_action == "exit":
                 return None
+            candidate = None
+            continue
+
+        prep_layout = detect_prep_layout(resolved_folder)
+        if prep_layout is not None:
+            click.echo("I found an existing FinalPass prep layout.")
+            click.echo("I'll scan the populated prep folders and ignore everything else.")
+            prep_result = _handle_prep_layout(prep_layout)
+            if isinstance(prep_result, FolderContext):
+                return prep_result
+            if prep_result == "exit":
+                return None
+            candidate = None
+            continue
+
+        next_action = choose_one(
+            "Choose an option:",
+            [
+                Choice("Analyze folder as-is", "analyze"),
+                Choice("Create FinalPass prep folders", "create_prep"),
+                Choice("Choose a different folder", "choose_folder"),
+                Choice("Quit", "exit"),
+            ],
+            allow_back=False,
+            default_index=1,
+        )
+        if next_action == "exit":
+            return None
+        if next_action == "choose_folder":
+            candidate = None
+            continue
+        if next_action == "create_prep":
+            prep_layout = create_prep_layout(resolved_folder)
+            _print_prep_created(prep_layout)
+            follow_up = choose_one(
+                "Choose an option:",
+                [
+                    Choice("Re-scan prep folders now", "rescan"),
+                    Choice("Quit for now", "exit"),
+                ],
+                allow_back=False,
+                default_index=1,
+            )
+            if follow_up == "exit":
+                return None
+            prep_result = _handle_prep_layout(prep_layout)
+            if isinstance(prep_result, FolderContext):
+                return prep_result
+            if prep_result == "exit":
+                return None
+            candidate = None
+            continue
+
+        context, error_message = _scan_folder_as_is(resolved_folder)
+        if context is None:
+            click.echo(f"Folder error: {error_message}")
             candidate = None
             continue
 
@@ -190,18 +252,22 @@ def _choose_folder_context(initial_folder: Path | None) -> FolderContext | None:
         return context
 
 
-def _job_menu() -> Literal["all", "loudness", "null", "me", "choose_folder", "exit"]:
+def _job_menu(folder_context: FolderContext) -> Literal["all", "loudness", "null", "me", "choose_folder", "exit"]:
     print_section("Choose a job:")
-    return choose_one(
-        "Select a job type.",
-        [
+    if folder_context.mode == "prep":
+        options = _prep_job_options(folder_context)
+    else:
+        options = [
             Choice("Analyze delivery folder", "all"),
             Choice("Measure loudness on one asset", "loudness"),
             Choice("Run printmaster null", "null"),
             Choice("Run M&E bleed check", "me"),
             Choice("Choose a different folder", "choose_folder"),
             Choice("Exit", "exit"),
-        ],
+        ]
+    return choose_one(
+        "Select a job type.",
+        options,
         allow_back=False,
     )
 
@@ -228,7 +294,7 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
                 try:
                     _review_and_confirm([
                         "Job: all",
-                        f"Folder: {folder_context.folder}",
+                        *_context_review_lines(folder_context),
                         f"Spec: {spec_selection.source_label}",
                         f"Output: {out_dir}",
                         f"FPS: {fps:g}",
@@ -244,23 +310,10 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
                         f"{report.summary.groups_failed} failed, "
                         f"{len(report.discovery_errors)} discovery issue(s)."
                     ),
-                    runner=lambda: run_all(
-                        folder=folder_context.folder,
+                    runner=lambda: _run_all_for_context(
+                        folder_context,
                         spec_name=spec_selection.spec_name,
-                        patterns_path=None,
-                        include_unclassified=False,
                         fps=fps,
-                        null_window_ms=DEFAULT_NULL_WINDOW_MS,
-                        null_hop_ms=DEFAULT_NULL_HOP_MS,
-                        null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
-                        me_window_ms=DEFAULT_ME_WINDOW_MS,
-                        me_hop_ms=DEFAULT_ME_HOP_MS,
-                        me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
-                        me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
-                        me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
-                        me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
-                        me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
-                        me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
                     ),
                 )
                 return _result_screen(result, out_dir=out_dir, fps=fps)
@@ -311,7 +364,7 @@ def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, defa
                             try:
                                 review_lines = [
                                     "Job: loudness",
-                                    f"Folder: {folder_context.folder}",
+                                    *_context_review_lines(folder_context),
                                     f"Group: {group_id}",
                                     _review_asset_line("Asset", asset),
                                     f"Spec: {spec_selection.source_label}",
@@ -384,7 +437,7 @@ def _null_flow(folder_context: FolderContext, *, default_out_dir: Path, default_
                         try:
                             _review_and_confirm([
                                 "Job: null",
-                                f"Folder: {folder_context.folder}",
+                                *_context_review_lines(folder_context),
                                 f"Group: {group_id}",
                                 _review_asset_line("Printmaster", pm_asset),
                                 f"Stems: {', '.join(logical_asset_display_name(asset) for asset in stem_assets)}",
@@ -454,7 +507,7 @@ def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fp
                         try:
                             _review_and_confirm([
                                 "Job: me",
-                                f"Folder: {folder_context.folder}",
+                                *_context_review_lines(folder_context),
                                 f"Group: {group_id}",
                                 _review_asset_line("M&E asset", me_asset),
                                 _review_asset_line("DX asset", dx_asset),
@@ -485,18 +538,224 @@ def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fp
                         return _result_screen(result, out_dir=out_dir, fps=fps)
 
 
-def _scan_folder(folder: Path) -> tuple[FolderContext | None, str | None]:
+def _resolve_folder(folder: Path) -> tuple[Path | None, str | None]:
     folder = folder.expanduser()
     if not folder.exists():
         return None, f"{folder} does not exist."
     if not folder.is_dir():
         return None, f"{folder} is not a directory."
+    return folder.resolve(), None
+
+
+def _scan_folder_as_is(folder: Path) -> tuple[FolderContext | None, str | None]:
+    folder = folder.resolve()
 
     try:
-        scan = discover_folder_assets(folder.resolve(), load_config(None))
+        scan = discover_folder_assets(folder, load_config(None))
     except FinalPassError as exc:
         return None, str(exc)
-    return FolderContext(folder=folder.resolve(), scan=scan), None
+    return FolderContext(folder=folder, scan=scan, mode="folder"), None
+
+
+def _scan_prep_folder(folder: Path, prep_scan: PrepScanResult) -> tuple[FolderContext | None, str | None]:
+    try:
+        scan = discover_assets_from_paths(
+            prep_scan.analyzable_paths,
+            load_config(None),
+            path_hints=prep_scan.path_hints,
+        )
+    except FinalPassError as exc:
+        return None, str(exc)
+    return FolderContext(
+        folder=folder.resolve(),
+        scan=scan,
+        mode="prep",
+        prep_scan=prep_scan,
+        prep_root=prep_scan.layout.prep_root,
+    ), None
+
+
+def _handle_prep_layout(prep_layout: PrepLayout) -> FolderContext | WizardAction:
+    while True:
+        prep_scan = scan_prep_layout(prep_layout)
+        if prep_scan.empty:
+            click.echo("I found the FinalPass prep folders, but none of the analysis buckets contain files yet.")
+            action = choose_one(
+                "Choose an option:",
+                [
+                    Choice("Re-scan prep folders", "rescan"),
+                    Choice("Choose a different folder", "choose_folder"),
+                    Choice("Quit", "exit"),
+                ],
+                allow_back=False,
+                default_index=1,
+            )
+            if action == "rescan":
+                continue
+            return action
+
+        context, error_message = _scan_prep_folder(prep_layout.folder, prep_scan)
+        if context is None:
+            click.echo(f"Prep scan error: {error_message}")
+            action = choose_one(
+                "Choose an option:",
+                [
+                    Choice("Re-scan prep folders", "rescan"),
+                    Choice("Choose a different folder", "choose_folder"),
+                    Choice("Quit", "exit"),
+                ],
+                allow_back=False,
+                default_index=1,
+            )
+            if action == "rescan":
+                continue
+            return action
+
+        _print_folder_summary(context)
+
+        if context.asset_count == 0:
+            click.echo("I scanned the populated prep folders, but no valid logical assets were found.")
+            action = choose_one(
+                "Choose an option:",
+                [
+                    Choice("Re-scan prep folders", "rescan"),
+                    Choice("Choose a different folder", "choose_folder"),
+                    Choice("Quit", "exit"),
+                ],
+                allow_back=False,
+                default_index=1,
+            )
+            if action == "rescan":
+                continue
+            return action
+
+        if context.scan.discovery_errors:
+            while True:
+                action = choose_one(
+                    "Discovery errors were found. What do you want to do?",
+                    [
+                        Choice("Continue anyway", "continue"),
+                        Choice("View discovery errors", "view"),
+                        Choice("Re-scan prep folders", "rescan"),
+                        Choice("Choose a different folder", "choose_folder"),
+                        Choice("Quit", "exit"),
+                    ],
+                    allow_back=False,
+                    default_index=1,
+                )
+                if action == "continue":
+                    return context
+                if action == "view":
+                    _print_discovery_errors(context)
+                    continue
+                if action == "rescan":
+                    break
+                return action
+            continue
+
+        return context
+
+
+def _prep_job_options(folder_context: FolderContext) -> list[Choice[str]]:
+    options: list[Choice[str]] = []
+    if _all_available(folder_context):
+        options.append(Choice("Analyze populated prep folders", "all"))
+    if folder_context.asset_count:
+        options.append(Choice("Measure loudness on one asset", "loudness"))
+    if _null_available(folder_context):
+        options.append(Choice("Run printmaster null", "null"))
+    if _me_available(folder_context):
+        options.append(Choice("Run M&E bleed check", "me"))
+    options.extend([
+        Choice("Choose a different folder", "choose_folder"),
+        Choice("Exit", "exit"),
+    ])
+    return options
+
+
+def _all_available(folder_context: FolderContext) -> bool:
+    for assets in folder_context.scan.groups.values():
+        if any(asset.role == "pm" for asset in assets):
+            return True
+    return False
+
+
+def _null_available(folder_context: FolderContext) -> bool:
+    for assets in folder_context.scan.groups.values():
+        for pm_asset in assets:
+            if pm_asset.role != "pm":
+                continue
+            same_layout_assets = [
+                asset for asset in assets
+                if asset.logical_asset.channel_config_actual == pm_asset.logical_asset.channel_config_actual
+                and asset.logical_asset.asset_id != pm_asset.logical_asset.asset_id
+            ]
+            if same_layout_assets:
+                return True
+    return False
+
+
+def _me_available(folder_context: FolderContext) -> bool:
+    for assets in folder_context.scan.groups.values():
+        has_me = any(asset.role == "me" for asset in assets)
+        has_dx = any(asset.role == "dx" for asset in assets)
+        if has_me and has_dx:
+            return True
+    return False
+
+
+def _run_all_for_context(folder_context: FolderContext, *, spec_name: str, fps: float) -> AllReport:
+    if folder_context.mode == "prep":
+        prep_scan = folder_context.prep_scan
+        if prep_scan is None:
+            raise FinalPassError("Prep mode is active, but no prep scan is available.")
+        return run_all_filtered(
+            folder=folder_context.folder,
+            paths=prep_scan.analyzable_paths,
+            path_hints=prep_scan.path_hints,
+            spec_name=spec_name,
+            patterns_path=None,
+            include_unclassified=False,
+            fps=fps,
+            null_window_ms=DEFAULT_NULL_WINDOW_MS,
+            null_hop_ms=DEFAULT_NULL_HOP_MS,
+            null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
+            me_window_ms=DEFAULT_ME_WINDOW_MS,
+            me_hop_ms=DEFAULT_ME_HOP_MS,
+            me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
+            me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
+            me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
+            me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
+            me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
+            me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
+        )
+    return run_all(
+        folder=folder_context.folder,
+        spec_name=spec_name,
+        patterns_path=None,
+        include_unclassified=False,
+        fps=fps,
+        null_window_ms=DEFAULT_NULL_WINDOW_MS,
+        null_hop_ms=DEFAULT_NULL_HOP_MS,
+        null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
+        me_window_ms=DEFAULT_ME_WINDOW_MS,
+        me_hop_ms=DEFAULT_ME_HOP_MS,
+        me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
+        me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
+        me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
+        me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
+        me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
+        me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
+    )
+
+
+def _print_prep_created(layout: PrepLayout) -> None:
+    print_section("Prep folders created:")
+    click.echo(f"Prep root: {layout.prep_root}")
+    click.echo("Buckets created:")
+    for bucket in layout.buckets:
+        click.echo(f"- {bucket.name}")
+    click.echo("Move or copy the stems you want analyzed into the appropriate prep buckets.")
 
 
 def _choose_group(folder_context: FolderContext, *, title: str) -> str:
@@ -809,6 +1068,10 @@ def _result_screen(result: JobExecutionResult, *, out_dir: Path, fps: float) -> 
 def _print_folder_summary(context: FolderContext) -> None:
     print_section("Folder summary:")
     click.echo(f"Folder: {context.folder}")
+    if context.mode == "prep" and context.prep_root is not None and context.prep_scan is not None:
+        click.echo("Mode: prep")
+        click.echo(f"Prep root: {context.prep_root}")
+        click.echo(f"Populated prep buckets: {len(context.prep_scan.analyzable_buckets)}")
     click.echo(f"Groups: {len(context.scan.groups)}")
     click.echo(f"Logical assets: {context.asset_count}")
     click.echo(f"Discovery errors: {len(context.scan.discovery_errors)}")
@@ -838,6 +1101,13 @@ def _review_asset_line(label: str, asset: ClassifiedLogicalAsset | None) -> str:
     if asset is None:
         return f"{label}: none"
     return f"{label}: {logical_asset_display_name(asset)} ({source_summary(asset)})"
+
+
+def _context_review_lines(folder_context: FolderContext) -> list[str]:
+    lines = [f"Folder: {folder_context.folder}"]
+    if folder_context.mode == "prep" and folder_context.prep_root is not None:
+        lines.append(f"Prep root: {folder_context.prep_root}")
+    return lines
 
 
 def _null_summary_line(report: NullReport) -> str:

@@ -10,12 +10,14 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 import re
+from typing import Mapping
 
-from .assets import DiscoveryError, LogicalAsset, discover_logical_assets_in_folder, read_logical_asset
+from .assets import DiscoveryError, LogicalAsset, discover_logical_assets, discover_logical_assets_in_folder, read_logical_asset
 from .audio_io import AudioFile
 from .classify import ClassifiedFile, ClassifierConfig, classify_file
 from .errors import AmbiguousClassificationError
 from .models import FileRole
+from .prep_folders import PrepBucketHint
 
 _COMPOUND_ROLE_PATTERN = re.compile(
     r"(?i)(PM|PRINTMASTER|MIX|FINAL|COMP|DX|DIA|DIALOG|DIALOGUE|MX|MUS|MUSIC|FX|SFX|EFFECTS|ME|M_AND_E|MANDE|OPT|OPTIONAL|NARR|NARRATION)\s*-\s*"
@@ -40,11 +42,44 @@ class AssetFolderScan:
 
 def discover_folder_assets(folder: Path, cfg: ClassifierConfig) -> AssetFolderScan:
     discovery = discover_logical_assets_in_folder(folder)
+    return _build_asset_scan(
+        assets=discovery.assets,
+        discovery_errors=discovery.errors,
+        ignored_paths=discovery.ignored_paths,
+        cfg=cfg,
+        path_hints=None,
+    )
+
+
+def discover_assets_from_paths(
+    paths: list[Path] | tuple[Path, ...],
+    cfg: ClassifierConfig,
+    *,
+    path_hints: Mapping[Path, PrepBucketHint] | None = None,
+) -> AssetFolderScan:
+    discovery = discover_logical_assets(paths, strict_explicit_split_members=True)
+    return _build_asset_scan(
+        assets=discovery.assets,
+        discovery_errors=discovery.errors,
+        ignored_paths=discovery.ignored_paths,
+        cfg=cfg,
+        path_hints=path_hints,
+    )
+
+
+def _build_asset_scan(
+    *,
+    assets: list[LogicalAsset],
+    discovery_errors: list[DiscoveryError],
+    ignored_paths: list[Path],
+    cfg: ClassifierConfig,
+    path_hints: Mapping[Path, PrepBucketHint] | None,
+) -> AssetFolderScan:
     groups: "OrderedDict[str, list[ClassifiedLogicalAsset]]" = OrderedDict()
     unclassified: list[ClassifiedLogicalAsset] = []
 
-    for logical_asset in discovery.assets:
-        classified = classify_logical_asset(logical_asset, cfg)
+    for logical_asset in assets:
+        classified = classify_logical_asset(logical_asset, cfg, path_hints=path_hints)
         groups.setdefault(logical_asset.group_id, []).append(classified)
         if classified.role == "unknown":
             unclassified.append(classified)
@@ -52,12 +87,17 @@ def discover_folder_assets(folder: Path, cfg: ClassifierConfig) -> AssetFolderSc
     return AssetFolderScan(
         groups=groups,
         unclassified=unclassified,
-        discovery_errors=discovery.errors,
-        ignored_paths=discovery.ignored_paths,
+        discovery_errors=discovery_errors,
+        ignored_paths=ignored_paths,
     )
 
 
-def classify_logical_asset(logical_asset: LogicalAsset, cfg: ClassifierConfig) -> ClassifiedLogicalAsset:
+def classify_logical_asset(
+    logical_asset: LogicalAsset,
+    cfg: ClassifierConfig,
+    *,
+    path_hints: Mapping[Path, PrepBucketHint] | None = None,
+) -> ClassifiedLogicalAsset:
     try:
         classified_file = classify_file(logical_asset.canonical_path, cfg)
     except AmbiguousClassificationError:
@@ -69,11 +109,17 @@ def classify_logical_asset(logical_asset: LogicalAsset, cfg: ClassifierConfig) -
             group_id=logical_asset.group_id,
             channel_config_hint=logical_asset.channel_config_hint,
         )
+    prep_hint = None
+    if path_hints is not None:
+        prep_hint = path_hints.get(logical_asset.canonical_path.resolve())
     resolved_role = _resolve_role(
         logical_asset=logical_asset,
         classifier_role=classified_file.role,
+        prep_role_hint=prep_hint.role_hint if prep_hint is not None else None,
     )
     channel_hint = logical_asset.channel_config_hint or classified_file.channel_config_hint
+    if channel_hint is None and prep_hint is not None:
+        channel_hint = prep_hint.layout_hint
     return ClassifiedLogicalAsset(
         logical_asset=logical_asset,
         role=resolved_role,
@@ -103,10 +149,15 @@ def to_classified_file(asset: ClassifiedLogicalAsset) -> ClassifiedFile:
     )
 
 
-def _resolve_role(*, logical_asset: LogicalAsset, classifier_role: FileRole) -> FileRole:
+def _resolve_role(
+    *,
+    logical_asset: LogicalAsset,
+    classifier_role: FileRole,
+    prep_role_hint: FileRole | None = None,
+) -> FileRole:
     asset_role = logical_asset.role_hint or "unknown"
     if asset_role == "unknown" and classifier_role == "unknown":
-        return "unknown"
+        return prep_role_hint or "unknown"
     if asset_role == "unknown":
         return classifier_role
     if classifier_role == "unknown":

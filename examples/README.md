@@ -151,6 +151,24 @@ uv run finalpass wizard \
   --out examples/out/split_wizard
 ```
 
+## Prep-folder walkthrough
+
+For a messy real-world delivery, the preferred interactive path is:
+
+```bash
+uv run finalpass wizard /path/to/delivery
+```
+
+Then:
+
+1. Choose `Create FinalPass prep folders`.
+2. Move or copy the stems you want analyzed into `FinalPass Prep/`.
+3. Leave anything irrelevant in the parent folder, or put explicit non-analysis material in `FinalPass Prep/Ignore/`.
+4. Re-run the wizard. If the prep layout already exists, FinalPass auto-resumes prep mode.
+5. Run `all` or one of the standalone jobs from the curated prep buckets.
+
+In SM-6 prep mode, FinalPass scans only files placed directly inside populated non-`Ignore` buckets. It does not recurse deeper inside those buckets yet, and it ignores files outside `FinalPass Prep/`.
+
 For `null`, `me`, and the integrated `all` run, `markers.aaf` is written only
 when the report contains exportable timed flags. The shipped example delivery
 is designed so the failing interleaved E04 case produces those timed flags.

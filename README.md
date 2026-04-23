@@ -1,8 +1,8 @@
 # FinalPass
 
-Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, a minimal folder-first terminal wizard, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
+Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, a minimal folder-first terminal wizard, prep-folder guided filtering for messy deliveries, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
 
-**Status: Phase 7 release candidate plus SM-5 split-mono/wizard polish.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, runs the same internal job/report pipeline as the direct commands, and presents logical assets with polished split-mono labels instead of raw leg filenames wherever practical. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
+**Status: Phase 7 release candidate plus SM-6 prep-folder guided filtering.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, runs the same internal job/report pipeline as the direct commands, presents logical assets with polished split-mono labels instead of raw leg filenames wherever practical, and can create or resume a `FinalPass Prep/` layout so messy folders can be curated before analysis. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
 
 ## Install (dev)
 
@@ -46,6 +46,8 @@ Exit codes: `0` all pass, `1` failures found, `2` tool error.
 
 Wizard note:
 - `finalpass wizard` is a minimal guided terminal flow. It starts from a folder, presents logical assets rather than raw mono legs, and can run `all`, standalone `loudness`, standalone `null`, and standalone `me` end-to-end with numbered menus.
+- For messy deliveries, the preferred path is prep mode: the wizard can create `FinalPass Prep/`, let you move/copy the stems you want into fixed 5.1/stereo buckets, and then analyze only those populated prep buckets.
+- If a valid `FinalPass Prep/` layout already exists in the chosen folder, the wizard auto-resumes prep mode and ignores files outside that prep root.
 - The wizard uses existing default null / M&E tuning only. Advanced parameter tuning still lives in the direct CLI commands.
 
 Standalone input note:
@@ -146,6 +148,23 @@ uv run finalpass all \
 
 uv run finalpass wizard examples/delivery_split_assets --out examples/out/split_wizard
 ```
+
+### Prep-folder quickstart
+
+For a messy delivery folder, use the wizard instead of running `all` on the whole directory immediately:
+
+```bash
+uv run finalpass wizard /path/to/delivery
+```
+
+Typical flow:
+
+1. Choose `Create FinalPass prep folders`.
+2. Move or copy only the stems you want analyzed into `FinalPass Prep/`.
+3. Re-run the wizard, or choose `Re-scan prep folders now`.
+4. Run `all`, `loudness`, `null`, or `me` from the curated prep assets.
+
+In prep mode, FinalPass scans only the populated non-`Ignore` buckets under `FinalPass Prep/`. Files outside that prep root are ignored for wizard analysis.
 
 Schema versions:
 - `finalpass loudness` emits `schema_version: 2`
