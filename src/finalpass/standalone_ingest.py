@@ -42,6 +42,7 @@ def resolve_standalone_asset(path: Path) -> ResolvedStandaloneAsset:
             bit_depth=logical_asset.bit_depth or 0,
             channel_count=audio_asset.channel_count,
             duration_seconds=logical_asset.sample_count / float(logical_asset.sample_rate),
+            time_reference_samples=audio_asset.time_reference_samples,
         ),
     )
 
@@ -49,7 +50,7 @@ def resolve_standalone_asset(path: Path) -> ResolvedStandaloneAsset:
 def describe_analysis_input(resolved: ResolvedStandaloneAsset) -> AnalysisInputFile:
     logical_asset = resolved.logical_asset
     audio = resolved.audio
-    return AnalysisInputFile(
+    item = AnalysisInputFile(
         path=str(logical_asset.canonical_path),
         sample_rate=audio.sample_rate,
         bit_depth=audio.bit_depth,
@@ -61,6 +62,8 @@ def describe_analysis_input(resolved: ResolvedStandaloneAsset) -> AnalysisInputF
         member_legs=list(logical_asset.member_legs),
         presentation_label=logical_asset.presentation_label,
     )
+    item._time_reference_samples = audio.time_reference_samples
+    return item
 
 
 def _seed_specific_error(seed_path: Path, error):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import struct
 
 import numpy as np
 import soundfile as sf
@@ -45,9 +46,59 @@ def pink_noise(n_samples: int, n_channels: int, seed: int) -> np.ndarray:
     return pink.astype(np.float64)
 
 
-def write_audio(path: Path, data: np.ndarray, *, sr: int = SR, subtype: str = "PCM_24") -> Path:
+def write_audio(
+    path: Path,
+    data: np.ndarray,
+    *,
+    sr: int = SR,
+    subtype: str = "PCM_24",
+    time_reference_samples: int | None = None,
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     sf.write(str(path), data.astype(np.float64), sr, subtype=subtype)
+    if time_reference_samples is not None:
+        write_bext_time_reference(path, time_reference_samples)
+    return path
+
+
+def write_bext_time_reference(path: Path, time_reference_samples: int) -> Path:
+    """Insert or replace a minimal bext chunk carrying the sample time reference."""
+    path = Path(path)
+    original = path.read_bytes()
+    if len(original) < 12 or original[:4] != b"RIFF" or original[8:12] != b"WAVE":
+        raise ValueError(f"{path} is not a RIFF/WAVE file.")
+
+    bext = bytearray(602)
+    struct.pack_into("<IIH", bext, 338, time_reference_samples & 0xFFFFFFFF, time_reference_samples >> 32, 1)
+    bext_chunk = b"bext" + struct.pack("<I", len(bext)) + bytes(bext)
+
+    body = bytearray()
+    offset = 12
+    replaced = False
+    while offset + 8 <= len(original):
+        chunk_id = original[offset : offset + 4]
+        size = struct.unpack("<I", original[offset + 4 : offset + 8])[0]
+        padded_size = size + (size % 2)
+        chunk_end = offset + 8 + padded_size
+        if chunk_end > len(original):
+            break
+        if chunk_id == b"bext":
+            body.extend(bext_chunk)
+            replaced = True
+        else:
+            body.extend(original[offset:chunk_end])
+        offset = chunk_end
+
+    if offset < len(original):
+        body.extend(original[offset:])
+    if not replaced:
+        body = bytearray(bext_chunk) + body
+
+    riff_size = 4 + len(body)
+    updated = bytearray(original[:12])
+    updated[4:8] = struct.pack("<I", riff_size)
+    updated.extend(body)
+    path.write_bytes(updated)
     return path
 
 

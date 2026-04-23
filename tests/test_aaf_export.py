@@ -11,6 +11,7 @@ from finalpass import aaf_export
 from finalpass.cli import main
 from finalpass.errors import AAFExportError
 from finalpass.models import AllReport
+from finalpass.timecode import sample_to_edit_units
 from tests.audio_cases import (
     SEED,
     SR,
@@ -19,6 +20,7 @@ from tests.audio_cases import (
     me_check_components,
     true_peak_over_program,
     write_audio,
+    write_bext_time_reference,
 )
 
 
@@ -74,6 +76,10 @@ def _read_marker_aaf(path: Path) -> dict[str, object]:
     with aaf2.open(str(path), "r") as handle:
         composition = next(handle.content.compositionmobs())
         slot = next(slot for slot in composition.slots if type(slot).__name__ == "EventMobSlot")
+        timecode_slot = next(
+            candidate for candidate in composition.slots
+            if type(candidate).__name__ == "TimelineMobSlot" and getattr(candidate, "name", "") == "Timecode"
+        )
         timeline_slot_types = [type(candidate).__name__ for candidate in composition.slots]
         markers = [
             {
@@ -96,6 +102,7 @@ def _read_marker_aaf(path: Path) -> dict[str, object]:
             "slot_types": timeline_slot_types,
             "slot_name": slot.name,
             "edit_rate": str(slot.edit_rate),
+            "timecode_start": timecode_slot.segment.start,
             "markers": markers,
         }
 
@@ -155,6 +162,25 @@ def test_standalone_loudness_tp_markers_are_limited_to_one_per_second(tmp_path: 
 
     data = json.loads(report_data)
     assert len(data["files"][0]["flags"]) == 3
+
+
+def test_standalone_loudness_bext_start_shifts_aaf_timeline_and_marker_time(tmp_path: Path) -> None:
+    file_path = _write_tp_case(tmp_path / "case", filename="tp_over_primary.wav")
+    write_bext_time_reference(file_path, 168648480)
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "loudness",
+        str(file_path),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 1, result.output
+    parsed = _read_marker_aaf(out_dir / "markers.aaf")
+    marker = parsed["markers"][0]
+    assert parsed["timecode_start"] == sample_to_edit_units(0, SR, 23.976, start_time_reference_samples=168648480)
+    assert marker["time"].startswith("00:58:35:")
+    assert 0 < marker["position"] < 1000
 
 
 def test_standalone_null_failing_case_writes_aaf(tmp_path: Path) -> None:
@@ -314,6 +340,23 @@ def test_all_run_with_tp_only_group_writes_loudness_aaf(tmp_path: Path) -> None:
     assert "true_peak_dbtp" in marker["title"]
     assert marker["title"] == marker["annotation"]
     assert marker["user_comments"]["Label"] == "[1] FAIL: true peak over"
+
+
+def test_all_run_bext_start_shifts_combined_aaf_timeline_and_marker_times(tmp_path: Path) -> None:
+    folder = build_two_episodes(tmp_path / "delivery", e04_null_defect=True, e04_me_bleed_defect=True)
+    for wav_path in folder.glob("*.wav"):
+        write_bext_time_reference(wav_path, 168648480)
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 1, result.output
+    parsed = _read_marker_aaf(out_dir / "markers.aaf")
+    assert parsed["timecode_start"] == sample_to_edit_units(0, SR, 23.976, start_time_reference_samples=168648480)
+    assert parsed["markers"][0]["time"].startswith("00:58:34:")
 
 
 def test_clean_all_run_writes_no_aaf(tmp_path: Path) -> None:

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 SpecSource = Literal["bundled", "user", "explicit"]
 # "primary" is the Phase 1 role used by the `loudness` command when the caller
@@ -69,6 +69,8 @@ class FlaggedRegion(BaseModel):
 
 class FileReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    _time_reference_samples: int | None = PrivateAttr(default=None)
 
     path: str
     role: FileRole
@@ -147,6 +149,8 @@ class NullSummary(BaseModel):
 class NullTestResult(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    _time_reference_samples: int | None = PrivateAttr(default=None)
+
     pass_: bool | None = Field(alias="pass")
     skipped: bool = False
     reason: str | None = None
@@ -167,6 +171,8 @@ class AutoNullTestResult(NullTestResult):
 
 class AnalysisInputFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    _time_reference_samples: int | None = PrivateAttr(default=None)
 
     path: str
     sample_rate: int
@@ -199,6 +205,8 @@ class MECheckSummary(BaseModel):
 
 class MECheckResult(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    _time_reference_samples: int | None = PrivateAttr(default=None)
 
     pass_: bool | None = Field(alias="pass")
     skipped: bool = False

@@ -165,8 +165,18 @@ def true_peak_over_flags(
                 threshold=threshold_dbtp,
                 start_sample=start_sample,
                 end_sample=end_sample,
-                start_tc=samples_to_tc(start_sample, audio.sample_rate, fps),
-                end_tc=samples_to_tc(end_sample, audio.sample_rate, fps),
+                start_tc=samples_to_tc(
+                    start_sample,
+                    audio.sample_rate,
+                    fps,
+                    start_time_reference_samples=audio.time_reference_samples,
+                ),
+                end_tc=samples_to_tc(
+                    end_sample,
+                    audio.sample_rate,
+                    fps,
+                    start_time_reference_samples=audio.time_reference_samples,
+                ),
                 duration_seconds=(end_sample - start_sample) / float(audio.sample_rate),
                 detail=f"over by {peak_dbtp - threshold_dbtp:.1f} dB",
             )

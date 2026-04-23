@@ -139,6 +139,7 @@ def read_classified_audio(asset: ClassifiedLogicalAsset) -> AudioFile:
         bit_depth=logical_asset.bit_depth or 0,
         channel_count=audio_asset.channel_count,
         duration_seconds=logical_asset.sample_count / float(logical_asset.sample_rate),
+        time_reference_samples=audio_asset.time_reference_samples,
     )
 
 

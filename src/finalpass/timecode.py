@@ -57,18 +57,39 @@ def frame_rate_info(fps: float) -> FrameRateInfo:
     return FrameRateInfo(edit_rate=exact_rate, nominal_fps=nominal_fps)
 
 
-def sample_to_edit_units(sample_index: int, sample_rate: int, fps: float) -> int:
+def sample_to_edit_units(
+    sample_index: int,
+    sample_rate: int,
+    fps: float,
+    *,
+    start_time_reference_samples: int | None = None,
+) -> int:
     """Convert a sample index to an integer edit-unit position."""
     if sample_rate <= 0:
         raise ValueError("sample_rate must be positive")
+    absolute_sample_index = sample_index + (start_time_reference_samples or 0)
     info = frame_rate_info(fps)
-    value = Fraction(sample_index * info.edit_rate.numerator, sample_rate * info.edit_rate.denominator)
+    value = Fraction(
+        absolute_sample_index * info.edit_rate.numerator,
+        sample_rate * info.edit_rate.denominator,
+    )
     return _round_fraction(value)
 
 
-def samples_to_tc(sample_index: int, sample_rate: int, fps: float) -> str:
+def samples_to_tc(
+    sample_index: int,
+    sample_rate: int,
+    fps: float,
+    *,
+    start_time_reference_samples: int | None = None,
+) -> str:
     """Convert a sample index to an ``HH:MM:SS:FF`` timecode string."""
-    total_frames = sample_to_edit_units(sample_index, sample_rate, fps)
+    total_frames = sample_to_edit_units(
+        sample_index,
+        sample_rate,
+        fps,
+        start_time_reference_samples=start_time_reference_samples,
+    )
     return frames_to_tc(total_frames, fps)
 
 

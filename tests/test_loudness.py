@@ -67,3 +67,18 @@ def test_true_peak_over_flags_localize_short_burst(tmp_path: Path) -> None:
     assert flag.end_sample > flag.start_sample
     assert flag.value > flag.threshold
     assert "over by" in flag.detail
+
+
+def test_true_peak_over_flags_use_embedded_start_timecode(tmp_path: Path) -> None:
+    path = write_audio(
+        tmp_path / "tp_over_bext.wav",
+        true_peak_over_program(),
+        time_reference_samples=168648480,
+    )
+    audio = read_wav(path)
+    flags = true_peak_over_flags(audio, threshold_dbtp=-1.0, fps=23.976)
+
+    assert len(flags) == 1
+    flag = flags[0]
+    assert flag.start_tc.startswith("00:58:35:")
+    assert flag.end_tc.startswith("00:58:35:")

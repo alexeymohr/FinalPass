@@ -62,7 +62,7 @@ class _WindowResult:
 
 
 def describe_audio(audio: AudioFile) -> AnalysisInputFile:
-    return AnalysisInputFile(
+    item = AnalysisInputFile(
         path=str(audio.path),
         sample_rate=audio.sample_rate,
         bit_depth=audio.bit_depth,
@@ -70,6 +70,8 @@ def describe_audio(audio: AudioFile) -> AnalysisInputFile:
         channel_config_actual=channel_config_from_count(audio.channel_count),
         duration_seconds=round(audio.duration_seconds, 3),
     )
+    item._time_reference_samples = audio.time_reference_samples
+    return item
 
 
 def analyze_me(
@@ -77,6 +79,7 @@ def analyze_me(
     dx_file: AudioFile,
     *,
     fps: float,
+    time_reference_samples: int | None = None,
     window_ms: float = DEFAULT_ME_WINDOW_MS,
     hop_ms: float = DEFAULT_ME_HOP_MS,
     band_low_hz: float = DEFAULT_ME_BAND_LOW_HZ,
@@ -128,6 +131,7 @@ def analyze_me(
         flagged_windows,
         sample_rate=dx_file.sample_rate,
         fps=fps,
+        time_reference_samples=time_reference_samples,
     )
     analyzed = [window for window in windows if not window.gated_out]
     summary = MECheckSummary(
@@ -390,6 +394,7 @@ def _merge_flagged_windows(
     *,
     sample_rate: int,
     fps: float,
+    time_reference_samples: int | None,
 ) -> list[FlaggedRegion]:
     if not windows:
         return []
@@ -427,8 +432,18 @@ def _merge_flagged_windows(
                 threshold=1.0,
                 start_sample=int(region["start_sample"]),
                 end_sample=int(region["end_sample"]),
-                start_tc=samples_to_tc(int(region["start_sample"]), sample_rate, fps),
-                end_tc=samples_to_tc(int(region["end_sample"]), sample_rate, fps),
+                start_tc=samples_to_tc(
+                    int(region["start_sample"]),
+                    sample_rate,
+                    fps,
+                    start_time_reference_samples=time_reference_samples,
+                ),
+                end_tc=samples_to_tc(
+                    int(region["end_sample"]),
+                    sample_rate,
+                    fps,
+                    start_time_reference_samples=time_reference_samples,
+                ),
                 duration_seconds=(int(region["end_sample"]) - int(region["start_sample"])) / float(sample_rate),
                 detail=(
                     f"corr={peak.corr_abs:.2f} coh={peak.coherence_mean:.2f} "

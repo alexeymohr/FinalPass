@@ -9,14 +9,20 @@ from finalpass.cli import main
 from tests.audio_cases import SEED, SR, exact_sum_components, shift_with_zeros, write_audio
 
 
-def _write_exact_sum_case(root: Path, *, seconds: float = 10.0, base_seed: int = SEED) -> dict[str, Path]:
+def _write_exact_sum_case(
+    root: Path,
+    *,
+    seconds: float = 10.0,
+    base_seed: int = SEED,
+    time_reference_samples: int | None = None,
+) -> dict[str, Path]:
     data = exact_sum_components(seconds=seconds, base_seed=base_seed)
     root.mkdir(parents=True, exist_ok=True)
     return {
-        "pm": write_audio(root / "SHOW_S01E03_PM_STEREO.wav", data["pm"]),
-        "dx": write_audio(root / "SHOW_S01E03_DX_STEREO.wav", data["dx"]),
-        "mx": write_audio(root / "SHOW_S01E03_MX_STEREO.wav", data["mx"]),
-        "fx": write_audio(root / "SHOW_S01E03_FX_STEREO.wav", data["fx"]),
+        "pm": write_audio(root / "SHOW_S01E03_PM_STEREO.wav", data["pm"], time_reference_samples=time_reference_samples),
+        "dx": write_audio(root / "SHOW_S01E03_DX_STEREO.wav", data["dx"], time_reference_samples=time_reference_samples),
+        "mx": write_audio(root / "SHOW_S01E03_MX_STEREO.wav", data["mx"], time_reference_samples=time_reference_samples),
+        "fx": write_audio(root / "SHOW_S01E03_FX_STEREO.wav", data["fx"], time_reference_samples=time_reference_samples),
     }
 
 
@@ -71,6 +77,34 @@ def test_null_injected_gross_error_fails_with_flagged_region(tmp_path: Path) -> 
     first = payload["null_test"]["flags"][0]
     assert first["start_sample"] <= start
     assert first["end_sample"] >= end
+
+
+def test_null_flags_use_embedded_start_timecode(tmp_path: Path) -> None:
+    files = _write_exact_sum_case(
+        tmp_path / "case",
+        base_seed=SEED + 150,
+        time_reference_samples=168648480,
+    )
+    data = exact_sum_components(base_seed=SEED + 150)
+    start = int(round(5.0 * SR))
+    end = int(round(7.0 * SR))
+    data["pm"][start:end] = data["pm"][start:end] - data["fx"][start:end]
+    write_audio(files["pm"], data["pm"], time_reference_samples=168648480)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--json-only",
+    ])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    first = payload["null_test"]["flags"][0]
+    assert first["start_tc"].startswith("00:58:34:")
+    assert first["end_tc"].startswith("00:58:37:")
 
 
 def test_null_sample_rate_mismatch_exits_two(tmp_path: Path) -> None:

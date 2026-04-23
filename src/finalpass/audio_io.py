@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import struct
 
 import numpy as np
 import soundfile as sf
@@ -27,6 +28,11 @@ _SUBTYPE_BIT_DEPTH: dict[str, int] = {
 
 _ALLOWED_EXTENSIONS = {".wav", ".bwf"}
 _CHANNEL_CONFIG_FROM_COUNT: dict[int, str] = {1: "mono", 2: "stereo", 6: "5.1", 8: "7.1"}
+_RIFF_HEADERS = {b"RIFF", b"RF64"}
+_WAVE_HEADER = b"WAVE"
+_BEXT_CHUNK_ID = b"bext"
+_BEXT_TIME_REFERENCE_OFFSET = 338
+_BEXT_TIME_REFERENCE_BYTES = 8
 
 
 class AudioFile(BaseModel):
@@ -38,6 +44,7 @@ class AudioFile(BaseModel):
     bit_depth: int
     channel_count: int
     duration_seconds: float
+    time_reference_samples: int | None = None
 
     @property
     def sample_count(self) -> int:
@@ -53,6 +60,7 @@ class AudioHeader:
     subtype: str | None
     channel_count: int
     duration_seconds: float
+    time_reference_samples: int | None = None
 
 
 def channel_config_from_count(n_channels: int) -> str | None:
@@ -79,6 +87,7 @@ def probe_wav(path: Path) -> AudioHeader:
             duration = frames / float(sr) if sr > 0 else 0.0
     except RuntimeError as exc:
         raise AudioFormatError(f"Could not read {path}: {exc}") from exc
+    time_reference_samples = _read_bext_time_reference_samples(path)
     return AudioHeader(
         path=path.resolve(),
         sample_rate=sr,
@@ -87,6 +96,7 @@ def probe_wav(path: Path) -> AudioHeader:
         subtype=subtype,
         channel_count=channels,
         duration_seconds=duration,
+        time_reference_samples=time_reference_samples,
     )
 
 
@@ -109,4 +119,35 @@ def read_wav(path: Path) -> AudioFile:
         bit_depth=header.bit_depth or 0,
         channel_count=header.channel_count,
         duration_seconds=header.duration_seconds,
+        time_reference_samples=header.time_reference_samples,
     )
+
+
+def _read_bext_time_reference_samples(path: Path) -> int | None:
+    """Return the BWF bext time reference in samples, if present."""
+    try:
+        with Path(path).open("rb") as handle:
+            header = handle.read(12)
+            if len(header) < 12 or header[:4] not in _RIFF_HEADERS or header[8:12] != _WAVE_HEADER:
+                return None
+
+            while True:
+                chunk_header = handle.read(8)
+                if len(chunk_header) < 8:
+                    return None
+                chunk_id, size = struct.unpack("<4sI", chunk_header)
+                if chunk_id == _BEXT_CHUNK_ID:
+                    chunk_data = handle.read(size)
+                    if len(chunk_data) < _BEXT_TIME_REFERENCE_OFFSET + _BEXT_TIME_REFERENCE_BYTES:
+                        return None
+                    low, high = struct.unpack(
+                        "<II",
+                        chunk_data[
+                            _BEXT_TIME_REFERENCE_OFFSET :
+                            _BEXT_TIME_REFERENCE_OFFSET + _BEXT_TIME_REFERENCE_BYTES
+                        ],
+                    )
+                    return low + (high << 32)
+                handle.seek(size + (size % 2), 1)
+    except OSError:
+        return None

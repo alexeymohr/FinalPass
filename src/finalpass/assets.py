@@ -87,6 +87,7 @@ class AssetMember:
     basename: str
     sample_rate: int
     sample_count: int
+    time_reference_samples: int | None
     bit_depth: int | None
     subtype: str | None
     channel_count: int
@@ -123,6 +124,7 @@ class LogicalAsset:
     member_legs: list[str]
     sample_rate: int
     sample_count: int
+    time_reference_samples: int | None
     bit_depth: int | None
     errors: list[DiscoveryError] = field(default_factory=list)
 
@@ -132,6 +134,7 @@ class AudioAsset:
     samples: np.ndarray
     sample_rate: int
     sample_count: int
+    time_reference_samples: int | None
     channel_count: int
     channel_config_actual: str
     source_kind: str
@@ -346,6 +349,7 @@ def read_logical_asset(asset: LogicalAsset) -> AudioAsset:
             samples=audio.data,
             sample_rate=audio.sample_rate,
             sample_count=audio.sample_count,
+            time_reference_samples=audio.time_reference_samples,
             channel_count=audio.channel_count,
             channel_config_actual=asset.channel_config_actual,
             source_kind=asset.source_kind,
@@ -408,6 +412,7 @@ def read_logical_asset(asset: LogicalAsset) -> AudioAsset:
         samples=samples,
         sample_rate=asset.sample_rate,
         sample_count=asset.sample_count,
+        time_reference_samples=asset.time_reference_samples,
         channel_count=samples.shape[1],
         channel_config_actual=asset.channel_config_actual,
         source_kind=asset.source_kind,
@@ -437,6 +442,7 @@ def _probe_member(path: Path) -> AssetMember:
         basename=path.name,
         sample_rate=header.sample_rate,
         sample_count=header.sample_count,
+        time_reference_samples=header.time_reference_samples,
         bit_depth=header.bit_depth,
         subtype=header.subtype,
         channel_count=header.channel_count,
@@ -475,6 +481,7 @@ def _build_single_asset(member: AssetMember) -> tuple[LogicalAsset, None] | tupl
         member_legs=[],
         sample_rate=member.sample_rate,
         sample_count=member.sample_count,
+        time_reference_samples=member.time_reference_samples,
         bit_depth=member.bit_depth,
         errors=[],
     ), None
@@ -626,6 +633,7 @@ def _build_split_asset(
         member_legs=ordered_legs,
         sample_rate=ordered_members[0].sample_rate,
         sample_count=ordered_members[0].sample_count,
+        time_reference_samples=ordered_members[0].time_reference_samples,
         bit_depth=ordered_members[0].bit_depth,
         errors=[],
     ), None

@@ -54,6 +54,7 @@ Standalone input note:
 - `finalpass loudness`, `finalpass null`, and `finalpass me` accept either an interleaved WAV/BWF path or a seed path to one member of a canonical split-mono family in the same directory.
 - Supported split layouts are stereo `L/R`, 5.1 `L/R/C/LFE/Ls/Rs`, and 7.1 `L/R/C/LFE/Ls/Rs/Lss/Rss`.
 - `finalpass all` now does folder-level logical-asset discovery too. Interleaved files remain supported, but explicit split-mono families are assembled in memory, grouped by logical asset, and selected by actual layout for the chosen spec.
+- If an input WAV/BWF carries a BWF `bext` time reference, FinalPass anchors flagged-region timecode strings and exported AAF marker placement to that embedded start sample. The user still chooses the frame rate via `--fps` or the wizard; FinalPass does not currently infer FPS from file metadata.
 
 ## Examples / smoke flow
 

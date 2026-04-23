@@ -37,6 +37,7 @@ class MarkerCandidate:
     comment: str
     code: str
     metric: str
+    source_start_edit_unit: int
     start_sample: int
     end_sample: int
     start_tc: str
@@ -59,26 +60,29 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                     flags=file_report.flags,
                     sample_rate=file_report.sample_rate,
                     fps=report.fps,
+                    time_reference_samples=_time_reference_samples(file_report),
                     asset_label=logical_asset_display_name(file_report),
                 )
             )
     elif isinstance(report, NullReport):
         candidates.extend(
-            _candidates_from_flags(
-                flags=report.null_test.flags,
-                sample_rate=report.printmaster.sample_rate,
-                fps=report.fps,
+                _candidates_from_flags(
+                    flags=report.null_test.flags,
+                    sample_rate=report.printmaster.sample_rate,
+                    fps=report.fps,
+                    time_reference_samples=_time_reference_samples(report.printmaster),
+                )
             )
-        )
 
     elif isinstance(report, MEReport):
         candidates.extend(
-            _candidates_from_flags(
-                flags=report.me_check.flags,
-                sample_rate=report.me_file.sample_rate,
-                fps=report.fps,
+                _candidates_from_flags(
+                    flags=report.me_check.flags,
+                    sample_rate=report.me_file.sample_rate,
+                    fps=report.fps,
+                    time_reference_samples=_time_reference_samples(report.me_file),
+                )
             )
-        )
     else:
         for group in report.groups:
             sample_rate = _group_sample_rate(group)
@@ -90,6 +94,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                         flags=file_report.flags,
                         sample_rate=file_report.sample_rate,
                         fps=report.fps,
+                        time_reference_samples=_time_reference_samples(file_report),
                         group_id=group.group_id,
                         asset_label=logical_asset_display_name(file_report),
                     )
@@ -100,6 +105,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                         flags=group.null_test.flags,
                         sample_rate=sample_rate,
                         fps=report.fps,
+                        time_reference_samples=_time_reference_samples(group.null_test),
                         group_id=group.group_id,
                     )
                 )
@@ -109,6 +115,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                         flags=group.me_check.flags,
                         sample_rate=sample_rate,
                         fps=report.fps,
+                        time_reference_samples=_time_reference_samples(group.me_check),
                         group_id=group.group_id,
                     )
                 )
@@ -144,7 +151,8 @@ def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: flo
 
     rate_info = frame_rate_info(fps)
     edit_rate = rate_info.edit_rate
-    timeline_length = _timeline_length_edit_units(candidates)
+    timeline_start = _timeline_start_edit_units(candidates)
+    timeline_length = _timeline_length_edit_units(candidates, timeline_start=timeline_start)
     try:
         with aaf2.open(str(path), "w") as handle:
             composition = handle.create.CompositionMob(EXPORT_TRACK_NAME)
@@ -160,7 +168,7 @@ def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: flo
             timecode_slot.name = "Timecode"
             timecode_slot.origin = 0
             timecode_segment = handle.create.Timecode(length=timeline_length)
-            timecode_segment.start = 0
+            timecode_segment.start = timeline_start
             timecode_segment.fps = rate_info.nominal_fps
             timecode_segment.drop = rate_info.drop_frame
             timecode_slot.segment = timecode_segment
@@ -195,7 +203,7 @@ def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: flo
             for candidate in candidates:
                 marker = _create_comment_marker(
                     handle,
-                    candidate.start_edit_unit,
+                    candidate.start_edit_unit - timeline_start,
                     max(0, candidate.length_edit_units),
                     candidate.name,
                     candidate.comment,
@@ -211,13 +219,30 @@ def _candidates_from_flags(
     flags: list[FlaggedRegion],
     sample_rate: int,
     fps: float,
+    time_reference_samples: int | None = None,
     group_id: str | None = None,
     asset_label: str | None = None,
 ) -> list[MarkerCandidate]:
     out: list[MarkerCandidate] = []
+    source_start_edit_unit = sample_to_edit_units(
+        0,
+        sample_rate,
+        fps,
+        start_time_reference_samples=time_reference_samples,
+    )
     for flag in flags:
-        start_edit_unit = sample_to_edit_units(flag.start_sample, sample_rate, fps)
-        end_edit_unit = sample_to_edit_units(flag.end_sample, sample_rate, fps)
+        start_edit_unit = sample_to_edit_units(
+            flag.start_sample,
+            sample_rate,
+            fps,
+            start_time_reference_samples=time_reference_samples,
+        )
+        end_edit_unit = sample_to_edit_units(
+            flag.end_sample,
+            sample_rate,
+            fps,
+            start_time_reference_samples=time_reference_samples,
+        )
         out.append(
             MarkerCandidate(
                 name=_marker_name(flag.code, group_id=group_id, asset_label=asset_label),
@@ -228,6 +253,7 @@ def _candidates_from_flags(
                 ),
                 code=flag.code,
                 metric=flag.metric,
+                source_start_edit_unit=source_start_edit_unit,
                 start_sample=flag.start_sample,
                 end_sample=flag.end_sample,
                 start_tc=flag.start_tc,
@@ -286,13 +312,19 @@ def _short_failure_label(candidate: MarkerCandidate) -> str:
     return candidate.metric.replace("_", " ").lower()
 
 
-def _timeline_length_edit_units(candidates: list[MarkerCandidate]) -> int:
+def _timeline_start_edit_units(candidates: list[MarkerCandidate]) -> int:
+    if not candidates:
+        return 0
+    return min(candidate.source_start_edit_unit for candidate in candidates)
+
+
+def _timeline_length_edit_units(candidates: list[MarkerCandidate], *, timeline_start: int) -> int:
     if not candidates:
         return 1
     return max(
         1,
         max(
-            candidate.start_edit_unit + max(1, candidate.length_edit_units)
+            (candidate.start_edit_unit - timeline_start) + max(1, candidate.length_edit_units)
             for candidate in candidates
         ),
     )
@@ -385,3 +417,7 @@ def _create_string_tagged_value(handle, name: str, value: str):
     tag.name = name
     tag.encode_value(value, handle.dictionary.lookup_typedef("aafString"))
     return tag
+
+
+def _time_reference_samples(item) -> int | None:
+    return getattr(item, "_time_reference_samples", None)

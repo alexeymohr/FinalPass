@@ -97,23 +97,26 @@ def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | Non
         m = measure(audio)
         cs = check(m, spec, role="primary")
         flags = _timed_loudness_flags(audio=audio, checks=cs, fps=fps)
-        file_reports.append(StandaloneFileReport(
-            path=str(resolved.logical_asset.canonical_path),
-            role="primary",
-            sample_rate=audio.sample_rate,
-            bit_depth=audio.bit_depth,
-            channel_count=audio.channel_count,
-            duration_seconds=round(audio.duration_seconds, 3),
-            measurements=m.as_measurements(),
-            checks=cs,
-            errors=m.errors,
-            channel_config_hint=resolved.logical_asset.channel_config_hint,
-            channel_config_actual=resolved.logical_asset.channel_config_actual,
-            source_kind=resolved.logical_asset.source_kind,
-            source_paths=[str(path) for path in resolved.logical_asset.source_paths],
-            member_legs=list(resolved.logical_asset.member_legs),
-            presentation_label=resolved.logical_asset.presentation_label,
-            flags=flags,
+        file_reports.append(_attach_time_reference(
+            StandaloneFileReport(
+                path=str(resolved.logical_asset.canonical_path),
+                role="primary",
+                sample_rate=audio.sample_rate,
+                bit_depth=audio.bit_depth,
+                channel_count=audio.channel_count,
+                duration_seconds=round(audio.duration_seconds, 3),
+                measurements=m.as_measurements(),
+                checks=cs,
+                errors=m.errors,
+                channel_config_hint=resolved.logical_asset.channel_config_hint,
+                channel_config_actual=resolved.logical_asset.channel_config_actual,
+                source_kind=resolved.logical_asset.source_kind,
+                source_paths=[str(path) for path in resolved.logical_asset.source_paths],
+                member_legs=list(resolved.logical_asset.member_legs),
+                presentation_label=resolved.logical_asset.presentation_label,
+                flags=flags,
+            ),
+            audio.time_reference_samples,
         ))
 
     if dx_input is not None:
@@ -121,23 +124,26 @@ def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | Non
         m = measure(dx_audio)
         cs = check(m, spec, role="dx")
         flags = _timed_loudness_flags(audio=dx_audio, checks=cs, fps=fps)
-        file_reports.append(StandaloneFileReport(
-            path=str(dx_input.logical_asset.canonical_path),
-            role="dx",
-            sample_rate=dx_audio.sample_rate,
-            bit_depth=dx_audio.bit_depth,
-            channel_count=dx_audio.channel_count,
-            duration_seconds=round(dx_audio.duration_seconds, 3),
-            measurements=m.as_measurements(),
-            checks=cs,
-            errors=m.errors,
-            channel_config_hint=dx_input.logical_asset.channel_config_hint,
-            channel_config_actual=dx_input.logical_asset.channel_config_actual,
-            source_kind=dx_input.logical_asset.source_kind,
-            source_paths=[str(path) for path in dx_input.logical_asset.source_paths],
-            member_legs=list(dx_input.logical_asset.member_legs),
-            presentation_label=dx_input.logical_asset.presentation_label,
-            flags=flags,
+        file_reports.append(_attach_time_reference(
+            StandaloneFileReport(
+                path=str(dx_input.logical_asset.canonical_path),
+                role="dx",
+                sample_rate=dx_audio.sample_rate,
+                bit_depth=dx_audio.bit_depth,
+                channel_count=dx_audio.channel_count,
+                duration_seconds=round(dx_audio.duration_seconds, 3),
+                measurements=m.as_measurements(),
+                checks=cs,
+                errors=m.errors,
+                channel_config_hint=dx_input.logical_asset.channel_config_hint,
+                channel_config_actual=dx_input.logical_asset.channel_config_actual,
+                source_kind=dx_input.logical_asset.source_kind,
+                source_paths=[str(path) for path in dx_input.logical_asset.source_paths],
+                member_legs=list(dx_input.logical_asset.member_legs),
+                presentation_label=dx_input.logical_asset.presentation_label,
+                flags=flags,
+            ),
+            dx_audio.time_reference_samples,
         ))
 
     all_checks = [c for fr in file_reports for c in fr.checks]
@@ -182,21 +188,25 @@ def run_null(
         pm_audio,
         stem_audios,
         fps=fps,
+        time_reference_samples=pm_audio.time_reference_samples,
         window_ms=window_ms,
         hop_ms=hop_ms,
         threshold_dbfs=threshold_dbfs,
     )
     passed = len(analysis.flags) == 0
-    null_test = NullTestResult(
-        **{"pass": passed},
-        skipped=False,
-        reason=None,
-        window_ms=window_ms,
-        hop_ms=hop_ms,
-        threshold_dbfs=threshold_dbfs,
-        summary=analysis.summary,
-        flags=analysis.flags,
-        errors=[],
+    null_test = _attach_time_reference(
+        NullTestResult(
+            **{"pass": passed},
+            skipped=False,
+            reason=None,
+            window_ms=window_ms,
+            hop_ms=hop_ms,
+            threshold_dbfs=threshold_dbfs,
+            summary=analysis.summary,
+            flags=analysis.flags,
+            errors=[],
+        ),
+        pm_audio.time_reference_samples,
     )
     now, run_id = _run_timestamp()
     return NullReport(
@@ -241,6 +251,7 @@ def run_me(
         me_audio,
         dx_audio,
         fps=fps,
+        time_reference_samples=me_audio.time_reference_samples,
         window_ms=window_ms,
         hop_ms=hop_ms,
         band_low_hz=band_low_hz,
@@ -251,22 +262,25 @@ def run_me(
         me_floor_dbfs=me_floor_dbfs,
     )
     passed = len(analysis.flags) == 0
-    me_check = MECheckResult(
-        **{"pass": passed},
-        skipped=False,
-        reason=None,
-        analysis_signal=ANALYSIS_SIGNAL_NAME,
-        window_ms=window_ms,
-        hop_ms=hop_ms,
-        band_low_hz=band_low_hz,
-        band_high_hz=band_high_hz,
-        corr_threshold=corr_threshold,
-        coherence_threshold=coherence_threshold,
-        dx_gate_dbfs=dx_gate_dbfs,
-        me_floor_dbfs=me_floor_dbfs,
-        summary=analysis.summary,
-        flags=analysis.flags,
-        errors=[],
+    me_check = _attach_time_reference(
+        MECheckResult(
+            **{"pass": passed},
+            skipped=False,
+            reason=None,
+            analysis_signal=ANALYSIS_SIGNAL_NAME,
+            window_ms=window_ms,
+            hop_ms=hop_ms,
+            band_low_hz=band_low_hz,
+            band_high_hz=band_high_hz,
+            corr_threshold=corr_threshold,
+            coherence_threshold=coherence_threshold,
+            dx_gate_dbfs=dx_gate_dbfs,
+            me_floor_dbfs=me_floor_dbfs,
+            summary=analysis.summary,
+            flags=analysis.flags,
+            errors=[],
+        ),
+        me_audio.time_reference_samples,
     )
     now, run_id = _run_timestamp()
     return MEReport(
@@ -807,23 +821,26 @@ def _measure_asset_file(
     cs = check(m, spec, role=check_role)
     flags = _timed_loudness_flags(audio=audio, checks=cs, fps=fps)
 
-    return FileReport(
-        path=str(audio.path),
-        role=role,
-        sample_rate=audio.sample_rate,
-        bit_depth=audio.bit_depth,
-        channel_count=audio.channel_count,
-        duration_seconds=round(audio.duration_seconds, 3),
-        measurements=m.as_measurements(),
-        checks=cs,
-        errors=m.errors,
-        channel_config_hint=asset.channel_config_hint,
-        channel_config_actual=asset.logical_asset.channel_config_actual,
-        source_kind=asset.logical_asset.source_kind,
-        source_paths=[str(path) for path in asset.logical_asset.source_paths],
-        member_legs=list(asset.logical_asset.member_legs),
-        presentation_label=asset.logical_asset.presentation_label,
-        flags=flags,
+    return _attach_time_reference(
+        FileReport(
+            path=str(audio.path),
+            role=role,
+            sample_rate=audio.sample_rate,
+            bit_depth=audio.bit_depth,
+            channel_count=audio.channel_count,
+            duration_seconds=round(audio.duration_seconds, 3),
+            measurements=m.as_measurements(),
+            checks=cs,
+            errors=m.errors,
+            channel_config_hint=asset.channel_config_hint,
+            channel_config_actual=asset.logical_asset.channel_config_actual,
+            source_kind=asset.logical_asset.source_kind,
+            source_paths=[str(path) for path in asset.logical_asset.source_paths],
+            member_legs=list(asset.logical_asset.member_legs),
+            presentation_label=asset.logical_asset.presentation_label,
+            flags=flags,
+        ),
+        audio.time_reference_samples,
     )
 
 
@@ -891,6 +908,7 @@ def _run_group_null_test(
             pm_audio,
             stem_audios,
             fps=fps,
+            time_reference_samples=pm_audio.time_reference_samples,
             window_ms=window_ms,
             hop_ms=hop_ms,
             threshold_dbfs=threshold_dbfs,
@@ -911,18 +929,21 @@ def _run_group_null_test(
         )
 
     passed = len(analysis.flags) == 0
-    return AutoNullTestResult(
-        **{"pass": passed},
-        skipped=False,
-        reason=None,
-        stem_strategy=strategy,
-        selected_roles=selected_roles,
-        window_ms=window_ms,
-        hop_ms=hop_ms,
-        threshold_dbfs=threshold_dbfs,
-        summary=analysis.summary,
-        flags=analysis.flags,
-        errors=[],
+    return _attach_time_reference(
+        AutoNullTestResult(
+            **{"pass": passed},
+            skipped=False,
+            reason=None,
+            stem_strategy=strategy,
+            selected_roles=selected_roles,
+            window_ms=window_ms,
+            hop_ms=hop_ms,
+            threshold_dbfs=threshold_dbfs,
+            summary=analysis.summary,
+            flags=analysis.flags,
+            errors=[],
+        ),
+        pm_audio.time_reference_samples,
     )
 
 
@@ -971,6 +992,7 @@ def _run_group_me_check(
             me_audio,
             dx_audio,
             fps=fps,
+            time_reference_samples=me_audio.time_reference_samples,
             window_ms=window_ms,
             hop_ms=hop_ms,
             band_low_hz=band_low_hz,
@@ -1000,22 +1022,25 @@ def _run_group_me_check(
         )
 
     passed = len(analysis.flags) == 0
-    return MECheckResult(
-        **{"pass": passed},
-        skipped=False,
-        reason=None,
-        analysis_signal=ANALYSIS_SIGNAL_NAME,
-        window_ms=window_ms,
-        hop_ms=hop_ms,
-        band_low_hz=band_low_hz,
-        band_high_hz=band_high_hz,
-        corr_threshold=corr_threshold,
-        coherence_threshold=coherence_threshold,
-        dx_gate_dbfs=dx_gate_dbfs,
-        me_floor_dbfs=me_floor_dbfs,
-        summary=analysis.summary,
-        flags=analysis.flags,
-        errors=[],
+    return _attach_time_reference(
+        MECheckResult(
+            **{"pass": passed},
+            skipped=False,
+            reason=None,
+            analysis_signal=ANALYSIS_SIGNAL_NAME,
+            window_ms=window_ms,
+            hop_ms=hop_ms,
+            band_low_hz=band_low_hz,
+            band_high_hz=band_high_hz,
+            corr_threshold=corr_threshold,
+            coherence_threshold=coherence_threshold,
+            dx_gate_dbfs=dx_gate_dbfs,
+            me_floor_dbfs=me_floor_dbfs,
+            summary=analysis.summary,
+            flags=analysis.flags,
+            errors=[],
+        ),
+        me_audio.time_reference_samples,
     )
 
 
@@ -1146,6 +1171,11 @@ def _unclassified_entry(asset: ClassifiedLogicalAsset, *, reason: str) -> Unclas
         presentation_label=logical_asset.presentation_label,
         reason=reason,
     )
+
+
+def _attach_time_reference(item, time_reference_samples: int | None):
+    item._time_reference_samples = time_reference_samples
+    return item
 
 
 def _discovery_issue(error) -> DiscoveryIssue:

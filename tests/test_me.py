@@ -17,6 +17,7 @@ def _write_me_case(
     bleed_region: tuple[float, float] | None = None,
     bleed_gain: float = 0.08,
     dx_quiet_region: tuple[float, float] | None = None,
+    time_reference_samples: int | None = None,
 ) -> dict[str, Path]:
     data = me_check_components(
         seconds=seconds,
@@ -27,8 +28,8 @@ def _write_me_case(
     )
     root.mkdir(parents=True, exist_ok=True)
     return {
-        "dx": write_audio(root / "SHOW_S01E03_DX_STEREO.wav", data["dx"]),
-        "me": write_audio(root / "SHOW_S01E03_ME_STEREO.wav", data["me"]),
+        "dx": write_audio(root / "SHOW_S01E03_DX_STEREO.wav", data["dx"], time_reference_samples=time_reference_samples),
+        "me": write_audio(root / "SHOW_S01E03_ME_STEREO.wav", data["me"], time_reference_samples=time_reference_samples),
     }
 
 
@@ -75,6 +76,28 @@ def test_me_injected_bleed_fails_with_flagged_region(tmp_path: Path) -> None:
     assert first["metric"] == "dialog_bleed_score"
     assert first["start_sample"] <= int(round(5.0 * SR))
     assert first["end_sample"] >= int(round(7.0 * SR))
+
+
+def test_me_flags_use_embedded_start_timecode(tmp_path: Path) -> None:
+    files = _write_me_case(
+        tmp_path / "case",
+        base_seed=SEED + 110,
+        bleed_region=(5.0, 7.0),
+        bleed_gain=0.08,
+        time_reference_samples=168648480,
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "me",
+        str(files["me"]),
+        "--dx", str(files["dx"]),
+        "--json-only",
+    ])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    first = payload["me_check"]["flags"][0]
+    assert first["start_tc"].startswith("00:58:35:")
+    assert first["end_tc"].startswith("00:58:37:")
 
 
 def test_me_sample_rate_mismatch_exits_two(tmp_path: Path) -> None:

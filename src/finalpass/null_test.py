@@ -50,7 +50,7 @@ class _WindowResult:
 
 
 def describe_audio(audio: AudioFile) -> NullInputFile:
-    return NullInputFile(
+    item = NullInputFile(
         path=str(audio.path),
         sample_rate=audio.sample_rate,
         bit_depth=audio.bit_depth,
@@ -58,6 +58,8 @@ def describe_audio(audio: AudioFile) -> NullInputFile:
         channel_config_actual=channel_config_from_count(audio.channel_count),
         duration_seconds=round(audio.duration_seconds, 3),
     )
+    item._time_reference_samples = audio.time_reference_samples
+    return item
 
 
 def analyze_null(
@@ -65,6 +67,7 @@ def analyze_null(
     stems: list[AudioFile],
     *,
     fps: float,
+    time_reference_samples: int | None = None,
     window_ms: float = DEFAULT_NULL_WINDOW_MS,
     hop_ms: float = DEFAULT_NULL_HOP_MS,
     threshold_dbfs: float = DEFAULT_NULL_THRESHOLD_DBFS,
@@ -86,6 +89,7 @@ def analyze_null(
         [w for w in window_results if w.residual_rms_dbfs > threshold_dbfs],
         sample_rate=printmaster.sample_rate,
         fps=fps,
+        time_reference_samples=time_reference_samples,
         threshold_dbfs=threshold_dbfs,
     )
     dbfs_values = [w.residual_rms_dbfs for w in window_results]
@@ -221,6 +225,7 @@ def _merge_flagged_windows(
     *,
     sample_rate: int,
     fps: float,
+    time_reference_samples: int | None,
     threshold_dbfs: float,
 ) -> list[FlaggedRegion]:
     if not windows:
@@ -253,8 +258,18 @@ def _merge_flagged_windows(
             threshold=threshold_dbfs,
             start_sample=int(region["start_sample"]),
             end_sample=int(region["end_sample"]),
-            start_tc=samples_to_tc(int(region["start_sample"]), sample_rate, fps),
-            end_tc=samples_to_tc(int(region["end_sample"]), sample_rate, fps),
+            start_tc=samples_to_tc(
+                int(region["start_sample"]),
+                sample_rate,
+                fps,
+                start_time_reference_samples=time_reference_samples,
+            ),
+            end_tc=samples_to_tc(
+                int(region["end_sample"]),
+                sample_rate,
+                fps,
+                start_time_reference_samples=time_reference_samples,
+            ),
             duration_seconds=(int(region["end_sample"]) - int(region["start_sample"])) / float(sample_rate),
             detail=_NULL_FLAG_DETAIL,
         )
