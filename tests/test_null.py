@@ -6,6 +6,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from finalpass.cli import main
+from finalpass.timecode import tc_to_sample_start
 from tests.audio_cases import SEED, SR, exact_sum_components, shift_with_zeros, write_audio
 
 
@@ -80,16 +81,17 @@ def test_null_injected_gross_error_fails_with_flagged_region(tmp_path: Path) -> 
 
 
 def test_null_flags_use_embedded_start_timecode(tmp_path: Path) -> None:
+    time_reference_samples = tc_to_sample_start("01:00:00:00", SR, 23.976)
     files = _write_exact_sum_case(
         tmp_path / "case",
         base_seed=SEED + 150,
-        time_reference_samples=168648480,
+        time_reference_samples=time_reference_samples,
     )
     data = exact_sum_components(base_seed=SEED + 150)
     start = int(round(5.0 * SR))
     end = int(round(7.0 * SR))
     data["pm"][start:end] = data["pm"][start:end] - data["fx"][start:end]
-    write_audio(files["pm"], data["pm"], time_reference_samples=168648480)
+    write_audio(files["pm"], data["pm"], time_reference_samples=time_reference_samples)
 
     runner = CliRunner()
     result = runner.invoke(main, [
@@ -103,8 +105,68 @@ def test_null_flags_use_embedded_start_timecode(tmp_path: Path) -> None:
     assert result.exit_code == 1, result.output
     payload = json.loads(result.output)
     first = payload["null_test"]["flags"][0]
-    assert first["start_tc"].startswith("00:58:34:")
-    assert first["end_tc"].startswith("00:58:37:")
+    assert first["start_tc"].startswith("01:00:04:")
+    assert first["end_tc"].startswith("01:00:07:")
+
+
+def test_null_ignores_defects_before_one_hour_when_embedded_start_is_known(tmp_path: Path) -> None:
+    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, 23.976)
+    files = _write_exact_sum_case(
+        tmp_path / "case",
+        base_seed=SEED + 160,
+        time_reference_samples=time_reference_samples,
+    )
+    data = exact_sum_components(base_seed=SEED + 160)
+    start = int(round(2.0 * SR))
+    end = int(round(4.0 * SR))
+    data["pm"][start:end] = data["pm"][start:end] - data["fx"][start:end]
+    write_audio(files["pm"], data["pm"], time_reference_samples=time_reference_samples)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--json-only",
+    ])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["null_test"]["pass"] is True
+    assert payload["null_test"]["flags"] == []
+    assert payload["null_test"]["summary"]["windows_total"] == 40
+    assert payload["null_test"]["summary"]["windows_flagged"] == 0
+
+
+def test_null_still_flags_defects_after_one_hour_when_embedded_start_is_known(tmp_path: Path) -> None:
+    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, 23.976)
+    files = _write_exact_sum_case(
+        tmp_path / "case",
+        base_seed=SEED + 170,
+        time_reference_samples=time_reference_samples,
+    )
+    data = exact_sum_components(base_seed=SEED + 170)
+    start = int(round(6.0 * SR))
+    end = int(round(8.0 * SR))
+    data["pm"][start:end] = data["pm"][start:end] - data["fx"][start:end]
+    write_audio(files["pm"], data["pm"], time_reference_samples=time_reference_samples)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--json-only",
+    ])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["null_test"]["pass"] is False
+    assert payload["null_test"]["summary"]["windows_total"] == 40
+    assert payload["null_test"]["flags"]
+    assert payload["null_test"]["flags"][0]["start_tc"] >= "01:00:00:00"
 
 
 def test_null_sample_rate_mismatch_exits_two(tmp_path: Path) -> None:

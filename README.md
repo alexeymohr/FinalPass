@@ -55,6 +55,7 @@ Standalone input note:
 - Supported split layouts are stereo `L/R`, 5.1 `L/R/C/LFE/Ls/Rs`, and 7.1 `L/R/C/LFE/Ls/Rs/Lss/Rss`.
 - `finalpass all` now does folder-level logical-asset discovery too. Interleaved files remain supported, but explicit split-mono families are assembled in memory, grouped by logical asset, and selected by actual layout for the chosen spec.
 - If an input WAV/BWF carries a BWF `bext` time reference, FinalPass anchors flagged-region timecode strings and exported AAF marker placement to that embedded start sample. The user still chooses the frame rate via `--fps` or the wizard; FinalPass does not currently infer FPS from file metadata.
+- For null only, when an input printmaster carries a BWF `bext` time reference, FinalPass ignores null-analysis material before absolute timecode `01:00:00:00`. If no embedded start sample is present, null analysis still runs across the full file.
 
 ## Examples / smoke flow
 

@@ -356,7 +356,9 @@ def test_all_run_bext_start_shifts_combined_aaf_timeline_and_marker_times(tmp_pa
     assert result.exit_code == 1, result.output
     parsed = _read_marker_aaf(out_dir / "markers.aaf")
     assert parsed["timecode_start"] == sample_to_edit_units(0, SR, 23.976, start_time_reference_samples=168648480)
-    assert parsed["markers"][0]["time"].startswith("00:58:34:")
+    assert parsed["markers"][0]["time"].startswith("00:58:35:")
+    assert not any("[NULL]" in marker["title"] for marker in parsed["markers"])
+    assert any("[ME]" in marker["title"] for marker in parsed["markers"])
 
 
 def test_clean_all_run_writes_no_aaf(tmp_path: Path) -> None:

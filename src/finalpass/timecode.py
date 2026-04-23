@@ -76,6 +76,28 @@ def sample_to_edit_units(
     return _round_fraction(value)
 
 
+def tc_to_frames(timecode: str, fps: float) -> int:
+    """Convert a non-drop ``HH:MM:SS:FF`` timecode string to edit units."""
+    info = frame_rate_info(fps)
+    hh, mm, ss, ff = _parse_timecode(timecode)
+    if ff >= info.nominal_fps:
+        raise ValueError(f"timecode frame field {ff} is invalid for fps={fps}")
+    return ((hh * 60 + mm) * 60 + ss) * info.nominal_fps + ff
+
+
+def tc_to_sample_start(timecode: str, sample_rate: int, fps: float) -> int:
+    """Return the first sample at or after the given non-drop timecode."""
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
+    total_frames = tc_to_frames(timecode, fps)
+    info = frame_rate_info(fps)
+    value = Fraction(
+        total_frames * sample_rate * info.edit_rate.denominator,
+        info.edit_rate.numerator,
+    )
+    return _ceil_fraction(value)
+
+
 def samples_to_tc(
     sample_index: int,
     sample_rate: int,
@@ -107,6 +129,29 @@ def frames_to_tc(total_frames: int, fps: float) -> str:
     ss = rem // frames_per_second
     ff = rem - ss * frames_per_second
     return f"{hh:02d}:{mm:02d}:{ss:02d}:{ff:02d}"
+
+
+def _parse_timecode(timecode: str) -> tuple[int, int, int, int]:
+    parts = timecode.split(":")
+    if len(parts) != 4:
+        raise ValueError(f"invalid timecode {timecode!r}; expected HH:MM:SS:FF")
+    try:
+        hh, mm, ss, ff = (int(part) for part in parts)
+    except ValueError as exc:
+        raise ValueError(f"invalid timecode {timecode!r}; expected numeric HH:MM:SS:FF") from exc
+    if min(hh, mm, ss, ff) < 0:
+        raise ValueError(f"invalid timecode {timecode!r}; fields must be non-negative")
+    if mm >= 60 or ss >= 60:
+        raise ValueError(f"invalid timecode {timecode!r}; minutes and seconds must be < 60")
+    return hh, mm, ss, ff
+
+
+def _ceil_fraction(value: Fraction) -> int:
+    if value.denominator == 1:
+        return value.numerator
+    if value >= 0:
+        return (value.numerator + value.denominator - 1) // value.denominator
+    return value.numerator // value.denominator
 
 
 def _round_fraction(value: Fraction) -> int:

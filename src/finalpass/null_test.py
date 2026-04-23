@@ -23,7 +23,7 @@ from .errors import (
     UnsupportedChannelConfigError,
 )
 from .models import FlaggedRegion, NullInputFile, NullSummary
-from .timecode import samples_to_tc
+from .timecode import samples_to_tc, tc_to_sample_start
 
 DEFAULT_NULL_WINDOW_MS = 1000.0
 DEFAULT_NULL_HOP_MS = 100.0
@@ -31,6 +31,7 @@ DEFAULT_NULL_THRESHOLD_DBFS = -40.0
 NULL_DBFS_FLOOR = -300.0
 _NULL_LINEAR_FLOOR = 10 ** (NULL_DBFS_FLOOR / 20.0)
 _NULL_FLAG_DETAIL = "Residual exceeded threshold after summing stems against printmaster."
+_NULL_ANALYSIS_START_TC = "01:00:00:00"
 _ALIGNMENT_MAX_LAG_SECONDS = 0.25
 _ALIGNMENT_TARGET_POINTS = 12000
 _ALIGNMENT_RELATIVE_MARGIN = 1.01
@@ -79,11 +80,18 @@ def analyze_null(
     _detect_alignment_error(printmaster.data, [stem.data for stem in stems], stem_sum, printmaster.sample_rate)
 
     residual = printmaster.data - stem_sum
+    analysis_start_sample = _analysis_start_offset(
+        sample_rate=printmaster.sample_rate,
+        fps=fps,
+        time_reference_samples=time_reference_samples,
+        sample_count=int(residual.shape[0]),
+    )
     window_results = _window_residual_rms(
-        residual,
+        residual[analysis_start_sample:, :],
         sample_rate=printmaster.sample_rate,
         window_ms=window_ms,
         hop_ms=hop_ms,
+        start_sample_offset=analysis_start_sample,
     )
     flags = _merge_flagged_windows(
         [w for w in window_results if w.residual_rms_dbfs > threshold_dbfs],
@@ -92,14 +100,7 @@ def analyze_null(
         time_reference_samples=time_reference_samples,
         threshold_dbfs=threshold_dbfs,
     )
-    dbfs_values = [w.residual_rms_dbfs for w in window_results]
-    summary = NullSummary(
-        windows_total=len(window_results),
-        windows_flagged=sum(1 for w in window_results if w.residual_rms_dbfs > threshold_dbfs),
-        flagged_regions=len(flags),
-        max_residual_rms_dbfs=max(dbfs_values),
-        mean_residual_rms_dbfs=float(np.mean(dbfs_values)),
-    )
+    summary = _summarize_windows(window_results, threshold_dbfs=threshold_dbfs, flagged_regions=len(flags))
     return NullAnalysis(summary=summary, flags=flags)
 
 
@@ -198,8 +199,11 @@ def _window_residual_rms(
     sample_rate: int,
     window_ms: float,
     hop_ms: float,
+    start_sample_offset: int = 0,
 ) -> list[_WindowResult]:
     n_samples = int(residual.shape[0])
+    if n_samples <= 0:
+        return []
     window_samples = max(1, int(round(window_ms * sample_rate / 1000.0)))
     hop_samples = max(1, int(round(hop_ms * sample_rate / 1000.0)))
     windows: list[tuple[int, int]]
@@ -216,8 +220,50 @@ def _window_residual_rms(
         block = residual[start:end, :]
         rms = float(np.sqrt(np.mean(block ** 2))) if block.size else 0.0
         dbfs = 20.0 * np.log10(max(rms, _NULL_LINEAR_FLOOR))
-        out.append(_WindowResult(start_sample=start, end_sample=end, residual_rms_dbfs=float(dbfs)))
+        out.append(_WindowResult(
+            start_sample=start + start_sample_offset,
+            end_sample=end + start_sample_offset,
+            residual_rms_dbfs=float(dbfs),
+        ))
     return out
+
+
+def _analysis_start_offset(
+    *,
+    sample_rate: int,
+    fps: float,
+    time_reference_samples: int | None,
+    sample_count: int,
+) -> int:
+    if time_reference_samples is None:
+        return 0
+    minimum_time_reference_samples = tc_to_sample_start(_NULL_ANALYSIS_START_TC, sample_rate, fps)
+    return min(sample_count, max(0, minimum_time_reference_samples - time_reference_samples))
+
+
+def _summarize_windows(
+    window_results: list[_WindowResult],
+    *,
+    threshold_dbfs: float,
+    flagged_regions: int,
+) -> NullSummary:
+    if not window_results:
+        return NullSummary(
+            windows_total=0,
+            windows_flagged=0,
+            flagged_regions=flagged_regions,
+            max_residual_rms_dbfs=NULL_DBFS_FLOOR,
+            mean_residual_rms_dbfs=NULL_DBFS_FLOOR,
+        )
+
+    dbfs_values = [w.residual_rms_dbfs for w in window_results]
+    return NullSummary(
+        windows_total=len(window_results),
+        windows_flagged=sum(1 for w in window_results if w.residual_rms_dbfs > threshold_dbfs),
+        flagged_regions=flagged_regions,
+        max_residual_rms_dbfs=max(dbfs_values),
+        mean_residual_rms_dbfs=float(np.mean(dbfs_values)),
+    )
 
 
 def _merge_flagged_windows(
