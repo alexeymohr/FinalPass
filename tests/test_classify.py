@@ -121,6 +121,15 @@ def test_ambiguous_filename_raises(tmp_path: Path, default_cfg) -> None:
     assert "mx" in str(exc.value)
 
 
+def test_compound_role_with_space_boundary_is_ambiguous(tmp_path: Path, default_cfg) -> None:
+    path = tmp_path / "SHOW_S01E03_MX-FX LtRt.L.wav"
+    path.touch()
+    with pytest.raises(AmbiguousClassificationError) as exc:
+        classify_file(path, default_cfg)
+    assert "mx" in str(exc.value)
+    assert "fx" in str(exc.value)
+
+
 # ---------------------------------------------------------------------------
 # Channel-config hint
 

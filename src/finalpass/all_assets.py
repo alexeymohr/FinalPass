@@ -9,12 +9,18 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 from .assets import DiscoveryError, LogicalAsset, discover_logical_assets_in_folder, read_logical_asset
 from .audio_io import AudioFile
 from .classify import ClassifiedFile, ClassifierConfig, classify_file
 from .errors import AmbiguousClassificationError
 from .models import FileRole
+
+_COMPOUND_ROLE_PATTERN = re.compile(
+    r"(?i)(PM|PRINTMASTER|MIX|FINAL|COMP|DX|DIA|DIALOG|DIALOGUE|MX|MUS|MUSIC|FX|SFX|EFFECTS|ME|M_AND_E|MANDE|OPT|OPTIONAL|NARR|NARRATION)\s*-\s*"
+    r"(PM|PRINTMASTER|MIX|FINAL|COMP|DX|DIA|DIALOG|DIALOGUE|MX|MUS|MUSIC|FX|SFX|EFFECTS|ME|M_AND_E|MANDE|OPT|OPTIONAL|NARR|NARRATION)"
+)
 
 
 @dataclass(frozen=True)
@@ -52,7 +58,17 @@ def discover_folder_assets(folder: Path, cfg: ClassifierConfig) -> AssetFolderSc
 
 
 def classify_logical_asset(logical_asset: LogicalAsset, cfg: ClassifierConfig) -> ClassifiedLogicalAsset:
-    classified_file = classify_file(logical_asset.canonical_path, cfg)
+    try:
+        classified_file = classify_file(logical_asset.canonical_path, cfg)
+    except AmbiguousClassificationError:
+        if logical_asset.role_hint != "unknown" or not _has_hyphenated_role_compound(logical_asset.canonical_path.stem):
+            raise
+        classified_file = ClassifiedFile(
+            path=logical_asset.canonical_path,
+            role="unknown",
+            group_id=logical_asset.group_id,
+            channel_config_hint=logical_asset.channel_config_hint,
+        )
     resolved_role = _resolve_role(
         logical_asset=logical_asset,
         classifier_role=classified_file.role,
@@ -102,3 +118,10 @@ def _resolve_role(*, logical_asset: LogicalAsset, classifier_role: FileRole) -> 
         f"{asset_role!r} but classifier patterns resolved {classifier_role!r}. "
         "Rename the asset or adjust the classifier config so only one role applies."
     )
+
+
+def _has_hyphenated_role_compound(stem: str) -> bool:
+    for match in _COMPOUND_ROLE_PATTERN.finditer(stem):
+        if match.group(1).upper() != match.group(2).upper():
+            return True
+    return False

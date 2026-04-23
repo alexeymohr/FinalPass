@@ -16,7 +16,17 @@ from jinja2 import Environment, FunctionLoader, TemplateNotFound, select_autoesc
 
 from .errors import ReportRenderError
 from .models import AllReport, FileReport, FlaggedRegion, Group, MEReport, NullReport, Report
-from .presentation import logical_asset_display_name, source_kind_label, source_summary
+from .presentation import (
+    blocking_issue_count,
+    display_group_name,
+    humanize_code,
+    humanize_code_list,
+    logical_asset_display_name,
+    skip_detail,
+    source_kind_label,
+    source_summary,
+    verdict_explainer,
+)
 
 RenderableReport: TypeAlias = Report | NullReport | MEReport | AllReport
 
@@ -91,9 +101,15 @@ def _environment() -> Environment:
         group_duration_seconds=_group_duration_seconds,
         group_sample_rate=_group_sample_rate,
         channel_display=_channel_display,
+        blocking_issue_count=blocking_issue_count,
         display_label=logical_asset_display_name,
+        display_group_name=display_group_name,
+        humanize_code=humanize_code,
+        humanize_code_list=humanize_code_list,
+        skip_detail=skip_detail,
         source_summary=source_summary,
         source_kind_label=source_kind_label,
+        verdict_explainer=verdict_explainer,
     )
     return env
 

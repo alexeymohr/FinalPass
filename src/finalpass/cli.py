@@ -43,7 +43,15 @@ from .null_test import (
     DEFAULT_NULL_THRESHOLD_DBFS,
     DEFAULT_NULL_WINDOW_MS,
 )
-from .presentation import logical_asset_display_name, source_summary
+from .presentation import (
+    blocking_issue_count,
+    display_group_name,
+    humanize_code,
+    humanize_code_list,
+    logical_asset_display_name,
+    source_summary,
+    verdict_explainer,
+)
 from .specs import list_bundled, load_spec
 from .wizard import run_wizard
 
@@ -385,29 +393,29 @@ def _render_all_report(report: AllReport) -> None:
     _out_console.print(f"[dim]folder:[/dim] {escape(report.folder)}", soft_wrap=True)
 
     if report.discovery_errors:
-        _out_console.print("\n[red]Discovery errors:[/red]")
+        _out_console.print("\n[red]Discovery issues:[/red]")
         for issue in report.discovery_errors:
-            scope = f" [{issue.group_hint}]" if issue.group_hint else ""
-            _out_console.print(f"  [red]{issue.error_type}{scope}:[/red] {issue.message}")
+            scope = f" [{display_group_name(issue.group_hint)}]" if issue.group_hint else ""
+            _out_console.print(f"  [red]{humanize_code(issue.error_type)}{scope}:[/red] {issue.message}")
             if issue.source_paths:
                 for path in issue.source_paths:
                     _out_console.print(f"    [dim]{path}[/dim]")
 
     for group in report.groups:
         status_color = "green" if group.group_summary.overall_pass else "red"
-        _out_console.print(f"\n[{status_color}]●[/{status_color}] [bold]{group.group_id}[/bold]")
+        _out_console.print(f"\n[{status_color}]●[/{status_color}] [bold]{display_group_name(group.group_id)}[/bold]")
 
         for error in group.errors:
-            _out_console.print(f"  [red]{error.type}:[/red] {error.message}")
+            _out_console.print(f"  [red]{humanize_code(error.type)}:[/red] {error.message}")
 
         if group.assets:
             _out_console.print("  [dim]Assets:[/dim]")
             for asset in group.assets:
-                used_by = ",".join(asset.used_by) if asset.used_by else "—"
-                note = asset.selection_note or "—"
+                used_by = humanize_code_list(asset.used_by)
+                note = humanize_code(asset.selection_note)
                 _out_console.print(
                     "    "
-                    f"{asset.role:<7} {escape(logical_asset_display_name(asset))}  "
+                    f"{humanize_code(asset.role):<12} {escape(logical_asset_display_name(asset))}  "
                     f"[dim]{escape(source_summary(asset))}[/dim]"
                 )
                 _out_console.print(
@@ -424,7 +432,7 @@ def _render_all_report(report: AllReport) -> None:
         if group.null_test is not None:
             null_test = group.null_test
             if null_test.skipped:
-                _out_console.print(f"  [dim]Null:[/dim] SKIPPED — {null_test.reason}")
+                _out_console.print(f"  [dim]Null:[/dim] SKIPPED — {humanize_code(null_test.reason)}")
             elif null_test.pass_ is True and null_test.summary is not None:
                 _out_console.print(
                     f"  [green]Null:[/green] PASS — {_format_stem_strategy(null_test.stem_strategy)} — "
@@ -435,10 +443,10 @@ def _render_all_report(report: AllReport) -> None:
                 noun = "region" if flagged == 1 else "regions"
                 _out_console.print(f"  [red]Null:[/red] FAIL — {flagged} flagged {noun}")
             else:
-                _out_console.print(f"  [red]Null:[/red] FAIL — {null_test.reason}")
+                _out_console.print(f"  [red]Null:[/red] FAIL — {humanize_code(null_test.reason)}")
 
             for error in null_test.errors:
-                _out_console.print(f"    [red]{error.type}:[/red] {error.message}")
+                _out_console.print(f"    [red]{humanize_code(error.type)}:[/red] {error.message}")
             if null_test.flags:
                 _out_console.print(
                     _flagged_regions_table(
@@ -452,7 +460,7 @@ def _render_all_report(report: AllReport) -> None:
         if group.me_check is not None:
             me_check = group.me_check
             if me_check.skipped:
-                _out_console.print(f"  [dim]M&E:[/dim] SKIPPED — {me_check.reason}")
+                _out_console.print(f"  [dim]M&E:[/dim] SKIPPED — {humanize_code(me_check.reason)}")
             elif me_check.pass_ is True and me_check.summary is not None:
                 _out_console.print("  [green]M&E:[/green] PASS — 0 flagged regions")
             elif me_check.summary is not None:
@@ -460,10 +468,10 @@ def _render_all_report(report: AllReport) -> None:
                 noun = "region" if flagged == 1 else "regions"
                 _out_console.print(f"  [red]M&E:[/red] FAIL — {flagged} flagged {noun}")
             else:
-                _out_console.print(f"  [red]M&E:[/red] FAIL — {me_check.reason}")
+                _out_console.print(f"  [red]M&E:[/red] FAIL — {humanize_code(me_check.reason)}")
 
             for error in me_check.errors:
-                _out_console.print(f"    [red]{error.type}:[/red] {error.message}")
+                _out_console.print(f"    [red]{humanize_code(error.type)}:[/red] {error.message}")
             if me_check.flags:
                 _out_console.print(
                     _flagged_regions_table(
@@ -480,6 +488,7 @@ def _render_all_report(report: AllReport) -> None:
             group.group_summary.failed,
             group.group_summary.skipped,
             group.group_summary.total_checks,
+            blocking_issues=blocking_issue_count(group),
             prefix="  ",
         )
 
@@ -492,7 +501,7 @@ def _render_all_report(report: AllReport) -> None:
                 f"[dim]{escape(source_summary(item))}[/dim]"
             )
             _out_console.print(
-                f"    [dim]path:[/dim] {escape(item.path)}  [dim]reason:[/dim] {escape(item.reason)}",
+                f"    [dim]path:[/dim] {escape(item.path)}  [dim]reason:[/dim] {escape(humanize_code(item.reason))}",
                 soft_wrap=True,
             )
 
@@ -501,7 +510,7 @@ def _render_all_report(report: AllReport) -> None:
     _out_console.print(
         f"\n[bold]{summary.groups_total}[/bold] groups checked — "
         f"[green]{summary.groups_passed} passed[/green], [red]{summary.groups_failed} failed[/red]. "
-        f"Overall: [{color}]{'PASS' if summary.overall_pass else 'FAIL'}[/{color}]."
+        f"Overall: [{color}]{verdict_explainer(overall_pass=summary.overall_pass, failed=summary.failed, blocking_issues=blocking_issue_count(report))}[/{color}]."
     )
 
 
@@ -602,13 +611,15 @@ def _print_summary(
     skipped: int,
     total_checks: int,
     *,
+    blocking_issues: int = 0,
     prefix: str = "",
 ) -> None:
     color = "green" if overall_pass else "red"
     skipped_suffix = f", {skipped} skipped" if skipped else ""
     _out_console.print(
         f"{prefix}[{color}]{'PASS' if overall_pass else 'FAIL'}[/{color}] — "
-        f"{passed} passed, {failed} failed{skipped_suffix} (of {total_checks} checks)"
+        f"{passed} passed, {failed} failed{skipped_suffix}, {blocking_issues} blocking "
+        f"{'issue' if blocking_issues == 1 else 'issues'} (of {total_checks} checks)"
     )
 
 

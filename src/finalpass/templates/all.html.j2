@@ -9,6 +9,7 @@
 <section class="card">
   <h2>Run Summary</h2>
   <p class="muted">{{ report.spec.name }} — {{ report.spec.display_name }}</p>
+  <p><strong>{{ verdict_explainer(overall_pass=report.summary.overall_pass, failed=report.summary.failed, blocking_issues=blocking_issue_count(report)) }}</strong></p>
   {{ macros.summary_stats([
     ("Overall", macros.badge(report.summary.overall_pass|verdict_label(false), report.summary.overall_pass|verdict_class(false))),
     ("Groups total", report.summary.groups_total),
@@ -18,12 +19,13 @@
     ("Passed", report.summary.passed),
     ("Failed", report.summary.failed),
     ("Skipped", report.summary.skipped),
+    ("Blocking issues", blocking_issue_count(report)),
   ]) }}
 </section>
 
 {% if report.discovery_errors %}
 <section class="card card-muted">
-  <h2>Discovery errors</h2>
+  <h2>Discovery issues</h2>
   <table>
     <thead>
       <tr><th>Path</th><th>Group hint</th><th>Error</th><th>Detail</th></tr>
@@ -32,8 +34,8 @@
       {% for issue in report.discovery_errors %}
       <tr>
         <td class="mono">{{ issue.path }}</td>
-        <td>{{ issue.group_hint or "—" }}</td>
-        <td>{{ issue.error_type }}</td>
+        <td>{{ display_group_name(issue.group_hint) if issue.group_hint else "—" }}</td>
+        <td>{{ humanize_code(issue.error_type) }}</td>
         <td>{{ issue.message }}</td>
       </tr>
       {% endfor %}
@@ -57,7 +59,7 @@
           <div class="muted">{{ source_summary(entry) }}</div>
           <div class="mono">{{ entry.path }}</div>
         </td>
-        <td>{{ entry.reason }}</td>
+        <td>{{ humanize_code(entry.reason) }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -68,13 +70,15 @@
 {% for group in report.groups %}
 <section class="group-block">
   <div class="card">
-    <h2>{{ group.group_id }}</h2>
+    <h2>{{ display_group_name(group.group_id) }}</h2>
+    <p><strong>{{ verdict_explainer(overall_pass=group.group_summary.overall_pass, failed=group.group_summary.failed, blocking_issues=blocking_issue_count(group)) }}</strong></p>
   {{ macros.summary_stats([
       ("Verdict", macros.badge(group.group_summary.overall_pass|verdict_label(false), group.group_summary.overall_pass|verdict_class(false))),
       ("Total checks", group.group_summary.total_checks),
       ("Passed", group.group_summary.passed),
       ("Failed", group.group_summary.failed),
       ("Skipped", group.group_summary.skipped),
+      ("Blocking issues", blocking_issue_count(group)),
     ]) }}
   </div>
 
@@ -96,15 +100,15 @@
       <tbody>
         {% for asset in group.assets %}
         <tr>
-          <td>{{ asset.role }}</td>
+          <td>{{ humanize_code(asset.role) }}</td>
           <td>
             <strong>{{ display_label(asset) }}</strong>
             <div class="muted">{{ source_summary(asset) }}</div>
             <div class="mono">{{ asset.path }}</div>
           </td>
           <td>{{ asset.channel_config_actual }}</td>
-          <td>{{ asset.used_by|join(", ") if asset.used_by else "—" }}</td>
-          <td>{{ asset.selection_note or "—" }}</td>
+          <td>{{ humanize_code_list(asset.used_by) }}</td>
+          <td>{{ humanize_code(asset.selection_note) }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -114,7 +118,7 @@
 
   {% if group.files %}
   <section class="card">
-    <h3>Measured files</h3>
+    <h3>Measured assets</h3>
     <table>
       <thead>
         <tr><th>Measured asset</th><th>Role</th><th>Sample rate</th><th>Bit depth</th><th>Channels</th><th>Duration</th></tr>
@@ -127,7 +131,7 @@
             <div class="muted">{{ source_summary(file_report) }}</div>
             <div class="mono">{{ file_report.path }}</div>
           </td>
-          <td>{{ file_report.role }}</td>
+          <td>{{ humanize_code(file_report.role) }}</td>
           <td>{{ file_report.sample_rate }} Hz</td>
           <td>{{ file_report.bit_depth }}-bit</td>
           <td>{{ channel_display(file_report.channel_config_actual, file_report.channel_count) }}</td>
@@ -149,11 +153,16 @@
       <h3>Null check</h3>
       {{ macros.summary_stats([
         ("Verdict", macros.badge(group.null_test.pass_|verdict_label(group.null_test.skipped), group.null_test.pass_|verdict_class(group.null_test.skipped))),
-        ("Skipped reason", group.null_test.reason or "—"),
+        ("Skipped reason", humanize_code(group.null_test.reason)),
         ("Stem strategy", group.null_test.stem_strategy or "—"),
-        ("Selected roles", group.null_test.selected_roles|join(", ") if group.null_test.selected_roles else "—"),
+        ("Selected roles", humanize_code_list(group.null_test.selected_roles)),
       ]) }}
     </div>
+    {% if group.null_test.skipped %}
+    <section class="card card-muted">
+      <p>{{ skip_detail(group.null_test.reason) }}</p>
+    </section>
+    {% else %}
     {% if group.null_test.summary %}
     <section class="card">
       <h3>Null analysis summary</h3>
@@ -174,6 +183,7 @@
       {{ macros.flagged_table(group.null_test.flags, "Peak residual") }}
     {% endif %}
     {{ macros.errors_block(group.null_test.errors) }}
+    {% endif %}
   </section>
   {% endif %}
 
@@ -183,10 +193,15 @@
       <h3>M&amp;E check</h3>
       {{ macros.summary_stats([
         ("Verdict", macros.badge(group.me_check.pass_|verdict_label(group.me_check.skipped), group.me_check.pass_|verdict_class(group.me_check.skipped))),
-        ("Skipped reason", group.me_check.reason or "—"),
-        ("Analysis signal", group.me_check.analysis_signal),
+        ("Skipped reason", humanize_code(group.me_check.reason)),
+        ("Analysis signal", humanize_code(group.me_check.analysis_signal)),
       ]) }}
     </div>
+    {% if group.me_check.skipped %}
+    <section class="card card-muted">
+      <p>{{ skip_detail(group.me_check.reason) }}</p>
+    </section>
+    {% else %}
     {% if group.me_check.summary %}
     <section class="card">
       <h3>M&amp;E analysis summary</h3>
@@ -210,6 +225,7 @@
       {{ macros.flagged_table(group.me_check.flags, "Bleed score") }}
     {% endif %}
     {{ macros.errors_block(group.me_check.errors) }}
+    {% endif %}
   </section>
   {% endif %}
 </section>

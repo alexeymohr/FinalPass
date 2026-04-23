@@ -16,10 +16,10 @@
 {% macro errors_block(errors) -%}
   {%- if errors %}
   <section class="card card-muted">
-    <h3>Errors</h3>
+    <h3>Blocking issues</h3>
     <ul class="errors">
       {%- for error in errors %}
-      <li><strong>{{ error.type }}</strong>: {{ error.message }}</li>
+      <li><strong>{{ humanize_code(error.type) }}</strong>: {{ error.message }}</li>
       {%- endfor %}
     </ul>
   </section>
@@ -63,8 +63,8 @@
       <td>{{ format_target_limit(check) }}</td>
       <td>{{ badge(check.pass_|verdict_label(check.skipped), check.pass_|verdict_class(check.skipped)) }}</td>
       <td>
-        {%- if check.skipped and check.reason %}{{ check.reason }}
-        {%- elif check.error %}{{ check.error }}
+        {%- if check.skipped and check.reason %}{{ humanize_code(check.reason) }}
+        {%- elif check.error %}{{ humanize_code(check.error) }}
         {%- else %}—{%- endif %}
       </td>
     </tr>
@@ -77,12 +77,12 @@
 <section class="card section-stack">
   <h3>{{ display_label(file_report) }}</h3>
   <p class="muted">{{ source_summary(file_report) }}</p>
-  <div class="meta-grid">
-    <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ file_report.path }}</div></div>
-    <div class="stat"><div class="stat-label">Role</div><div class="stat-value">{{ file_report.role }}</div></div>
-    <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ file_report.sample_rate }} Hz</div></div>
-    <div class="stat"><div class="stat-label">Bit depth</div><div class="stat-value">{{ file_report.bit_depth }}-bit</div></div>
-    <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(file_report.channel_config_actual, file_report.channel_count) }}</div></div>
+    <div class="meta-grid">
+      <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ file_report.path }}</div></div>
+    <div class="stat"><div class="stat-label">Role</div><div class="stat-value">{{ humanize_code(file_report.role) }}</div></div>
+      <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ file_report.sample_rate }} Hz</div></div>
+      <div class="stat"><div class="stat-label">Bit depth</div><div class="stat-value">{{ file_report.bit_depth }}-bit</div></div>
+      <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(file_report.channel_config_actual, file_report.channel_count) }}</div></div>
     <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">{{ file_report.duration_seconds|fmt_seconds(2) }}</div></div>
   </div>
   {{ source_provenance(file_report) }}

@@ -104,6 +104,33 @@ def test_all_duplicate_pm_isolates_to_group(tmp_path: Path) -> None:
     assert by_gid["S01E04"]["group_summary"]["overall_pass"] is True
 
 
+def test_all_duplicate_optional_target_role_without_viable_analysis_does_not_fail_group(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    folder.mkdir()
+    group = build_group(folder, "S01E03", write_roles=("pm", "mx"), base_seed=SEED + 120)
+    write_audio(
+        folder / "SHOW_S01E03_MUSIC_STEREO.wav",
+        sf.read(str(group["mx"]), dtype="float64", always_2d=True)[0],
+        sr=SR,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+        "--json-only",
+    ])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    group = data["groups"][0]
+    assert group["errors"] == []
+    assert group["group_summary"]["overall_pass"] is True
+    mx_assets = [asset for asset in group["assets"] if asset["role"] == "mx"]
+    assert len(mx_assets) == 2
+    assert all("duplicate_target_layout" in (asset["selection_note"] or "") for asset in mx_assets)
+
+
 def test_all_sample_rate_mismatch_within_group(tmp_path: Path) -> None:
     folder = tmp_path / "delivery"
     folder.mkdir()
@@ -317,7 +344,7 @@ def test_all_normal_run_writes_json_and_html(tmp_path: Path) -> None:
     assert "report.html" in result.output
     assert "markers.aaf" in result.output
     html = html_path.read_text(encoding="utf-8")
-    assert "Measured files" in html
+    assert "Measured assets" in html
     assert "Null check" in html
     assert "M&amp;E check" in html
 
@@ -495,6 +522,27 @@ def test_all_terminal_output_uses_polished_split_labels(tmp_path: Path) -> None:
     assert "SHOW_S01E03_Comp_LtRt.L.wav" in result.output
 
 
+def test_all_terminal_output_surfaces_blocking_issue_cause(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    folder.mkdir()
+    group = build_group(folder, "S01E03", write_roles=("pm", "dx"), base_seed=SEED + 1026)
+    write_audio(
+        folder / "SHOW_S01E03_PRINTMASTER_STEREO.wav",
+        sf.read(str(group["pm"]), dtype="float64", always_2d=True)[0],
+        sr=SR,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+    ])
+    assert result.exit_code == 1, result.output
+    assert "Competing same-layout asset" in result.output
+    assert "blocking issue" in result.output
+
+
 def test_all_dialog_loudness_falls_back_to_alternate_layout_dx_only(tmp_path: Path) -> None:
     folder = tmp_path / "delivery"
     build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "mx", "fx"), base_seed=SEED + 1030)
@@ -569,3 +617,29 @@ def test_all_unknown_split_asset_include_unclassified_measures_loudness_only(tmp
     assert unknown_report["source_kind"] == "split_mono"
     assert len(unknown_report["source_paths"]) == 2
     assert any(entry["source_kind"] == "split_mono" for entry in data["unclassified"])
+
+
+def test_all_compound_split_role_stays_unknown_instead_of_becoming_mx(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="stereo",
+        write_roles=("pm", "unknown"),
+        base_seed=SEED + 1060,
+        role_stem_tokens={"unknown": "MX-FX"},
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--json-only",
+    ])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    group = data["groups"][0]
+    compound_asset = next(asset for asset in group["assets"] if "MX-FX" in asset["path"])
+    assert compound_asset["role"] == "unknown"
+    assert "unknown_skipped" in (compound_asset["selection_note"] or "")
+    assert any("MX-FX" in entry["path"] for entry in data["unclassified"])

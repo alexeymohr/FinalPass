@@ -104,7 +104,7 @@ def test_render_all_html_smoke(tmp_path: Path) -> None:
     assert "Run Summary" in html
     assert "S01E03" in html
     assert "S01E04" in html
-    assert "Measured files" in html
+    assert "Measured assets" in html
     assert "Null check" in html
     assert "M&amp;E check" in html
 
@@ -212,6 +212,73 @@ def test_round_trip_all_json_renders_html(tmp_path: Path) -> None:
     assert result.exit_code == 1, result.output
     report = AllReport.model_validate(json.loads(result.output))
     html = render_report_html(report)
-    assert "Measured files" in html
+    assert "Measured assets" in html
     assert "Null flagged-region timeline" in html
     assert "M&E flagged-region timeline" in html
+
+
+def test_render_all_html_surfaces_blocking_issues_summary(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_two_episodes(folder)
+    # Duplicate the S01E03 printmaster to force a blocking selection issue.
+    pm = folder / "SHOW_S01E03_PM_STEREO.wav"
+    duplicate = folder / "SHOW_S01E03_PRINTMASTER_STEREO.wav"
+    duplicate.write_bytes(pm.read_bytes())
+
+    report = run_all(
+        folder=folder,
+        spec_name="ebu_r128",
+        patterns_path=None,
+        include_unclassified=False,
+        fps=23.976,
+        null_window_ms=1000.0,
+        null_hop_ms=100.0,
+        null_threshold_dbfs=-40.0,
+        me_window_ms=500.0,
+        me_hop_ms=100.0,
+        me_band_low_hz=200.0,
+        me_band_high_hz=4000.0,
+        me_corr_threshold=0.65,
+        me_coherence_threshold=0.60,
+        me_dx_gate_dbfs=-45.0,
+        me_me_floor_dbfs=-60.0,
+    )
+    html = render_report_html(report)
+    assert "Blocking issues" in html
+    assert "FAIL — 0 check failures, 1 blocking issue" in html
+    assert "Competing same-layout asset" in html
+
+
+def test_render_all_html_skipped_analyses_do_not_render_empty_timelines(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_two_episodes(folder)
+    for path in folder.glob("*_MX_STEREO.wav"):
+        path.unlink()
+    for path in folder.glob("*_FX_STEREO.wav"):
+        path.unlink()
+    for path in folder.glob("*_ME_STEREO.wav"):
+        path.unlink()
+
+    report = run_all(
+        folder=folder,
+        spec_name="ebu_r128",
+        patterns_path=None,
+        include_unclassified=False,
+        fps=23.976,
+        null_window_ms=1000.0,
+        null_hop_ms=100.0,
+        null_threshold_dbfs=-40.0,
+        me_window_ms=500.0,
+        me_hop_ms=100.0,
+        me_band_low_hz=200.0,
+        me_band_high_hz=4000.0,
+        me_corr_threshold=0.65,
+        me_coherence_threshold=0.60,
+        me_dx_gate_dbfs=-45.0,
+        me_me_floor_dbfs=-60.0,
+    )
+    html = render_report_html(report)
+    assert "Auto-null was not run because no same-layout DX+MX+FX or DX+ME set was available." in html
+    assert "M&E was not run because no DX and M&E pair was available." in html
+    assert "Null flagged-region timeline" not in html
+    assert "M&amp;E flagged-region timeline" not in html

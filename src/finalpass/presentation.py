@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -14,6 +15,68 @@ class DisplayItem:
     presentation_label: str | None
     channel_config_actual: str | None
     role: str | None
+
+
+_CODE_LABELS = {
+    "alternate_presentation": "Other layout available",
+    "AmbiguousFamilyKey": "Ambiguous split family",
+    "audio_format_error": "Audio format error",
+    "channel_config_label_mismatch": "Channel label does not match audio header",
+    "ChannelConfigLabelMismatch": "Channel label does not match audio header",
+    "channel_count_mismatch": "Channel-count mismatch",
+    "ChannelMismatchError": "Channel-count mismatch",
+    "DialogFallbackAmbiguity": "Alternate-layout DX fallback is ambiguous",
+    "dialog_fallback_ambiguous": "Alternate-layout DX fallback is ambiguous",
+    "dialog_loudness": "Dialog loudness",
+    "duplicate_target_layout": "Competing same-layout asset",
+    "DuplicateTargetLayoutRoleError": "Competing same-layout asset",
+    "dx": "DX",
+    "empty_signal": "Empty signal",
+    "file_too_short_for_integrated": "File is too short for integrated loudness",
+    "fx": "FX",
+    "IncompatiblePresentation": "Incompatible split presentation",
+    "insufficient_gated_content": "Not enough gated content to measure",
+    "insufficient_stems_for_auto_null": "Auto-null skipped: no valid same-layout DX+MX+FX or DX+ME set",
+    "InvalidFamily": "Invalid split family",
+    "InvalidLegSet": "Invalid split-leg set",
+    "me": "M&E",
+    "missing_dx_or_me": "M&E skipped: missing DX or M&E asset",
+    "MissingLeg": "Missing split leg",
+    "MissingPath": "Missing source file",
+    "missing_target_layout_printmaster": "Auto-null skipped: missing target-layout printmaster",
+    "MissingTargetLayoutPrintmaster": "Missing target-layout printmaster",
+    "MissingTargetLayoutRole": "Missing target-layout asset",
+    "MixedSampleCount": "Mixed sample counts",
+    "MixedSampleRate": "Mixed sample rates",
+    "mono_downmix_excluding_lfe": "Speech-band downmix excluding LFE",
+    "mx": "MX",
+    "NonMonoMember": "Non-mono split member",
+    "no_role_pattern_match": "No role token matched",
+    "null": "Auto-null",
+    "opt": "Optional",
+    "pm_loudness": "PM loudness",
+    "pm": "PM",
+    "selected_for_dialog_fallback": "Used as dialog fallback from another layout",
+    "selected_for_loudness_only": "Included for loudness only",
+    "selected_for_target_layout": "Chosen for target layout",
+    "sample_count_mismatch": "Sample-count mismatch",
+    "sample_rate_mismatch": "Sample-rate mismatch",
+    "silent_or_below_gate": "Silent or below gate",
+    "SubtypeMismatch": "Mixed audio subtypes",
+    "unknown_loudness": "Unclassified loudness",
+    "unknown": "Unknown",
+    "unknown_skipped": "Unclassified asset was not used",
+    "UnsupportedChannelConfig": "Unsupported channel layout",
+}
+_SKIP_DETAIL_LABELS = {
+    "insufficient_stems_for_auto_null": "Auto-null was not run because no same-layout DX+MX+FX or DX+ME set was available.",
+    "missing_dx_or_me": "M&E was not run because no DX and M&E pair was available.",
+    "missing_target_layout_printmaster": "Auto-null was not run because no target-layout printmaster was available.",
+}
+_SPECIAL_GROUP_LABELS = {
+    "AUDIO FILES": "Ungrouped delivery (Audio Files)",
+}
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
 def logical_asset_display_name(item: Any) -> str:
@@ -65,6 +128,46 @@ def asset_menu_label(item: Any) -> str:
     return " · ".join(parts)
 
 
+def display_group_name(group_id: str) -> str:
+    return _SPECIAL_GROUP_LABELS.get(group_id, group_id)
+
+
+def humanize_code(code: str | None) -> str:
+    if not code:
+        return "—"
+    parts = [part.strip() for part in code.split(";") if part.strip()]
+    if not parts:
+        return "—"
+    return "; ".join(_humanize_single_code(part) for part in parts)
+
+
+def humanize_code_list(codes: list[str] | tuple[str, ...]) -> str:
+    if not codes:
+        return "—"
+    return ", ".join(_humanize_single_code(code) for code in codes)
+
+
+def skip_detail(reason: str | None) -> str:
+    if not reason:
+        return "This analysis was not run."
+    return _SKIP_DETAIL_LABELS.get(reason, humanize_code(reason))
+
+
+def blocking_issue_count(item: Any) -> int:
+    if hasattr(item, "discovery_errors") and hasattr(item, "groups"):
+        return len(item.discovery_errors) + sum(len(group.errors) for group in item.groups)
+    if hasattr(item, "errors"):
+        return len(item.errors)
+    return 0
+
+
+def verdict_explainer(*, overall_pass: bool, failed: int, blocking_issues: int) -> str:
+    verdict = "PASS" if overall_pass else "FAIL"
+    checks_noun = "check failure" if failed == 1 else "check failures"
+    issues_noun = "blocking issue" if blocking_issues == 1 else "blocking issues"
+    return f"{verdict} — {failed} {checks_noun}, {blocking_issues} {issues_noun}"
+
+
 def _to_display_item(item: Any) -> DisplayItem:
     if hasattr(item, "logical_asset"):
         logical_asset = item.logical_asset
@@ -87,3 +190,16 @@ def _to_display_item(item: Any) -> DisplayItem:
         channel_config_actual=getattr(item, "channel_config_actual", None),
         role=getattr(item, "role", None),
     )
+
+
+def _humanize_single_code(code: str) -> str:
+    mapped = _CODE_LABELS.get(code)
+    if mapped is not None:
+        return mapped
+
+    text = code.replace("_", " ").replace("-", " ")
+    text = _CAMEL_BOUNDARY.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return "—"
+    return text[:1].upper() + text[1:]

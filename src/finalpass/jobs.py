@@ -481,6 +481,25 @@ def _process_group(
     role_to_assets: dict[FileRole, list[ClassifiedLogicalAsset]] = {}
     for asset in classified_assets:
         role_to_assets.setdefault(asset.role, []).append(asset)
+    target_layout_matches: dict[FileRole, list[ClassifiedLogicalAsset]] = {
+        role: [
+            asset for asset in assets
+            if asset.logical_asset.channel_config_actual == target_layout
+        ]
+        for role, assets in role_to_assets.items()
+    }
+
+    def has_target(role: FileRole) -> bool:
+        return bool(target_layout_matches.get(role, []))
+
+    dx_duplicate_is_blocking = (
+        spec.dialog_lufs is not None
+        or has_target("me")
+        or (has_target("mx") and has_target("fx"))
+    )
+    mx_duplicate_is_blocking = has_target("dx") and has_target("fx")
+    fx_duplicate_is_blocking = has_target("dx") and has_target("mx")
+    me_duplicate_is_blocking = has_target("dx")
 
     pm_asset, _, _ = _select_target_layout_asset(
         group_id=group_id,
@@ -491,6 +510,7 @@ def _process_group(
         selection_notes=selection_notes,
         required=True,
         missing_type="MissingTargetLayoutPrintmaster",
+        duplicate_is_blocking=True,
     )
     dx_target, _, dx_alternates = _select_target_layout_asset(
         group_id=group_id,
@@ -500,6 +520,7 @@ def _process_group(
         errors=errors,
         selection_notes=selection_notes,
         required=False,
+        duplicate_is_blocking=dx_duplicate_is_blocking,
     )
     mx_target, _, _ = _select_target_layout_asset(
         group_id=group_id,
@@ -509,6 +530,7 @@ def _process_group(
         errors=errors,
         selection_notes=selection_notes,
         required=False,
+        duplicate_is_blocking=mx_duplicate_is_blocking,
     )
     fx_target, _, _ = _select_target_layout_asset(
         group_id=group_id,
@@ -518,6 +540,7 @@ def _process_group(
         errors=errors,
         selection_notes=selection_notes,
         required=False,
+        duplicate_is_blocking=fx_duplicate_is_blocking,
     )
     me_target, _, _ = _select_target_layout_asset(
         group_id=group_id,
@@ -527,6 +550,7 @@ def _process_group(
         errors=errors,
         selection_notes=selection_notes,
         required=False,
+        duplicate_is_blocking=me_duplicate_is_blocking,
     )
 
     selected_target_assets: dict[FileRole, ClassifiedLogicalAsset] = {}
@@ -915,6 +939,7 @@ def _select_target_layout_asset(
     selection_notes: dict[str, str | None],
     required: bool,
     missing_type: str | None = None,
+    duplicate_is_blocking: bool,
 ) -> tuple[ClassifiedLogicalAsset | None, list[ClassifiedLogicalAsset], list[ClassifiedLogicalAsset]]:
     matching = [asset for asset in assets if asset.logical_asset.channel_config_actual == target_layout]
     alternates = [asset for asset in assets if asset.logical_asset.channel_config_actual != target_layout]
@@ -935,13 +960,14 @@ def _select_target_layout_asset(
         return None, matching, alternates
 
     names = ", ".join(asset.logical_asset.canonical_path.name for asset in matching)
-    errors.append(GroupError(
-        type="DuplicateTargetLayoutRoleError",
-        message=(
-            f"group {group_id!r} has {len(matching)} {role!r} assets in target layout "
-            f"{target_layout!r}: {names}"
-        ),
-    ))
+    if duplicate_is_blocking:
+        errors.append(GroupError(
+            type="DuplicateTargetLayoutRoleError",
+            message=(
+                f"group {group_id!r} has {len(matching)} {role!r} assets in target layout "
+                f"{target_layout!r}: {names}"
+            ),
+        ))
     for asset in matching:
         _append_selection_note(selection_notes, asset, "duplicate_target_layout")
     return None, matching, alternates
