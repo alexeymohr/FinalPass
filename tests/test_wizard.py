@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
 from pathlib import Path
+import time
 
 from click.testing import CliRunner
 
+import finalpass.wizard as wizard_module
 from finalpass.cli import main
 from finalpass.prep_folders import BUCKET_SPECS, PREP_ROOT_NAME, create_prep_layout
 from tests.audio_cases import SEED, build_split_group
@@ -392,3 +395,35 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
         for group in payload["groups"]
         for asset in group["assets"]
     )
+
+
+def test_job_spinner_writes_dot_progress_on_tty(monkeypatch) -> None:
+    class FakeTTY(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    stream = FakeTTY()
+    monkeypatch.setattr(wizard_module.click, "get_text_stream", lambda name: stream)
+    monkeypatch.setattr(wizard_module, "_SPINNER_INTERVAL_SECONDS", 0.01)
+
+    with wizard_module._job_spinner():
+        time.sleep(0.04)
+
+    output = stream.getvalue()
+    assert "Running job." in output
+    assert "Running job.." in output or "Running job..." in output
+
+
+def test_job_spinner_is_silent_when_not_tty(monkeypatch) -> None:
+    class FakePipe(io.StringIO):
+        def isatty(self) -> bool:
+            return False
+
+    stream = FakePipe()
+    monkeypatch.setattr(wizard_module.click, "get_text_stream", lambda name: stream)
+    monkeypatch.setattr(wizard_module, "_SPINNER_INTERVAL_SECONDS", 0.01)
+
+    with wizard_module._job_spinner():
+        time.sleep(0.02)
+
+    assert stream.getvalue() == ""

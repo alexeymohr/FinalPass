@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+import threading
+import time
 from typing import Literal
 
 import click
@@ -37,7 +40,6 @@ from .null_test import (
 from .presentation import asset_menu_label, logical_asset_display_name, source_summary
 from .prep_folders import PrepLayout, PrepScanResult, create_prep_layout, detect_prep_layout, scan_prep_layout
 from .specs import Spec, list_bundled, load_spec
-from .terminal_spinner import processing_spinner
 from .wizard_io import Choice, WizardBack, WizardQuit, choose_many, choose_one, print_section, prompt_text
 
 WizardAction = Literal["job_menu", "choose_folder", "exit"]
@@ -46,6 +48,8 @@ WizardMode = Literal["folder", "prep"]
 
 DEFAULT_OUTPUT_DIR = Path("./finalpass-report")
 COMMON_FPS_OPTIONS = [23.976, 24.0, 25.0, 29.97, 30.0]
+_SPINNER_INTERVAL_SECONDS = 0.2
+_SPINNER_MESSAGE = "Running job"
 
 
 @dataclass(frozen=True)
@@ -1002,10 +1006,7 @@ def _review_and_confirm(lines: list[str]) -> None:
 
 def _execute_report_job(*, job_name: str, out_dir: Path, summary_builder, runner) -> JobExecutionResult:
     try:
-        with processing_spinner(
-            f"Running {job_name}...",
-            stream=click.get_text_stream("stdout"),
-        ):
+        with _job_spinner():
             report = runner()
             payload = report.model_dump_json(indent=2, by_alias=True)
             written = write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
@@ -1148,3 +1149,45 @@ def _existing_artifacts(out_dir: Path) -> list[Path]:
         if path.is_file()
     }
     return sorted(matches)
+
+
+@contextmanager
+def _job_spinner(*, message: str = _SPINNER_MESSAGE):
+    stream = click.get_text_stream("stderr")
+    if not _spinner_enabled(stream):
+        yield
+        return
+
+    stop_event = threading.Event()
+    width = len(message) + 3
+
+    def render(frame: int) -> None:
+        dots = "." * ((frame % 3) + 1)
+        padding = " " * (3 - len(dots))
+        stream.write(f"\r{message}{dots}{padding}")
+        stream.flush()
+
+    def clear() -> None:
+        stream.write("\r" + (" " * width) + "\r")
+        stream.flush()
+
+    def spin() -> None:
+        frame = 0
+        render(frame)
+        while not stop_event.wait(_SPINNER_INTERVAL_SECONDS):
+            frame += 1
+            render(frame)
+
+    thread = threading.Thread(target=spin, name="finalpass-wizard-spinner", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        thread.join()
+        clear()
+
+
+def _spinner_enabled(stream) -> bool:
+    isatty = getattr(stream, "isatty", None)
+    return bool(callable(isatty) and isatty())
