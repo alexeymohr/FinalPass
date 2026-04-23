@@ -175,7 +175,9 @@ def test_render_split_all_html_uses_polished_display_label(tmp_path: Path) -> No
     )
     html = render_report_html(report)
     assert "SHOW_S01E03_Comp_LtRt" in html
-    assert "SHOW_S01E03_Comp_LtRt.L.wav" in html
+    logical_assets_section = html.split("Logical assets", 1)[1].split("Measured assets", 1)[0]
+    assert "SHOW_S01E03_Comp_LtRt.L.wav" in logical_assets_section
+    assert "SHOW_S01E03_Comp_LtRt.R.wav" in logical_assets_section
     assert "split mono" in html
 
 

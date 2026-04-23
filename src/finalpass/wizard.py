@@ -1139,9 +1139,12 @@ def _written_artifacts(written: WrittenArtifacts) -> list[Path]:
 
 
 def _existing_artifacts(out_dir: Path) -> list[Path]:
-    candidates = [
-        out_dir / "report.json",
-        out_dir / "report.html",
-        out_dir / "markers.aaf",
-    ]
-    return [path for path in candidates if path.exists()]
+    if not out_dir.is_dir():
+        return []
+    matches = {
+        path
+        for pattern in ("report*.json", "report*.html", "markers*.aaf")
+        for path in out_dir.glob(pattern)
+        if path.is_file()
+    }
+    return sorted(matches)

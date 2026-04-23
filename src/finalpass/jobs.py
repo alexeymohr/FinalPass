@@ -478,23 +478,19 @@ def write_report_artifacts(
     out_dir: Path,
 ) -> WrittenArtifacts:
     candidates = aaf_export.collect_marker_candidates(report)
-    artifacts = ("report.json", "report.html", "markers.aaf") if candidates else ("report.json", "report.html")
-    html = render_report_html(report, artifacts=artifacts)
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    json_path = out_dir / "report.json"
-    html_path = out_dir / "report.html"
-    aaf_path = out_dir / "markers.aaf"
+    json_path, html_path, aaf_path = _reserve_artifact_paths(out_dir=out_dir, include_aaf=bool(candidates))
+    artifacts = tuple(
+        path.name
+        for path in (json_path, html_path, aaf_path)
+        if path is not None
+    )
+    html = render_report_html(report, artifacts=artifacts)
     json_path.write_text(payload + "\n", encoding="utf-8")
 
     if not candidates:
-        if aaf_path.exists():
-            aaf_path.unlink()
         html_path.write_text(html + "\n", encoding="utf-8")
         return WrittenArtifacts(json_path=json_path, html_path=html_path, aaf_path=None)
-
-    if aaf_path.exists():
-        aaf_path.unlink()
 
     temp_fd, temp_name = tempfile.mkstemp(
         prefix="finalpass-markers-",
@@ -512,7 +508,7 @@ def write_report_artifacts(
         raise
     except Exception as exc:  # pragma: no cover - defensive wrapper
         temp_path.unlink(missing_ok=True)
-        raise AAFExportError(f"Could not write markers.aaf: {exc}") from exc
+        raise AAFExportError(f"Could not write {aaf_path.name}: {exc}") from exc
     finally:
         try:
             Path(temp_name).unlink(missing_ok=True)
@@ -521,6 +517,21 @@ def write_report_artifacts(
 
     html_path.write_text(html + "\n", encoding="utf-8")
     return WrittenArtifacts(json_path=json_path, html_path=html_path, aaf_path=aaf_path)
+
+
+def _reserve_artifact_paths(*, out_dir: Path, include_aaf: bool) -> tuple[Path, Path, Path | None]:
+    index = 0
+    while True:
+        suffix = "" if index == 0 else f"-{index:02d}"
+        json_path = out_dir / f"report{suffix}.json"
+        html_path = out_dir / f"report{suffix}.html"
+        aaf_path = out_dir / f"markers{suffix}.aaf" if include_aaf else None
+        candidates = [json_path, html_path]
+        if aaf_path is not None:
+            candidates.append(aaf_path)
+        if not any(path.exists() for path in candidates):
+            return json_path, html_path, aaf_path
+        index += 1
 
 
 def _validate_channels(files, spec: Spec) -> None:

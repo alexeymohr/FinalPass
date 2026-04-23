@@ -230,6 +230,32 @@ def test_loudness_command_routes_artifact_writes_through_shared_seam(monkeypatch
     assert '"schema_version": 2' in calls["payload"]
 
 
+def test_loudness_repeated_runs_reserve_new_report_filenames(pink_stereo_10s: Path, tmp_path: Path) -> None:
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+
+    first = runner.invoke(main, [
+        "loudness", str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    second = runner.invoke(main, [
+        "loudness", str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+
+    assert first.exit_code in (0, 1), first.output
+    assert second.exit_code in (0, 1), second.output
+    assert (out_dir / "report.json").exists()
+    assert (out_dir / "report.html").exists()
+    assert (out_dir / "report-01.json").exists()
+    assert (out_dir / "report-01.html").exists()
+    assert "report-01.json" in second.output
+    assert "report-01.html" in second.output
+    assert "markers-01.aaf" in second.output
+
+
 def test_loudness_terminal_output_shows_full_input_path_on_separate_line(
     pink_stereo_10s: Path,
     tmp_path: Path,

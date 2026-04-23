@@ -7,6 +7,7 @@ preserving the existing classifier patterns as an optional supplement.
 from __future__ import annotations
 
 from collections import OrderedDict
+from dataclasses import replace
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -58,8 +59,9 @@ def discover_assets_from_paths(
     path_hints: Mapping[Path, PrepBucketHint] | None = None,
 ) -> AssetFolderScan:
     discovery = discover_logical_assets(paths, strict_explicit_split_members=True)
+    assets = _apply_prep_hints_to_assets(discovery.assets, path_hints)
     return _build_asset_scan(
-        assets=discovery.assets,
+        assets=assets,
         discovery_errors=discovery.errors,
         ignored_paths=discovery.ignored_paths,
         cfg=cfg,
@@ -169,6 +171,32 @@ def _resolve_role(
         f"{asset_role!r} but classifier patterns resolved {classifier_role!r}. "
         "Rename the asset or adjust the classifier config so only one role applies."
     )
+
+
+def _apply_prep_hints_to_assets(
+    assets: list[LogicalAsset],
+    path_hints: Mapping[Path, PrepBucketHint] | None,
+) -> list[LogicalAsset]:
+    if path_hints is None:
+        return assets
+
+    out: list[LogicalAsset] = []
+    for asset in assets:
+        prep_hints = {
+            hint.group_hint
+            for path in asset.source_paths
+            if (hint := path_hints.get(path.resolve())) is not None and hint.group_hint
+        }
+        if (
+            asset.group_hint is None
+            and len(prep_hints) == 1
+            and asset.group_id == asset.canonical_path.parent.name.upper()
+        ):
+            group_hint = next(iter(prep_hints))
+            out.append(replace(asset, group_id=group_hint, group_hint=group_hint))
+            continue
+        out.append(asset)
+    return out
 
 
 def _has_hyphenated_role_compound(stem: str) -> bool:

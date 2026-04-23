@@ -49,3 +49,4 @@ def test_scan_prep_layout_reads_direct_files_only_and_excludes_ignore(tmp_path: 
     assert nested.resolve() not in scan.analyzable_paths
     assert scan.path_hints[direct.resolve()].role_hint == "pm"
     assert scan.path_hints[direct.resolve()].layout_hint == "stereo"
+    assert scan.path_hints[direct.resolve()].group_hint == folder.name.upper()

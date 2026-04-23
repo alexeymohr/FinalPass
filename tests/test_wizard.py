@@ -374,6 +374,19 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
     payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
     assert payload["command"] == "all"
     assert payload["spec"]["name"] == "netflix_51"
+    assert payload["summary"]["groups_total"] == 1
+    assert payload["groups"][0]["group_id"] not in {
+        "5.1 DIALOGUE",
+        "5.1 EFFECTS",
+        "5.1 MUSIC",
+        "5.1 PRINTMASTER",
+        "STEREO DIALOGUE",
+        "STEREO PRINTMASTER",
+    }
+    assert payload["groups"][0]["errors"] == []
+    assert payload["groups"][0]["null_test"]["pass"] is True
+    assert payload["groups"][0]["null_test"]["stem_strategy"] == "dx_mx_fx"
+    assert payload["groups"][0]["me_check"]["skipped"] is True
     assert any(
         asset["channel_config_actual"] == "5.1"
         for group in payload["groups"]

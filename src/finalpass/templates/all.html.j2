@@ -104,7 +104,16 @@
           <td>
             <strong>{{ display_label(asset) }}</strong>
             <div class="muted">{{ source_summary(asset) }}</div>
+            {% if asset.source_paths|length > 1 %}
+            <div class="muted">Source members:</div>
+            <div class="mono">
+              {% for path in asset.source_paths %}
+              <div>{{ path }}</div>
+              {% endfor %}
+            </div>
+            {% else %}
             <div class="mono">{{ asset.path }}</div>
+            {% endif %}
           </td>
           <td>{{ asset.channel_config_actual }}</td>
           <td>{{ humanize_code_list(asset.used_by) }}</td>

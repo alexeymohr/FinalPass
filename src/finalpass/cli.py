@@ -596,10 +596,16 @@ def _announce_written_artifacts(written: WrittenArtifacts) -> None:
     _out_console.print(f"[dim]Wrote[/dim] {written.html_path}")
     if written.aaf_path is None:
         _out_console.print(
-            f"[dim]No exportable timed markers; did not write[/dim] {written.html_path.parent / 'markers.aaf'}"
+            f"[dim]No exportable timed markers; did not write[/dim] {_expected_aaf_path(written)}"
         )
     else:
         _out_console.print(f"[dim]Wrote[/dim] {written.aaf_path}")
+
+
+def _expected_aaf_path(written: WrittenArtifacts) -> Path:
+    stem = written.json_path.stem
+    suffix = stem[len("report"):] if stem.startswith("report") else ""
+    return written.json_path.with_name(f"markers{suffix}.aaf")
 
 
 def _format_target_limit(check) -> str:

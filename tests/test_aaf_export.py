@@ -247,7 +247,39 @@ def test_no_partial_aaf_left_on_export_failure(tmp_path: Path, monkeypatch: pyte
         "--out", str(out_dir),
     ])
     assert result.exit_code == 2
-    assert not stale.exists()
+    assert stale.exists()
+    assert not (out_dir / "markers-01.aaf").exists()
+
+
+def test_repeated_aaf_runs_reserve_new_marker_filename(tmp_path: Path) -> None:
+    files = _write_null_case(tmp_path / "case", base_seed=SEED + 510, defect_region=(5.0, 7.0))
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+
+    first = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--out", str(out_dir),
+    ])
+    second = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--out", str(out_dir),
+    ])
+
+    assert first.exit_code == 1, first.output
+    assert second.exit_code == 1, second.output
+    assert (out_dir / "markers.aaf").exists()
+    assert (out_dir / "markers-01.aaf").exists()
+    assert (out_dir / "report.json").exists()
+    assert (out_dir / "report-01.json").exists()
+    assert "markers-01.aaf" in second.output
 
 
 def test_collect_marker_candidates_from_all_uses_only_timed_flags(tmp_path: Path) -> None:

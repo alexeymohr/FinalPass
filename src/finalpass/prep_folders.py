@@ -13,6 +13,7 @@ IGNORE_BUCKET_NAME = "Ignore"
 class PrepBucketHint:
     role_hint: FileRole | None
     layout_hint: str | None
+    group_hint: str | None
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ def scan_prep_layout(layout: PrepLayout) -> PrepScanResult:
     ignored_buckets: list[PrepBucket] = []
     analyzable_paths: list[Path] = []
     path_hints: dict[Path, PrepBucketHint] = {}
+    shared_group_hint = layout.folder.name.upper()
 
     for bucket in refreshed.buckets:
         if not bucket.populated:
@@ -126,7 +128,11 @@ def scan_prep_layout(layout: PrepLayout) -> PrepScanResult:
             continue
         analyzable_buckets.append(bucket)
         analyzable_paths.extend(bucket.file_paths)
-        hint = PrepBucketHint(role_hint=bucket.role_hint, layout_hint=bucket.layout_hint)
+        hint = PrepBucketHint(
+            role_hint=bucket.role_hint,
+            layout_hint=bucket.layout_hint,
+            group_hint=shared_group_hint,
+        )
         for path in bucket.file_paths:
             path_hints[path.resolve()] = hint
 
