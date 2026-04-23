@@ -17,11 +17,13 @@ ME_BAND_LOW_HZ = 200.0
 ME_BAND_HIGH_HZ = 4000.0
 SPLIT_LEG_ORDERS = {
     "stereo": ["L", "R"],
+    "5.0": ["L", "R", "C", "Ls", "Rs"],
     "5.1": ["L", "R", "C", "LFE", "Ls", "Rs"],
     "7.1": ["L", "R", "C", "LFE", "Ls", "Rs", "Lss", "Rss"],
 }
 PRESENTATION_TOKEN = {
     "stereo": "LtRt",
+    "5.0": "5.0",
     "5.1": "5.1",
     "7.1": "7.1",
 }

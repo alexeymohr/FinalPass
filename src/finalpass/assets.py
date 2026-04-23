@@ -52,12 +52,14 @@ _ROLE_PATTERNS: list[tuple[RoleHint, re.Pattern[str]]] = [
 _CHANNEL_HINT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("mono", re.compile(rf"(?i){_TOKEN_BOUNDARY}(MONO|1{_TOKEN_SEPARATORS}?0){_TOKEN_END}")),
     ("stereo", re.compile(rf"(?i){_TOKEN_BOUNDARY}(STEREO|ST|2{_TOKEN_SEPARATORS}?0){_TOKEN_END}")),
+    ("5.0", re.compile(rf"(?i){_TOKEN_BOUNDARY}(5{_TOKEN_SEPARATORS}?0|50){_TOKEN_END}")),
     ("5.1", re.compile(rf"(?i){_TOKEN_BOUNDARY}(5{_TOKEN_SEPARATORS}?1|51){_TOKEN_END}")),
     ("7.1", re.compile(rf"(?i){_TOKEN_BOUNDARY}(7{_TOKEN_SEPARATORS}?1|71){_TOKEN_END}")),
 ]
 
 _PRESENTATION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("7.1", re.compile(rf"(?i){_TOKEN_BOUNDARY}(7{_TOKEN_SEPARATORS}?1|71){_TOKEN_END}")),
+    ("5.0", re.compile(rf"(?i){_TOKEN_BOUNDARY}(5{_TOKEN_SEPARATORS}?0|50){_TOKEN_END}")),
     ("5.1", re.compile(rf"(?i){_TOKEN_BOUNDARY}(5{_TOKEN_SEPARATORS}?1|51){_TOKEN_END}")),
     ("LtRt", re.compile(rf"(?i){_TOKEN_BOUNDARY}(LT{_TOKEN_SEPARATORS}?RT){_TOKEN_END}")),
     ("Stereo", re.compile(rf"(?i){_TOKEN_BOUNDARY}(STEREO){_TOKEN_END}")),
@@ -79,6 +81,8 @@ _CANONICAL_LAYOUTS: dict[ChannelConfigActual, list[str]] = {
     "5.1": ["L", "R", "C", "LFE", "Ls", "Rs"],
     "7.1": ["L", "R", "C", "LFE", "Ls", "Rs", "Lss", "Rss"],
 }
+_FIVE_POINT_ZERO_LEGS = ["L", "R", "C", "Ls", "Rs"]
+_FIVE_POINT_ZERO_SET = set(_FIVE_POINT_ZERO_LEGS)
 
 
 @dataclass(frozen=True)
@@ -364,7 +368,18 @@ def read_logical_asset(asset: LogicalAsset) -> AudioAsset:
     expected_bit_depth: int | None = None
 
     for leg in leg_order:
-        path = leg_to_path[leg]
+        path = leg_to_path.get(leg)
+        if path is None:
+            if _uses_silent_lfe_padding(asset.channel_config_actual, asset.member_legs, leg):
+                channels.append(np.zeros(asset.sample_count, dtype=np.float64))
+                continue
+            raise AssetResolutionError(DiscoveryError(
+                type="MissingLeg",
+                message=f"{asset.canonical_path.name}: split-mono asset is missing required {leg} leg.",
+                paths=list(asset.source_paths),
+                family_key=asset.asset_id,
+                group_hint=asset.group_hint,
+            ))
         header = probe_wav(path)
         if header.channel_count != 1:
             raise AssetResolutionError(DiscoveryError(
@@ -613,7 +628,8 @@ def _build_split_asset(
 
     ordered_legs = _CANONICAL_LAYOUTS[layout]
     leg_to_member = {member.leg_label: member for member in members if member.leg_label is not None}
-    ordered_members = [leg_to_member[leg] for leg in ordered_legs]
+    present_ordered_legs = [leg for leg in ordered_legs if leg in leg_to_member]
+    ordered_members = [leg_to_member[leg] for leg in present_ordered_legs]
     canonical_path = ordered_members[0].path
     role_hint = _unified_or_unknown(member.role_hint for member in ordered_members)
     group_hint = _unified_or_none(member.group_hint for member in ordered_members)
@@ -627,10 +643,10 @@ def _build_split_asset(
         source_kind="split_mono",
         channel_config_actual=layout,
         channel_config_hint=channel_hint,
-        presentation_label=presentation,
+        presentation_label=_reported_presentation_label(presentation, layout, present_ordered_legs),
         canonical_path=canonical_path,
         source_paths=[member.path for member in ordered_members],
-        member_legs=ordered_legs,
+        member_legs=present_ordered_legs,
         sample_rate=ordered_members[0].sample_rate,
         sample_count=ordered_members[0].sample_count,
         time_reference_samples=ordered_members[0].time_reference_samples,
@@ -644,6 +660,8 @@ def _infer_layout(legs: list[str]) -> ChannelConfigActual | DiscoveryError:
     for layout, expected in _CANONICAL_LAYOUTS.items():
         if unique == set(expected):
             return layout
+    if _is_five_point_zero_leg_set(unique):
+        return "5.1"
 
     expected_missing: tuple[ChannelConfigActual, list[str]] | None = None
     for layout, expected in sorted(_CANONICAL_LAYOUTS.items(), key=lambda item: len(item[1])):
@@ -690,6 +708,13 @@ def _validate_presentation_compatibility(
             paths=[],
             family_key=None,
         )
+    if presentation_label == "5.0" and inferred_layout != "5.1":
+        return DiscoveryError(
+            type="IncompatiblePresentation",
+            message=f"Presentation hint {presentation_label} is incompatible with inferred layout {inferred_layout}.",
+            paths=[],
+            family_key=None,
+        )
     if presentation_label == "7.1" and inferred_layout != "7.1":
         return DiscoveryError(
             type="IncompatiblePresentation",
@@ -706,6 +731,10 @@ def _missing_legs_for_presentation(
 ) -> list[str] | None:
     if presentation_label == "5.1":
         expected = _CANONICAL_LAYOUTS["5.1"]
+        if _is_five_point_zero_leg_set(set(legs)):
+            return None
+    elif presentation_label == "5.0":
+        expected = _FIVE_POINT_ZERO_LEGS
     elif presentation_label == "7.1":
         expected = _CANONICAL_LAYOUTS["7.1"]
     elif presentation_label in {"Stereo", "LtRt"}:
@@ -746,6 +775,8 @@ def _parse_group_hint(stem: str) -> str | None:
 
 
 def _parse_channel_config_hint(stem: str, presentation_label: str | None) -> str | None:
+    if presentation_label == "5.0":
+        return "5.0"
     if presentation_label == "5.1":
         return "5.1"
     if presentation_label == "7.1":
@@ -842,9 +873,33 @@ def _unified_channel_hint(members: list[AssetMember], inferred_layout: ChannelCo
         hint = next(iter(hints))
         if hint == inferred_layout:
             return hint
+        if hint == "5.0" and inferred_layout == "5.1":
+            return hint
         if hint == "stereo" and inferred_layout == "stereo":
             return hint
     return None
+
+
+def _reported_presentation_label(
+    presentation_label: str | None,
+    layout: ChannelConfigActual,
+    member_legs: list[str],
+) -> str | None:
+    if layout == "5.1" and _is_five_point_zero_leg_set(set(member_legs)):
+        return "5.0"
+    return presentation_label
+
+
+def _is_five_point_zero_leg_set(legs: set[str]) -> bool:
+    return legs == _FIVE_POINT_ZERO_SET
+
+
+def _uses_silent_lfe_padding(channel_config_actual: str, member_legs: list[str], requested_leg: str) -> bool:
+    return (
+        channel_config_actual == "5.1"
+        and requested_leg == "LFE"
+        and _is_five_point_zero_leg_set(set(member_legs))
+    )
 
 
 def _should_ignore(path: Path) -> bool:

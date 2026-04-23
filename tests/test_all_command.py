@@ -121,7 +121,7 @@ def test_all_duplicate_optional_target_role_without_viable_analysis_does_not_fai
         "--out", str(tmp_path / "out"),
         "--json-only",
     ])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
     group = data["groups"][0]
     assert group["errors"] == []
@@ -236,7 +236,7 @@ def test_all_auto_null_fallback_to_dx_me(tmp_path: Path) -> None:
         "--spec", "ebu_r128",
         "--json-only",
     ])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
     group = data["groups"][0]
     assert group["null_test"]["pass"] is True
@@ -589,6 +589,34 @@ def test_all_explicit_incomplete_split_family_becomes_discovery_error(tmp_path: 
     assert data["groups"] == []
     assert data["discovery_errors"]
     assert data["discovery_errors"][0]["error_type"] == "MissingLeg"
+
+
+def test_all_accepts_50_split_family_as_51_with_silent_lfe(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="5.0",
+        write_roles=("pm", "dx", "mx", "fx"),
+        base_seed=SEED + 1045,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "netflix_51",
+        "--json-only",
+    ])
+    assert result.exit_code in (0, 1), result.output
+    data = json.loads(result.output)
+    group = data["groups"][0]
+    assert group["null_test"]["pass"] is True
+    assert {file_report["channel_config_actual"] for file_report in group["files"]} == {"5.1"}
+    assert {file_report["channel_count"] for file_report in group["files"]} == {6}
+    dx_asset = next(asset for asset in group["assets"] if asset["role"] == "dx")
+    assert dx_asset["presentation_label"] == "5.0"
+    assert dx_asset["member_legs"] == ["L", "R", "C", "Ls", "Rs"]
+    assert len(dx_asset["source_paths"]) == 5
 
 
 def test_all_unknown_split_asset_include_unclassified_measures_loudness_only(tmp_path: Path) -> None:

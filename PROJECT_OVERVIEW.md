@@ -33,7 +33,7 @@ Exit codes: `0` all pass, `1` failures found, `2` tool error.
 
 ## Scope — v0.1
 
-**In:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1. The three passes. Bundled spec presets plus user-overridable YAML. JSON + HTML output artifacts, plus conditional timed-marker AAF export. Python 3.11+.
+**In:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a run). Mono, stereo, 5.1, 7.1, plus split-mono 5.0 sources padded with silent LFE for 5.1 analysis while preserving five-leg provenance in reports. The three passes. Bundled spec presets plus user-overridable YAML. JSON + HTML output artifacts, plus conditional timed-marker AAF export. Python 3.11+.
 
 **Out (explicit non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification (we measure, we don't bless).
 

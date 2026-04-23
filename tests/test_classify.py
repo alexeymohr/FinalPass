@@ -140,6 +140,8 @@ def test_compound_role_with_space_boundary_is_ambiguous(tmp_path: Path, default_
     [
         ("SHOW_PM_STEREO", "stereo"),
         ("SHOW_PM_ST", "stereo"),
+        ("SHOW_PM_5.0", "5.0"),
+        ("SHOW_PM_50", "5.0"),
         ("SHOW_PM_5.1", "5.1"),
         ("SHOW_PM_51", "5.1"),
         ("SHOW_PM_MONO", "mono"),

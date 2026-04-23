@@ -53,7 +53,7 @@ Wizard note:
 
 Standalone input note:
 - `finalpass loudness`, `finalpass null`, and `finalpass me` accept either an interleaved WAV/BWF path or a seed path to one member of a canonical split-mono family in the same directory.
-- Supported split layouts are stereo `L/R`, 5.1 `L/R/C/LFE/Ls/Rs`, and 7.1 `L/R/C/LFE/Ls/Rs/Lss/Rss`.
+- Supported split layouts are stereo `L/R`, 5.0 `L/R/C/Ls/Rs`, 5.1 `L/R/C/LFE/Ls/Rs`, and 7.1 `L/R/C/LFE/Ls/Rs/Lss/Rss`. A 5.0 split source is analyzed as 5.1 with a temporary silent LFE channel; reports preserve the five real source legs.
 - `finalpass all` now does folder-level logical-asset discovery too. Interleaved files remain supported, but explicit split-mono families are assembled in memory, grouped by logical asset, and selected by actual layout for the chosen spec.
 - If an input WAV/BWF carries a BWF `bext` time reference, FinalPass anchors flagged-region timecode strings and exported AAF marker placement to that embedded start sample. The user still chooses the frame rate via `--fps` or the wizard; FinalPass does not currently infer FPS from file metadata.
 - For null only, when an input printmaster carries a BWF `bext` time reference, FinalPass ignores null-analysis material before absolute timecode `01:00:00:00`. If no embedded start sample is present, null analysis still runs across the full file.
@@ -210,7 +210,7 @@ keys as [_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml)).
 
 ## Scope — v0.1 release candidate
 
-**Current:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a single asset or checked operation). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Interleaved assets plus canonical split stereo / 5.1 / 7.1 logical assets. Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with logical-asset selection plus conservative auto-null/auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + conditional timed-marker AAF export + terminal summary.
+**Current:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a single asset or checked operation). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Interleaved assets plus canonical split stereo / 5.0 / 5.1 / 7.1 logical assets; 5.0 split stems are padded with silent LFE for 5.1 analysis while reports keep the real five-leg provenance. Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with logical-asset selection plus conservative auto-null/auto-M&E. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + conditional timed-marker AAF export + terminal summary.
 
 **Out (non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Speech recognition, transcription, diarization, or ML/VAD. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification — FinalPass measures, it does not bless.
 
@@ -227,7 +227,7 @@ Values are current best-public-knowledge targets; they are not official platform
 
 ## Channel order
 
-SMPTE throughout: `L R C LFE Ls Rs [Lss Rss]`. FinalPass does not silently remap; if your file is in a different order, flag and relabel before measuring.
+SMPTE throughout: `L R C LFE Ls Rs [Lss Rss]`. A 5.0 split stem is the one accepted exception: FinalPass inserts a silent LFE channel for analysis and reports the real source legs. It does not otherwise remap; if your file is in a different order, flag and relabel before measuring.
 
 ## Non-goals — ever
 

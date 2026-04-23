@@ -55,6 +55,34 @@ def test_split_51_seed_path_loudness_succeeds(tmp_path: Path) -> None:
     assert file_report["channel_config_actual"] == "5.1"
 
 
+def test_split_50_seed_path_loudness_pads_lfe_and_reports_real_members(tmp_path: Path) -> None:
+    data = exact_sum_components(base_seed=SEED + 1011, n_channels=6)
+    family = write_split_from_array(
+        tmp_path / "case",
+        "DX 5.0",
+        "5.0",
+        data["dx"][:, [0, 1, 2, 4, 5]],
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness",
+        str(family["L"]),
+        "--spec", "netflix_51",
+        "--json-only",
+    ])
+    assert result.exit_code in (0, 1), result.output
+    payload = json.loads(result.output)
+    file_report = payload["files"][0]
+    assert file_report["source_kind"] == "split_mono"
+    assert file_report["presentation_label"] == "5.0"
+    assert file_report["member_legs"] == ["L", "R", "C", "Ls", "Rs"]
+    assert len(file_report["source_paths"]) == 5
+    assert file_report["channel_count"] == 6
+    assert file_report["channel_config_actual"] == "5.1"
+    assert file_report["channel_config_hint"] == "5.0"
+
+
 def test_incomplete_split_family_loudness_fails_cleanly(tmp_path: Path) -> None:
     data = exact_sum_components(base_seed=SEED + 102, n_channels=6)
     family = write_split_from_array(tmp_path / "case", "Comp 5.1", "5.1", data["pm"])

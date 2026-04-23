@@ -39,6 +39,19 @@ def test_read_logical_asset_assembles_51_split_in_smpte_order(tmp_path: Path) ->
         np.testing.assert_allclose(audio.samples[:, index], float(expected), atol=1e-6)
 
 
+def test_read_logical_asset_pads_50_split_lfe_as_silence(tmp_path: Path) -> None:
+    write_split_family(tmp_path, "DX 5.0", "5.0", values=[0.1, 0.2, 0.3, 0.5, 0.6])
+
+    asset = _discover_one(tmp_path)
+    audio = read_logical_asset(asset)
+
+    assert asset.member_legs == ["L", "R", "C", "Ls", "Rs"]
+    assert audio.channel_count == 6
+    assert audio.channel_config_actual == "5.1"
+    for index, expected in enumerate([0.1, 0.2, 0.3, 0.0, 0.5, 0.6]):
+        np.testing.assert_allclose(audio.samples[:, index], float(expected), atol=1e-6)
+
+
 def test_read_logical_asset_assembles_71_split_in_smpte_order(tmp_path: Path) -> None:
     write_split_family(tmp_path, "Comp 7.1", "7.1", values=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
 

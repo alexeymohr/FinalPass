@@ -1610,6 +1610,8 @@ def _validate_channel_label_hints(items: list[tuple[ClassifiedLogicalAsset, Audi
         actual = asset.logical_asset.channel_config_actual
         if hint == actual:
             continue
+        if hint == "5.0" and actual == "5.1":
+            continue
         actual_label = actual if actual is not None else f"unsupported {audio.channel_count}ch"
         raise ChannelConfigLabelMismatch(
             f"{audio.path.name} hints {hint} but header is {actual_label}."

@@ -105,7 +105,9 @@ def source_summary(item: Any) -> str:
     parts = [source_kind_label(display.source_kind)]
     if display.channel_config_actual:
         parts.append(display.channel_config_actual)
-    if display.presentation_label and display.presentation_label != display.channel_config_actual:
+    if _is_five_point_zero_source(display):
+        parts.append("5.0 source; silent LFE")
+    elif display.presentation_label and display.presentation_label != display.channel_config_actual:
         parts.append(display.presentation_label)
     if display.source_kind == "split_mono":
         count = max(len(display.source_paths), len(display.member_legs), 1)
@@ -121,7 +123,10 @@ def asset_menu_label(item: Any) -> str:
         parts.append(display.role)
     parts.append(logical_asset_display_name(item))
     if display.channel_config_actual:
-        parts.append(display.channel_config_actual)
+        if _is_five_point_zero_source(display):
+            parts.append("5.0 source -> 5.1")
+        else:
+            parts.append(display.channel_config_actual)
     if display.source_kind == "split_mono":
         count = max(len(display.source_paths), len(display.member_legs), 1)
         noun = "mono file" if count == 1 else "mono files"
@@ -192,6 +197,14 @@ def _to_display_item(item: Any) -> DisplayItem:
         presentation_label=getattr(item, "presentation_label", None),
         channel_config_actual=getattr(item, "channel_config_actual", None),
         role=getattr(item, "role", None),
+    )
+
+
+def _is_five_point_zero_source(display: DisplayItem) -> bool:
+    return (
+        display.source_kind == "split_mono"
+        and display.channel_config_actual == "5.1"
+        and set(display.member_legs) == {"L", "R", "C", "Ls", "Rs"}
     )
 
 

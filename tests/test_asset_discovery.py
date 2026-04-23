@@ -64,6 +64,35 @@ def test_seed_path_resolution_from_split_member_resolves_full_family(tmp_path: P
     assert asset.canonical_path == members["L"]
 
 
+def test_50_split_family_discovers_as_51_with_missing_lfe_provenance(tmp_path: Path) -> None:
+    members = write_split_family(tmp_path, "DX 5.0", "5.0")
+
+    result = discover_logical_assets_in_folder(tmp_path)
+
+    assert result.errors == []
+    assert len(result.assets) == 1
+    asset = result.assets[0]
+    assert asset.channel_config_actual == "5.1"
+    assert asset.channel_config_hint == "5.0"
+    assert asset.presentation_label == "5.0"
+    assert asset.member_legs == ["L", "R", "C", "Ls", "Rs"]
+    assert asset.source_paths == [members[leg] for leg in ["L", "R", "C", "Ls", "Rs"]]
+
+
+def test_51_split_family_missing_only_lfe_discovers_as_50_source(tmp_path: Path) -> None:
+    members = write_split_family(tmp_path, "DX 5.1", "5.1")
+    members["LFE"].unlink()
+
+    result = discover_logical_assets_in_folder(tmp_path)
+
+    assert result.errors == []
+    assert len(result.assets) == 1
+    asset = result.assets[0]
+    assert asset.channel_config_actual == "5.1"
+    assert asset.presentation_label == "5.0"
+    assert asset.member_legs == ["L", "R", "C", "Ls", "Rs"]
+
+
 def test_missing_leg_produces_clean_discovery_error(tmp_path: Path) -> None:
     members = write_split_family(tmp_path, "Comp 5.1", "5.1")
     members["Rs"].unlink()

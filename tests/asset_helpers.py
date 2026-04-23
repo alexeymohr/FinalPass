@@ -8,6 +8,7 @@ from tests.audio_cases import SR, write_audio
 
 LEG_ORDERS = {
     "stereo": ["L", "R"],
+    "5.0": ["L", "R", "C", "Ls", "Rs"],
     "5.1": ["L", "R", "C", "LFE", "Ls", "Rs"],
     "7.1": ["L", "R", "C", "LFE", "Ls", "Rs", "Lss", "Rss"],
 }
