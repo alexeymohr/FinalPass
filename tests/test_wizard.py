@@ -83,6 +83,30 @@ def test_wizard_loudness_flow_succeeds_on_split_asset(tmp_path: Path) -> None:
     assert "Produced artifacts:" in result.output
 
 
+def test_wizard_loudness_family_selection_auto_resolves_matching_spec(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="5.1",
+        write_roles=("pm",),
+        base_seed=SEED + 2015,
+    )
+    out_dir = tmp_path / "out"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["wizard", str(folder), "--out", str(out_dir)],
+        input="1\n2\n2\n1\n1\n1\n3\n",
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    assert payload["spec"]["name"] == "netflix_51"
+    assert payload["files"][0]["channel_config_actual"] == "5.1"
+    assert "Loudness standard: Netflix Original (auto -> netflix_51 for 5.1 asset layout)" in result.output
+
+
 def test_wizard_null_flow_succeeds_with_auto_stem_plan(tmp_path: Path) -> None:
     folder = tmp_path / "delivery"
     build_split_group(
@@ -369,7 +393,7 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
     result = runner.invoke(
         main,
         ["wizard", str(folder), "--out", str(out_dir)],
-        input="1\n4\n1\n1\n1\n3\n",
+        input="1\n3\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
     assert "Mode: prep" in result.output
@@ -395,6 +419,38 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
         for group in payload["groups"]
         for asset in group["assets"]
     )
+
+
+def test_wizard_all_family_selection_uses_best_supported_printmaster_layout(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="stereo",
+        write_roles=("pm",),
+        base_seed=SEED + 2115,
+    )
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="5.1",
+        write_roles=("pm", "dx", "mx", "fx"),
+        base_seed=SEED + 2120,
+    )
+
+    out_dir = tmp_path / "out"
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["wizard", str(folder), "--out", str(out_dir)],
+        input="1\n1\n2\n1\n1\n1\n3\n",
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    assert payload["command"] == "all"
+    assert payload["spec"]["name"] == "ebu_r128"
+    assert payload["groups"][0]["files"][0]["channel_config_actual"] == "stereo"
+    assert "Loudness standard: EBU R128 (auto -> ebu_r128 for stereo printmaster layout)" in result.output
 
 
 def test_job_spinner_writes_dot_progress_on_tty(monkeypatch) -> None:

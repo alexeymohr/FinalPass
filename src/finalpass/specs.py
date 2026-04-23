@@ -9,6 +9,7 @@ Specs are Pydantic v2 models loaded from YAML. Resolution order:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 from typing import Literal
@@ -26,6 +27,44 @@ CHANNEL_COUNTS: dict[str, int] = {
     "5.1": 6,
     "7.1": 8,
 }
+
+_BUNDLED_SPEC_FAMILY_KEYS: dict[str, str] = {
+    "atsc_a85": "atsc_a85",
+    "atsc_a85_51": "atsc_a85",
+    "ebu_r128": "ebu_r128",
+    "netflix_stereo": "netflix",
+    "netflix_51": "netflix",
+    "streaming_-14": "streaming_-14",
+}
+_BUNDLED_SPEC_FAMILY_DISPLAY_NAMES: dict[str, str] = {
+    "atsc_a85": "ATSC A/85",
+    "ebu_r128": "EBU R128",
+    "netflix": "Netflix Original",
+    "streaming_-14": "Streaming -14 LUFS",
+}
+
+
+@dataclass(frozen=True)
+class BundledSpecFamily:
+    key: str
+    display_name: str
+    specs: tuple[Spec, ...]
+
+    @property
+    def supported_channel_configs(self) -> tuple[str, ...]:
+        return tuple(sorted(
+            {spec.channel_config for spec in self.specs},
+            key=lambda layout: CHANNEL_COUNTS[layout],
+        ))
+
+    def supports_channel_config(self, channel_config: str) -> bool:
+        return any(spec.channel_config == channel_config for spec in self.specs)
+
+    def best_spec_for_channel_configs(self, channel_configs: set[str] | frozenset[str]) -> Spec | None:
+        matches = [spec for spec in self.specs if spec.channel_config in channel_configs]
+        if not matches:
+            return None
+        return max(matches, key=lambda spec: CHANNEL_COUNTS[spec.channel_config])
 
 
 class Tolerance(BaseModel):
@@ -134,3 +173,36 @@ def list_bundled() -> list[Spec]:
         spec, _, _ = load_spec(name)
         out.append(spec)
     return out
+
+
+def list_bundled_families() -> list[BundledSpecFamily]:
+    grouped: dict[str, list[Spec]] = {}
+    display_names: dict[str, str] = {}
+    family_order: list[str] = []
+
+    for spec in list_bundled():
+        family_key = _bundled_family_key(spec)
+        if family_key not in grouped:
+            grouped[family_key] = []
+            display_names[family_key] = _bundled_family_display_name(spec, family_key)
+            family_order.append(family_key)
+        grouped[family_key].append(spec)
+
+    return [
+        BundledSpecFamily(
+            key=family_key,
+            display_name=display_names[family_key],
+            specs=tuple(grouped[family_key]),
+        )
+        for family_key in family_order
+    ]
+
+
+def _bundled_family_key(spec: Spec) -> str:
+    return _BUNDLED_SPEC_FAMILY_KEYS.get(spec.name, spec.name)
+
+
+def _bundled_family_display_name(spec: Spec, family_key: str) -> str:
+    if family_key in _BUNDLED_SPEC_FAMILY_DISPLAY_NAMES:
+        return _BUNDLED_SPEC_FAMILY_DISPLAY_NAMES[family_key]
+    return spec.display_name.split(" — ", 1)[0].strip()

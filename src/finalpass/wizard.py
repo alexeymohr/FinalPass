@@ -39,7 +39,7 @@ from .null_test import (
 )
 from .presentation import asset_menu_label, logical_asset_display_name, source_summary
 from .prep_folders import PrepLayout, PrepScanResult, create_prep_layout, detect_prep_layout, scan_prep_layout
-from .specs import Spec, list_bundled, load_spec
+from .specs import BundledSpecFamily, CHANNEL_COUNTS, Spec, list_bundled_families, load_spec
 from .wizard_io import Choice, WizardBack, WizardQuit, choose_many, choose_one, print_section, prompt_text
 
 WizardAction = Literal["job_menu", "choose_folder", "exit"]
@@ -86,7 +86,7 @@ class JobExecutionResult:
 class SpecSelection:
     spec_name: str
     spec: Spec
-    source_label: str
+    review_label: str
 
 
 def run_wizard(*, folder: Path | None, out_dir: Path, fps: float) -> None:
@@ -280,7 +280,7 @@ def _job_menu(folder_context: FolderContext) -> Literal["all", "loudness", "null
 def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float) -> FlowResult:
     while True:
         try:
-            spec_selection = _choose_spec_for_all()
+            spec_selection = _choose_spec_for_all(folder_context)
         except WizardBack:
             return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps)
 
@@ -297,10 +297,10 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
                     break
 
                 try:
-                    _review_and_confirm([
+                        _review_and_confirm([
                         "Job: all",
                         *_context_review_lines(folder_context),
-                        f"Spec: {spec_selection.source_label}",
+                        f"Loudness standard: {spec_selection.review_label}",
                         f"Output: {out_dir}",
                         f"FPS: {fps:g}",
                     ])
@@ -372,7 +372,7 @@ def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, defa
                                     *_context_review_lines(folder_context),
                                     f"Group: {group_id}",
                                     _review_asset_line("Asset", asset),
-                                    f"Spec: {spec_selection.source_label}",
+                                    f"Loudness standard: {spec_selection.review_label}",
                                     _review_asset_line("DX asset", dx_asset),
                                     f"Output: {out_dir}",
                                     f"FPS: {fps:g}",
@@ -785,32 +785,68 @@ def _choose_asset(
     return choose_one(title, options, auto_select_notice=auto_select_notice)
 
 
-def _choose_spec_for_all() -> SpecSelection:
-    bundled = list_bundled()
+def _choose_spec_for_all(folder_context: FolderContext) -> SpecSelection:
+    detected_layouts = _detected_printmaster_layouts(folder_context)
+    families = [
+        family for family in list_bundled_families()
+        if family.best_spec_for_channel_configs(detected_layouts) is not None
+    ]
     options = [
-        Choice(f"{spec.name} — {spec.display_name} — {spec.channel_config}", spec.name)
-        for spec in bundled
+        Choice(_family_menu_label_for_context(family, detected_layouts), family)
+        for family in families
     ]
     options.append(Choice("Enter a custom spec path", "__custom__"))
-    choice = choose_one("Choose a spec.", options)
-    return _resolve_spec_selection(choice)
+    choice = choose_one(
+        "Choose a loudness standard. FinalPass will auto-match the correct spec layout to the detected printmaster.",
+        options,
+    )
+    return _resolve_spec_selection(choice, auto_channel_configs=detected_layouts, auto_scope="printmaster layout")
 
 
 def _choose_spec_for_loudness(asset: ClassifiedLogicalAsset) -> SpecSelection:
-    bundled = [spec for spec in list_bundled() if spec.channel_config == asset.logical_asset.channel_config_actual]
+    asset_layout = asset.logical_asset.channel_config_actual
+    families = [
+        family for family in list_bundled_families()
+        if family.supports_channel_config(asset_layout)
+    ]
     options = [
-        Choice(f"{spec.name} — {spec.display_name} — {spec.channel_config}", spec.name)
-        for spec in bundled
+        Choice(_family_menu_label_for_asset(family), family)
+        for family in families
     ]
     options.append(Choice("Enter a custom spec path", "__custom__"))
-    choice = choose_one("Choose a spec.", options)
-    return _resolve_spec_selection(choice)
+    choice = choose_one(
+        "Choose a loudness standard. FinalPass will auto-match the correct spec layout to the selected asset.",
+        options,
+    )
+    return _resolve_spec_selection(choice, auto_channel_configs={asset_layout}, auto_scope="asset layout")
 
 
-def _resolve_spec_selection(choice: str) -> SpecSelection:
+def _resolve_spec_selection(
+    choice,
+    *,
+    auto_channel_configs: set[str] | None = None,
+    auto_scope: str | None = None,
+) -> SpecSelection:
+    if isinstance(choice, BundledSpecFamily):
+        if not auto_channel_configs:
+            raise FinalPassError("Wizard spec-family selection requires a detected channel layout.")
+        spec = choice.best_spec_for_channel_configs(auto_channel_configs)
+        if spec is None:
+            detected = ", ".join(_sort_channel_configs(auto_channel_configs))
+            raise FinalPassError(
+                f"{choice.display_name} has no bundled preset matching the detected {auto_scope or 'layout'} "
+                f"({detected})."
+            )
+        scope = auto_scope or "layout"
+        return SpecSelection(
+            spec_name=spec.name,
+            spec=spec,
+            review_label=f"{choice.display_name} (auto -> {spec.name} for {spec.channel_config} {scope})",
+        )
+
     if choice != "__custom__":
         spec, source, path = load_spec(choice)
-        return SpecSelection(spec_name=choice, spec=spec, source_label=f"{spec.name} ({source}, {path})")
+        return SpecSelection(spec_name=choice, spec=spec, review_label=f"{spec.name} ({source}, {path})")
 
     while True:
         try:
@@ -822,7 +858,35 @@ def _resolve_spec_selection(choice: str) -> SpecSelection:
         except FinalPassError as exc:
             click.echo(f"Spec error: {exc}")
             continue
-        return SpecSelection(spec_name=str(path), spec=spec, source_label=f"{spec.name} ({source}, {path})")
+        return SpecSelection(spec_name=str(path), spec=spec, review_label=f"{spec.name} ({source}, {path})")
+
+
+def _detected_printmaster_layouts(folder_context: FolderContext) -> set[str]:
+    return {
+        asset.logical_asset.channel_config_actual
+        for assets in folder_context.scan.groups.values()
+        for asset in assets
+        if asset.role == "pm"
+    }
+
+
+def _family_menu_label_for_context(family: BundledSpecFamily, detected_layouts: set[str]) -> str:
+    resolved = family.best_spec_for_channel_configs(detected_layouts)
+    if resolved is None:
+        return family.display_name
+    if len(family.supported_channel_configs) == 1:
+        return f"{family.display_name} — {resolved.channel_config} only"
+    return f"{family.display_name} — auto {resolved.channel_config}"
+
+
+def _family_menu_label_for_asset(family: BundledSpecFamily) -> str:
+    if len(family.supported_channel_configs) == 1:
+        return f"{family.display_name} — {family.supported_channel_configs[0]} only"
+    return family.display_name
+
+
+def _sort_channel_configs(channel_configs: set[str]) -> list[str]:
+    return sorted(channel_configs, key=lambda layout: CHANNEL_COUNTS[layout])
 
 
 def _choose_optional_dx_asset(

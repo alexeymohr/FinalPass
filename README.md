@@ -49,6 +49,7 @@ Wizard note:
 - For messy deliveries, the preferred path is prep mode: the wizard can create `FinalPass Prep/`, let you move/copy the stems you want into fixed 5.1/stereo buckets, and then analyze only those populated prep buckets.
 - If a valid `FinalPass Prep/` layout already exists in the chosen folder, the wizard auto-resumes prep mode and ignores files outside that prep root.
 - The wizard uses existing default null / M&E tuning only. Advanced parameter tuning still lives in the direct CLI commands.
+- For bundled loudness presets, the wizard asks for the overall loudness standard (`ATSC A/85`, `Netflix Original`, etc.) and auto-resolves the concrete stereo / 5.1 preset from the selected asset or detected printmaster layout. The direct CLI still takes exact `--spec` names.
 
 Standalone input note:
 - `finalpass loudness`, `finalpass null`, and `finalpass me` accept either an interleaved WAV/BWF path or a seed path to one member of a canonical split-mono family in the same directory.
