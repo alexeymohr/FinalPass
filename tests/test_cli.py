@@ -44,7 +44,7 @@ def test_loudness_pass_exits_zero(pink_stereo_10s: Path, tmp_path: Path) -> None
     assert html_path.exists()
     assert not aaf_path.exists()
     data = json.loads(report_path.read_text())
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == 3
     assert data["spec"]["name"] == "ebu_r128"
     assert data["files"][0]["role"] == "primary"
     assert "report.json" in result.output
@@ -73,7 +73,7 @@ def test_json_only_is_parseable(pink_stereo_10s: Path, tmp_path: Path) -> None:
     ])
     assert result.exit_code in (0, 1)
     data = json.loads(result.output)
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == 3
     assert not (tmp_path / "out" / "report.json").exists()
     assert not (tmp_path / "out" / "report.html").exists()
     assert not (tmp_path / "out" / "markers.aaf").exists()
@@ -90,7 +90,7 @@ def test_channel_mismatch_exits_two(pink_stereo_10s: Path, tmp_path: Path) -> No
     assert "5.1" in result.output or "6 ch" in result.output
 
 
-def test_loudness_v2_includes_standalone_provenance_fields(pink_stereo_10s: Path, tmp_path: Path) -> None:
+def test_loudness_v3_includes_standalone_provenance_fields(pink_stereo_10s: Path, tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(main, [
         "loudness", str(pink_stereo_10s),
@@ -100,7 +100,7 @@ def test_loudness_v2_includes_standalone_provenance_fields(pink_stereo_10s: Path
     ])
     assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == 3
     file_report = data["files"][0]
     assert file_report["source_kind"] == "interleaved"
     assert file_report["source_paths"] == [str(pink_stereo_10s.resolve())]
@@ -164,7 +164,7 @@ def test_loudness_command_routes_through_shared_runner(monkeypatch, pink_stereo_
         calls["fps"] = fps
         return Report(
             finalpass_version=__version__,
-            schema_version=2,
+            schema_version=3,
             run_id="test-run",
             run_started_at="2026-04-22T00:00:00Z",
             spec=SpecRef(name="ebu_r128", display_name="EBU R128", source="bundled"),
@@ -193,7 +193,7 @@ def test_loudness_command_routes_artifact_writes_through_shared_seam(monkeypatch
     out_dir = tmp_path / "out"
     report = Report(
         finalpass_version=__version__,
-        schema_version=2,
+        schema_version=3,
         run_id="test-run",
         run_started_at="2026-04-22T00:00:00Z",
         spec=SpecRef(name="ebu_r128", display_name="EBU R128", source="bundled"),
@@ -227,7 +227,7 @@ def test_loudness_command_routes_artifact_writes_through_shared_seam(monkeypatch
     assert result.exit_code == 0, result.output
     assert calls["report"] == report
     assert calls["out_dir"] == out_dir
-    assert '"schema_version": 2' in calls["payload"]
+    assert '"schema_version": 3' in calls["payload"]
 
 
 def test_loudness_repeated_runs_reserve_new_report_filenames(pink_stereo_10s: Path, tmp_path: Path) -> None:

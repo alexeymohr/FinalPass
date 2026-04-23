@@ -94,6 +94,10 @@
     <h4>Checks</h4>
     {{ checks_table(file_report.checks) }}
   </div>
+  {% if file_report.flags %}
+  {{ flagged_timeline(timeline_lane(file_report.flags, sample_rate=file_report.sample_rate, duration_seconds=file_report.duration_seconds), "True-peak flagged-region timeline") }}
+  {{ flagged_table(file_report.flags, "Peak true peak") }}
+  {% endif %}
   {% if file_report.errors %}
   <div>
     <h4>File errors</h4>
@@ -178,8 +182,24 @@
         <td class="mono">{{ flag.start_tc }}</td>
         <td class="mono">{{ flag.end_tc }}</td>
         <td>{{ flag.duration_seconds|fmt_seconds(2) }}</td>
-        <td>{% if flag.metric == "dialog_bleed_score" %}{{ flag.value|fmt_float(2) }}{% else %}{{ flag.value|fmt_float(1) }} dBFS{% endif %}</td>
-        <td>{% if flag.metric == "dialog_bleed_score" %}{{ flag.threshold|fmt_float(2) }}{% else %}{{ flag.threshold|fmt_float(1) }} dBFS{% endif %}</td>
+        <td>
+          {% if flag.metric == "dialog_bleed_score" %}
+            {{ flag.value|fmt_float(2) }}
+          {% elif flag.metric == "true_peak_dbtp" %}
+            {{ flag.value|fmt_float(1) }} dBTP
+          {% else %}
+            {{ flag.value|fmt_float(1) }} dBFS
+          {% endif %}
+        </td>
+        <td>
+          {% if flag.metric == "dialog_bleed_score" %}
+            {{ flag.threshold|fmt_float(2) }}
+          {% elif flag.metric == "true_peak_dbtp" %}
+            {{ flag.threshold|fmt_float(1) }} dBTP
+          {% else %}
+            {{ flag.threshold|fmt_float(1) }} dBFS
+          {% endif %}
+        </td>
         <td>{{ flag.detail }}</td>
       </tr>
       {% endfor %}

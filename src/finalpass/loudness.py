@@ -21,6 +21,7 @@ BS.1770-4 Annex 2 permits; inter-sample peaks stay within ~0.1 dB.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
 from typing import Literal
 import warnings
@@ -32,11 +33,13 @@ from scipy.signal import resample_poly
 
 from .audio_io import AudioFile
 from .errors import LoudnessError
-from .models import CheckResult, Measurements
+from .models import CheckResult, FlaggedRegion, Measurements
 from .specs import Spec
+from .timecode import samples_to_tc
 
 ABS_GATE_LUFS = -70.0
 TP_OVERSAMPLE_RATIO = 4
+TP_OVER_MERGE_GAP_SECONDS = 0.001
 
 # BS.1770-4 channel weights (up to 7.1). SMPTE order: L R C LFE Ls Rs Lss Rss.
 # LFE is dropped (weight 0); surround channels get 1.41.
@@ -46,6 +49,13 @@ _CHANNEL_WEIGHTS: dict[int, list[float]] = {
     6: [1.0, 1.0, 1.0, 0.0, 1.41, 1.41],
     8: [1.0, 1.0, 1.0, 0.0, 1.41, 1.41, 1.41, 1.41],
 }
+
+
+@dataclass(frozen=True)
+class _TruePeakRegion:
+    start_oversampled: int
+    end_oversampled: int
+    peak_amplitude: float
 
 
 class LoudnessMeasurement(BaseModel):
@@ -114,11 +124,7 @@ def _true_peak(data: np.ndarray, sr: int) -> tuple[float | None, str | None]:
         signal = data[:, ch]
         if signal.size == 0:
             continue
-        # Kaiser-window polyphase upsample. resample_poly chooses an FIR of
-        # appropriate order for the given (up, down, window) combination.
-        oversampled = resample_poly(
-            signal, up=TP_OVERSAMPLE_RATIO, down=1, window=("kaiser", 14.0)
-        )
+        oversampled = _oversampled_true_peak(signal)
         ch_peak = float(np.max(np.abs(oversampled)))
         if ch_peak > peak:
             peak = ch_peak
@@ -126,6 +132,119 @@ def _true_peak(data: np.ndarray, sr: int) -> tuple[float | None, str | None]:
     if peak <= 0.0:
         return None, "silent_or_below_gate"
     return 20.0 * math.log10(peak), None
+
+
+def true_peak_over_flags(
+    audio: AudioFile,
+    *,
+    threshold_dbtp: float,
+    fps: float,
+) -> list[FlaggedRegion]:
+    """Return merged timed regions where 4× true peak exceeds ``threshold_dbtp``."""
+    if audio.data.size == 0:
+        return []
+
+    regions = _collect_true_peak_over_regions(
+        audio.data,
+        sample_rate=audio.sample_rate,
+        threshold_dbtp=threshold_dbtp,
+    )
+    flags: list[FlaggedRegion] = []
+    for region in regions:
+        peak_dbtp = 20.0 * math.log10(region.peak_amplitude)
+        start_sample = region.start_oversampled // TP_OVERSAMPLE_RATIO
+        end_sample = max(
+            start_sample + 1,
+            int(math.ceil(region.end_oversampled / TP_OVERSAMPLE_RATIO)),
+        )
+        flags.append(
+            FlaggedRegion(
+                code="LOUDNESS",
+                metric="true_peak_dbtp",
+                value=peak_dbtp,
+                threshold=threshold_dbtp,
+                start_sample=start_sample,
+                end_sample=end_sample,
+                start_tc=samples_to_tc(start_sample, audio.sample_rate, fps),
+                end_tc=samples_to_tc(end_sample, audio.sample_rate, fps),
+                duration_seconds=(end_sample - start_sample) / float(audio.sample_rate),
+                detail=f"over by {peak_dbtp - threshold_dbtp:.1f} dB",
+            )
+        )
+    return flags
+
+
+def _oversampled_true_peak(signal: np.ndarray) -> np.ndarray:
+    # Kaiser-window polyphase upsample. resample_poly chooses an FIR of
+    # appropriate order for the given (up, down, window) combination.
+    return resample_poly(signal, up=TP_OVERSAMPLE_RATIO, down=1, window=("kaiser", 14.0))
+
+
+def _collect_true_peak_over_regions(
+    data: np.ndarray,
+    *,
+    sample_rate: int,
+    threshold_dbtp: float,
+) -> list[_TruePeakRegion]:
+    threshold_amplitude = 10.0 ** (threshold_dbtp / 20.0)
+    regions: list[_TruePeakRegion] = []
+    for ch in range(data.shape[1]):
+        signal = data[:, ch]
+        if signal.size == 0:
+            continue
+        oversampled = _oversampled_true_peak(signal)
+        magnitude = np.abs(oversampled)
+        over_indices = np.flatnonzero(magnitude > threshold_amplitude)
+        if over_indices.size == 0:
+            continue
+        regions.extend(_regions_from_indices(over_indices, magnitude))
+    return _merge_true_peak_regions(regions, sample_rate=sample_rate)
+
+
+def _regions_from_indices(
+    over_indices: np.ndarray,
+    magnitude: np.ndarray,
+) -> list[_TruePeakRegion]:
+    if over_indices.size == 0:
+        return []
+
+    split_points = np.where(np.diff(over_indices) > 1)[0] + 1
+    groups = np.split(over_indices, split_points)
+    return [
+        _TruePeakRegion(
+            start_oversampled=int(group[0]),
+            end_oversampled=int(group[-1]) + 1,
+            peak_amplitude=float(np.max(magnitude[int(group[0]) : int(group[-1]) + 1])),
+        )
+        for group in groups
+        if group.size
+    ]
+
+
+def _merge_true_peak_regions(
+    regions: list[_TruePeakRegion],
+    *,
+    sample_rate: int,
+) -> list[_TruePeakRegion]:
+    if not regions:
+        return []
+
+    merged: list[_TruePeakRegion] = []
+    gap = int(round(TP_OVER_MERGE_GAP_SECONDS * sample_rate * TP_OVERSAMPLE_RATIO))
+    regions = sorted(regions, key=lambda region: region.start_oversampled)
+    current = regions[0]
+    for region in regions[1:]:
+        if region.start_oversampled <= current.end_oversampled + gap:
+            current = _TruePeakRegion(
+                start_oversampled=current.start_oversampled,
+                end_oversampled=max(current.end_oversampled, region.end_oversampled),
+                peak_amplitude=max(current.peak_amplitude, region.peak_amplitude),
+            )
+            continue
+        merged.append(current)
+        current = region
+    merged.append(current)
+    return merged
 
 
 def _make_meter(sr: int) -> pyln.Meter:

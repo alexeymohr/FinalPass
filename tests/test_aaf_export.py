@@ -10,7 +10,15 @@ from finalpass import aaf_export
 from finalpass.cli import main
 from finalpass.errors import AAFExportError
 from finalpass.models import AllReport
-from tests.audio_cases import SEED, SR, build_two_episodes, exact_sum_components, me_check_components, write_audio
+from tests.audio_cases import (
+    SEED,
+    SR,
+    build_two_episodes,
+    exact_sum_components,
+    me_check_components,
+    true_peak_over_program,
+    write_audio,
+)
 
 
 def _write_null_case(
@@ -52,6 +60,15 @@ def _write_me_case(
     }
 
 
+def _write_tp_case(
+    root: Path,
+    *,
+    filename: str,
+) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    return write_audio(root / filename, true_peak_over_program())
+
+
 def _read_marker_aaf(path: Path) -> dict[str, object]:
     with aaf2.open(str(path), "r") as handle:
         composition = next(handle.content.compositionmobs())
@@ -80,6 +97,34 @@ def _read_marker_aaf(path: Path) -> dict[str, object]:
             "edit_rate": str(slot.edit_rate),
             "markers": markers,
         }
+
+
+def test_standalone_loudness_tp_only_fail_writes_aaf(tmp_path: Path) -> None:
+    file_path = _write_tp_case(tmp_path / "case", filename="tp_over_primary.wav")
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "loudness",
+        str(file_path),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 1, result.output
+    aaf_path = out_dir / "markers.aaf"
+    assert aaf_path.exists()
+    parsed = _read_marker_aaf(aaf_path)
+    markers = parsed["markers"]
+    assert len(markers) == 1
+    marker = markers[0]
+    assert "[LOUDNESS]" in marker["title"]
+    assert "true_peak_dbtp" in marker["title"]
+    assert "over by" in marker["title"]
+    assert marker["title"] == marker["annotation"]
+    assert marker["position"] > 0
+    assert marker["length"] >= 1
+    assert marker["time"].startswith("00:00:05:")
+    assert marker["user_comments"]["Label"] == "[1] FAIL: true peak over"
+    assert "[LOUDNESS]" in marker["user_comments"]["Detail"]
 
 
 def test_standalone_null_failing_case_writes_aaf(tmp_path: Path) -> None:
@@ -175,6 +220,22 @@ def test_clean_standalone_runs_write_no_aaf(tmp_path: Path, command_name: str) -
     assert "No exportable timed markers" in result.output
 
 
+def test_clean_loudness_run_writes_no_aaf(pink_stereo_10s: Path, tmp_path: Path) -> None:
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "loudness",
+        str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code in (0, 1), result.output
+    assert (out_dir / "report.json").exists()
+    assert (out_dir / "report.html").exists()
+    assert not (out_dir / "markers.aaf").exists()
+    assert "No exportable timed markers" in result.output
+
+
 def test_all_run_writes_combined_aaf(tmp_path: Path) -> None:
     folder = build_two_episodes(tmp_path / "delivery", e04_null_defect=True, e04_me_bleed_defect=True)
     runner = CliRunner()
@@ -199,6 +260,46 @@ def test_all_run_writes_combined_aaf(tmp_path: Path) -> None:
     assert any("S01E04" in marker["title"] for marker in markers)
     assert not any("[LOUDNESS]" in marker["title"] for marker in markers)
     assert all("Detail" in marker["user_comments"] for marker in markers)
+
+
+def test_all_run_with_tp_only_group_writes_loudness_aaf(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    _write_tp_case(folder, filename="SHOW_S01E05_PM_STEREO.wav")
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 1, result.output
+    aaf_path = out_dir / "markers.aaf"
+    assert aaf_path.exists()
+    parsed = _read_marker_aaf(aaf_path)
+    markers = parsed["markers"]
+    assert len(markers) == 1
+    marker = markers[0]
+    assert "[LOUDNESS]" in marker["title"]
+    assert "S01E05" in marker["title"]
+    assert "true_peak_dbtp" in marker["title"]
+    assert marker["title"] == marker["annotation"]
+    assert marker["user_comments"]["Label"] == "[1] FAIL: true peak over"
+
+
+def test_clean_all_run_writes_no_aaf(tmp_path: Path) -> None:
+    folder = build_two_episodes(tmp_path / "delivery")
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 0, result.output
+    assert (out_dir / "report.json").exists()
+    assert (out_dir / "report.html").exists()
+    assert not (out_dir / "markers.aaf").exists()
+    assert "No exportable timed markers" in result.output
 
 
 def test_json_only_writes_no_aaf(tmp_path: Path) -> None:
@@ -283,7 +384,7 @@ def test_repeated_aaf_runs_reserve_new_marker_filename(tmp_path: Path) -> None:
 
 
 def test_collect_marker_candidates_from_all_uses_only_timed_flags(tmp_path: Path) -> None:
-    folder = build_two_episodes(tmp_path / "delivery", hot_e04_pm=True, e04_null_defect=True, e04_me_bleed_defect=True)
+    folder = build_two_episodes(tmp_path / "delivery", e04_null_defect=True, e04_me_bleed_defect=True)
     runner = CliRunner()
     result = runner.invoke(main, [
         "all", str(folder),

@@ -52,6 +52,21 @@ class CheckResult(BaseModel):
     error: str | None = None
 
 
+class FlaggedRegion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal["NULL", "ME", "LOUDNESS"]
+    metric: Literal["residual_rms_dbfs", "dialog_bleed_score", "true_peak_dbtp"]
+    value: float
+    threshold: float
+    start_sample: int
+    end_sample: int
+    start_tc: str
+    end_tc: str
+    duration_seconds: float
+    detail: str
+
+
 class FileReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -75,6 +90,7 @@ class FileReport(BaseModel):
     source_paths: list[str] = Field(default_factory=list)
     member_legs: list[str] = Field(default_factory=list)
     presentation_label: str | None = None
+    flags: list[FlaggedRegion] = Field(default_factory=list)
 
 
 class StandaloneFileReport(FileReport):
@@ -97,7 +113,7 @@ class Summary(BaseModel):
 
 
 class Report(BaseModel):
-    """SM-2 `loudness` command report — `schema_version == 2`."""
+    """SM-2 `loudness` command report — `schema_version == 3`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -116,21 +132,6 @@ class GroupError(BaseModel):
 
     type: str
     message: str
-
-
-class FlaggedRegion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    code: Literal["NULL", "ME"]
-    metric: Literal["residual_rms_dbfs", "dialog_bleed_score"]
-    value: float
-    threshold: float
-    start_sample: int
-    end_sample: int
-    start_tc: str
-    end_tc: str
-    duration_seconds: float
-    detail: str
 
 
 class NullSummary(BaseModel):
@@ -290,7 +291,7 @@ class AllSummary(BaseModel):
 
 
 class AllReport(BaseModel):
-    """SM-3 `all` command report — `schema_version == 6`."""
+    """SM-3 `all` command report — `schema_version == 7`."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

@@ -238,16 +238,8 @@ def _timeline_lane(flags: list[FlaggedRegion], *, sample_rate: int, duration_sec
 
 
 def _flag_title(flag: FlaggedRegion) -> str:
-    value_label = (
-        f"{flag.value:.2f}"
-        if flag.metric == "dialog_bleed_score"
-        else f"{flag.value:.1f} dBFS"
-    )
-    threshold_label = (
-        f"{flag.threshold:.2f}"
-        if flag.metric == "dialog_bleed_score"
-        else f"{flag.threshold:.1f} dBFS"
-    )
+    value_label = _flag_numeric_label(flag.value, metric=flag.metric)
+    threshold_label = _flag_numeric_label(flag.threshold, metric=flag.metric)
     return "\n".join([
         f"{flag.code} {flag.metric}",
         f"{flag.start_tc} → {flag.end_tc}",
@@ -256,3 +248,11 @@ def _flag_title(flag: FlaggedRegion) -> str:
         f"threshold: {threshold_label}",
         flag.detail,
     ])
+
+
+def _flag_numeric_label(value: float, *, metric: str) -> str:
+    if metric == "dialog_bleed_score":
+        return f"{value:.2f}"
+    if metric == "true_peak_dbtp":
+        return f"{value:.1f} dBTP"
+    return f"{value:.1f} dBFS"

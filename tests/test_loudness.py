@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from finalpass.audio_io import read_wav
-from finalpass.loudness import measure
+from finalpass.loudness import measure, true_peak_over_flags
+from tests.audio_cases import true_peak_over_program, write_audio
 
 
 def test_pink_stereo_10s_integrated_is_finite(pink_stereo_10s: Path) -> None:
@@ -52,3 +53,17 @@ def test_mono_pink_integrated_finite(mono_10s: Path) -> None:
     m = measure(audio)
     assert m.integrated_lufs is not None
     assert m.true_peak_dbtp is not None
+
+
+def test_true_peak_over_flags_localize_short_burst(tmp_path: Path) -> None:
+    path = write_audio(tmp_path / "tp_over.wav", true_peak_over_program())
+    audio = read_wav(path)
+    flags = true_peak_over_flags(audio, threshold_dbtp=-1.0, fps=23.976)
+    assert len(flags) == 1
+    flag = flags[0]
+    assert flag.code == "LOUDNESS"
+    assert flag.metric == "true_peak_dbtp"
+    assert 4.99 <= flag.start_sample / audio.sample_rate <= 5.01
+    assert flag.end_sample > flag.start_sample
+    assert flag.value > flag.threshold
+    assert "over by" in flag.detail

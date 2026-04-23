@@ -551,6 +551,15 @@ def _render_file_checks(file_report: FileReport) -> None:
     _out_console.print(_file_source_line(file_report))
     _out_console.print(_file_path_line(file_report), soft_wrap=True)
     _out_console.print(_checks_table(file_report))
+    if file_report.flags:
+        _out_console.print(
+            _flagged_regions_table(
+                file_report.flags,
+                title="Loudness Flags",
+                value_header="peak true peak",
+                value_formatter=lambda flag: f"{flag.value:.1f} dBTP",
+            )
+        )
 
 
 def _file_summary_heading(file_report: FileReport) -> str:

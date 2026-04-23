@@ -2,7 +2,7 @@
 
 ## Elevator pitch
 
-One command to QC a sound delivery folder. FinalPass classifies what's there, measures loudness against a named platform spec, nulls the stems against the printmaster to catch gross mix errors, and checks the M&E for dialogue bleed. The current v0.1 release candidate writes a JSON record, a self-contained HTML report, and a conditional AAF of timed markers you can drop onto a Pro Tools marker track and jump directly to flagged null/M&E regions.
+One command to QC a sound delivery folder. FinalPass classifies what's there, measures loudness against a named platform spec, nulls the stems against the printmaster to catch gross mix errors, and checks the M&E for dialogue bleed. The current v0.1 release candidate writes a JSON record, a self-contained HTML report, and a conditional AAF of timed markers you can drop onto a Pro Tools marker track and jump directly to flagged null/M&E or true-peak-over regions.
 
 ## Why it exists
 
@@ -23,11 +23,11 @@ FinalPass is that tool, CLI-first so it can be automated, scripted, and trusted.
 For any normal run, FinalPass writes to `./finalpass-report/`:
 
 - `report.json` — full machine-readable record, the stable contract for downstream tooling.
-- `report.html` — self-contained single file, pass/fail summary, loudness tables, and flagged-region lanes for null and M&E.
-- `markers.aaf` — written only when the run contains exportable timed `null` / `me` flags.
+- `report.html` — self-contained single file, pass/fail summary, loudness tables, and flagged-region lanes for null, M&E, and timed true-peak overs.
+- `markers.aaf` — written only when the run contains exportable timed `null` / `me` flags or true-peak-over regions.
 - `summary.txt` — not a current output artifact.
 
-AAF stays intentionally strict in Phase 6: only persisted timed `null` / `me` flags export. Loudness-only failures, group-level errors, and skipped checks remain JSON/HTML-only because they have no honest timeline positions.
+AAF stays intentionally strict in Phase 6: only persisted timed flags export. That includes `null`, `me`, and timed true-peak-over regions. Integrated/LRA/dialog loudness failures, group-level errors, and skipped checks remain JSON/HTML-only because they have no honest timeline positions.
 
 Exit codes: `0` all pass, `1` failures found, `2` tool error.
 
@@ -54,7 +54,7 @@ Each phase ends with a CLI the user can actually run and verify.
 - **Phase 3 — Stem sum null pass.** `finalpass null` subcommand and integration into `all`.
 - **Phase 4 — M&E dialogue check.** `finalpass me` subcommand and integration into `all`.
 - **Phase 5 — HTML report.** Jinja2 template, inline SVG timelines, self-contained single file.
-- **Phase 6 — AAF marker export.** Complete. One AAF per CLI run, a single marker track, and persisted timed `null` / `me` flags exported as timed comment markers.
+- **Phase 6 — AAF marker export.** Complete. One AAF per CLI run, a single marker track, and persisted timed `null` / `me` / true-peak-over flags exported as timed comment markers.
 - **Phase 7 — Polish.** Complete for the release candidate: CI, examples smoke flow, changelog/checklist, terminal-output cleanup, and `finalpass --version`. The local tag step remains manual after human acceptance.
 
 ## What lives outside this repo

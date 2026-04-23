@@ -36,7 +36,7 @@ from .errors import (
     SampleRateMismatchError,
     UnsupportedChannelConfigError,
 )
-from .loudness import check, measure
+from .loudness import check, measure, true_peak_over_flags
 from .models import (
     AllReport,
     AllSummary,
@@ -96,6 +96,7 @@ def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | Non
         audio = resolved.audio
         m = measure(audio)
         cs = check(m, spec, role="primary")
+        flags = _timed_loudness_flags(audio=audio, checks=cs, fps=fps)
         file_reports.append(StandaloneFileReport(
             path=str(resolved.logical_asset.canonical_path),
             role="primary",
@@ -112,12 +113,14 @@ def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | Non
             source_paths=[str(path) for path in resolved.logical_asset.source_paths],
             member_legs=list(resolved.logical_asset.member_legs),
             presentation_label=resolved.logical_asset.presentation_label,
+            flags=flags,
         ))
 
     if dx_input is not None:
         dx_audio = dx_input.audio
         m = measure(dx_audio)
         cs = check(m, spec, role="dx")
+        flags = _timed_loudness_flags(audio=dx_audio, checks=cs, fps=fps)
         file_reports.append(StandaloneFileReport(
             path=str(dx_input.logical_asset.canonical_path),
             role="dx",
@@ -134,6 +137,7 @@ def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | Non
             source_paths=[str(path) for path in dx_input.logical_asset.source_paths],
             member_legs=list(dx_input.logical_asset.member_legs),
             presentation_label=dx_input.logical_asset.presentation_label,
+            flags=flags,
         ))
 
     all_checks = [c for fr in file_reports for c in fr.checks]
@@ -706,7 +710,7 @@ def _process_group(
     for asset, role in measure_targets:
         try:
             audio = read_classified_audio(asset)
-            fr = _measure_asset_file(asset, audio, spec, role)
+            fr = _measure_asset_file(asset, audio, spec, role, fps=fps)
         except ChannelMismatchError as exc:
             errors.append(GroupError(type="ChannelMismatchError", message=str(exc)))
             continue
@@ -788,6 +792,8 @@ def _measure_asset_file(
     audio: AudioFile,
     spec: Spec,
     role: FileRole,
+    *,
+    fps: float,
 ) -> FileReport:
     if role == "pm":
         _validate_channels([audio], spec)
@@ -799,6 +805,7 @@ def _measure_asset_file(
 
     m = measure(audio)
     cs = check(m, spec, role=check_role)
+    flags = _timed_loudness_flags(audio=audio, checks=cs, fps=fps)
 
     return FileReport(
         path=str(audio.path),
@@ -816,7 +823,20 @@ def _measure_asset_file(
         source_paths=[str(path) for path in asset.logical_asset.source_paths],
         member_legs=list(asset.logical_asset.member_legs),
         presentation_label=asset.logical_asset.presentation_label,
+        flags=flags,
     )
+
+
+def _timed_loudness_flags(
+    *,
+    audio: AudioFile,
+    checks,
+    fps: float,
+):
+    tp_check = next((check for check in checks if check.metric == "true_peak_dbtp"), None)
+    if tp_check is None or tp_check.pass_ is not False or tp_check.limit is None:
+        return []
+    return true_peak_over_flags(audio, threshold_dbtp=tp_check.limit, fps=fps)
 
 
 def _run_group_null_test(

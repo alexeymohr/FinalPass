@@ -10,7 +10,16 @@ from finalpass.cli import main
 from finalpass.jobs import run_all, run_loudness, run_me, run_null
 from finalpass.models import AllReport, MEReport
 from finalpass.report import grouped_templates_present, render_report_html
-from tests.audio_cases import SEED, SR, build_split_group, build_two_episodes, exact_sum_components, me_check_components, write_audio
+from tests.audio_cases import (
+    SEED,
+    SR,
+    build_split_group,
+    build_two_episodes,
+    exact_sum_components,
+    me_check_components,
+    true_peak_over_program,
+    write_audio,
+)
 
 
 def _build_null_fail_report(root: Path):
@@ -53,6 +62,16 @@ def test_render_loudness_html_smoke(pink_stereo_10s: Path) -> None:
     assert "pink_stereo_10s.wav" in html
     assert "Integrated LUFS" in html
     assert "Checks" in html
+
+
+def test_render_loudness_html_shows_true_peak_flags(tmp_path: Path) -> None:
+    path = write_audio(tmp_path / "tp_over_primary.wav", true_peak_over_program())
+    report = run_loudness(files=(path,), spec_name="ebu_r128", dx_file=None, fps=23.976)
+    html = render_report_html(report)
+    assert "True-peak flagged-region timeline" in html
+    assert "LOUDNESS" in html
+    assert "true_peak_dbtp" in html
+    assert "over by" in html
 
 
 def test_render_null_html_smoke(tmp_path: Path) -> None:
@@ -107,6 +126,33 @@ def test_render_all_html_smoke(tmp_path: Path) -> None:
     assert "Measured assets" in html
     assert "Null check" in html
     assert "M&amp;E check" in html
+
+
+def test_render_all_html_shows_true_peak_flags(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    write_audio(folder / "SHOW_S01E05_PM_STEREO.wav", true_peak_over_program())
+    report = run_all(
+        folder=folder,
+        spec_name="ebu_r128",
+        patterns_path=None,
+        include_unclassified=False,
+        fps=23.976,
+        null_window_ms=1000.0,
+        null_hop_ms=100.0,
+        null_threshold_dbfs=-40.0,
+        me_window_ms=500.0,
+        me_hop_ms=100.0,
+        me_band_low_hz=200.0,
+        me_band_high_hz=4000.0,
+        me_corr_threshold=0.65,
+        me_coherence_threshold=0.60,
+        me_dx_gate_dbfs=-45.0,
+        me_me_floor_dbfs=-60.0,
+    )
+    html = render_report_html(report)
+    assert "True-peak flagged-region timeline" in html
+    assert "LOUDNESS" in html
+    assert "S01E05" in html
 
 
 def test_rendered_html_has_no_external_assets(pink_stereo_10s: Path) -> None:

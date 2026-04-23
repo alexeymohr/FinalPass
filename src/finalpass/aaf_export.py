@@ -1,8 +1,8 @@
 """Phase 6 AAF marker export.
 
 The runtime dependency is the ``pyaaf2`` package, which imports as ``aaf2``.
-This module exports only already-persisted timed flags from the ``null`` and
-``me`` report paths; it never reopens audio or recomputes analysis.
+This module exports only already-persisted timed flags from the report model;
+it never reopens audio or recomputes analysis.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import TypeAlias
 
 from .errors import AAFExportError
 from .models import AllReport, FlaggedRegion, Group, MEReport, NullReport, Report
+from .presentation import logical_asset_display_name
 from .timecode import frame_rate_info, sample_to_edit_units
 
 try:  # pragma: no cover - exercised by integration tests
@@ -43,6 +44,7 @@ class MarkerCandidate:
     start_edit_unit: int
     length_edit_units: int
     group_id: str | None = None
+    asset_label: str | None = None
 
 
 def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]:
@@ -50,9 +52,15 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
     candidates: list[MarkerCandidate] = []
 
     if isinstance(report, Report):
-        return []
-
-    if isinstance(report, NullReport):
+        for file_report in report.files:
+            candidates.extend(
+                _candidates_from_flags(
+                    flags=file_report.flags,
+                    sample_rate=file_report.sample_rate,
+                    fps=report.fps,
+                )
+            )
+    elif isinstance(report, NullReport):
         candidates.extend(
             _candidates_from_flags(
                 flags=report.null_test.flags,
@@ -60,6 +68,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                 fps=report.fps,
             )
         )
+
     elif isinstance(report, MEReport):
         candidates.extend(
             _candidates_from_flags(
@@ -73,6 +82,16 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
             sample_rate = _group_sample_rate(group)
             if sample_rate is None:
                 continue
+            for file_report in group.files:
+                candidates.extend(
+                    _candidates_from_flags(
+                        flags=file_report.flags,
+                        sample_rate=file_report.sample_rate,
+                        fps=report.fps,
+                        group_id=group.group_id,
+                        asset_label=logical_asset_display_name(file_report),
+                    )
+                )
             if group.null_test is not None:
                 candidates.extend(
                     _candidates_from_flags(
@@ -97,6 +116,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
         key=lambda candidate: (
             candidate.start_edit_unit,
             candidate.group_id or "",
+            candidate.asset_label or "",
             candidate.code,
             candidate.metric,
         ),
@@ -189,6 +209,7 @@ def _candidates_from_flags(
     sample_rate: int,
     fps: float,
     group_id: str | None = None,
+    asset_label: str | None = None,
 ) -> list[MarkerCandidate]:
     out: list[MarkerCandidate] = []
     for flag in flags:
@@ -196,8 +217,12 @@ def _candidates_from_flags(
         end_edit_unit = sample_to_edit_units(flag.end_sample, sample_rate, fps)
         out.append(
             MarkerCandidate(
-                name=_marker_name(flag.code, group_id=group_id),
-                comment=_marker_comment(flag, group_id=group_id),
+                name=_marker_name(flag.code, group_id=group_id, asset_label=asset_label),
+                comment=_marker_comment(
+                    flag,
+                    group_id=group_id,
+                    asset_label=asset_label,
+                ),
                 code=flag.code,
                 metric=flag.metric,
                 start_sample=flag.start_sample,
@@ -208,6 +233,7 @@ def _candidates_from_flags(
                 start_edit_unit=start_edit_unit,
                 length_edit_units=max(1, end_edit_unit - start_edit_unit),
                 group_id=group_id,
+                asset_label=asset_label,
             )
         )
     return out
@@ -220,13 +246,25 @@ def _group_sample_rate(group: Group) -> int | None:
     return group.files[0].sample_rate if group.files else None
 
 
-def _marker_name(code: str, *, group_id: str | None) -> str:
-    return f"{group_id} {code}" if group_id else code
+def _marker_name(
+    code: str,
+    *,
+    group_id: str | None,
+    asset_label: str | None,
+) -> str:
+    parts = [part for part in (group_id, asset_label, code) if part]
+    return " ".join(parts)
 
 
-def _marker_comment(flag: FlaggedRegion, *, group_id: str | None) -> str:
-    group_context = f"{group_id} — " if group_id else ""
-    return f"[{flag.code}] {flag.metric} {_format_metric_value(flag)} — {group_context}{flag.detail}"
+def _marker_comment(
+    flag: FlaggedRegion,
+    *,
+    group_id: str | None,
+    asset_label: str | None,
+) -> str:
+    context = " — ".join(part for part in (group_id, asset_label) if part)
+    context_prefix = f"{context} — " if context else ""
+    return f"[{flag.code}] {flag.metric} {_format_metric_value(flag)} — {context_prefix}{flag.detail}"
 
 
 def _format_metric_value(flag: FlaggedRegion) -> str:
@@ -240,6 +278,8 @@ def _short_failure_label(candidate: MarkerCandidate) -> str:
         return "null mismatch"
     if candidate.code == "ME":
         return "dialog bleed"
+    if candidate.code == "LOUDNESS":
+        return "true peak over"
     return candidate.metric.replace("_", " ").lower()
 
 

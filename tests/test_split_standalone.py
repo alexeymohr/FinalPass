@@ -24,7 +24,7 @@ def test_split_stereo_seed_path_loudness_succeeds(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     file_report = payload["files"][0]
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert file_report["source_kind"] == "split_mono"
     assert file_report["presentation_label"] == "LtRt"
     assert file_report["member_legs"] == ["L", "R"]
@@ -47,7 +47,7 @@ def test_split_51_seed_path_loudness_succeeds(tmp_path: Path) -> None:
     assert result.exit_code in (0, 1), result.output
     payload = json.loads(result.output)
     file_report = payload["files"][0]
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert file_report["source_kind"] == "split_mono"
     assert file_report["presentation_label"] == "5.1"
     assert file_report["member_legs"] == ["L", "R", "C", "LFE", "Ls", "Rs"]

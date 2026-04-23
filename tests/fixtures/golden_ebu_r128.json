@@ -1,6 +1,6 @@
 {
   "finalpass_version": "0.1.0",
-  "schema_version": 2,
+  "schema_version": 3,
   "spec": {
     "name": "ebu_r128",
     "display_name": "EBU R128 \u2014 stereo (pre-produced)",
@@ -65,7 +65,8 @@
         "pink_stereo_10s.wav"
       ],
       "member_legs": [],
-      "presentation_label": "Stereo"
+      "presentation_label": "Stereo",
+      "flags": []
     }
   ],
   "summary": {

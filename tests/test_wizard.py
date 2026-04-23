@@ -41,7 +41,7 @@ def test_wizard_all_flow_succeeds_on_split_folder(tmp_path: Path) -> None:
     assert report_path.exists()
     assert html_path.exists()
     payload = json.loads(report_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 6
+    assert payload["schema_version"] == 7
     assert payload["command"] == "all"
     assert "Folder summary:" in result.output
     assert "Job: all" in result.output
@@ -69,7 +69,7 @@ def test_wizard_loudness_flow_succeeds_on_split_asset(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["files"][0]["source_kind"] == "split_mono"
     assert payload["files"][0]["member_legs"] == ["L", "R"]
     assert "split mono (2 mono files)" in result.output or "split mono · stereo · LtRt · 2 mono files" in result.output
@@ -205,7 +205,7 @@ def test_wizard_discovery_errors_can_be_viewed_and_continue(tmp_path: Path) -> N
     assert result.exit_code == 0, result.output
     assert "Discovery errors:" in result.output
     payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 6
+    assert payload["schema_version"] == 7
     assert payload["discovery_errors"]
 
 

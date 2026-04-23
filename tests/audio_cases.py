@@ -10,6 +10,7 @@ SR = 48000
 SECONDS = 10.0
 SEED = 0xC0DE
 PM_TARGET_DBFS = -23.0
+LOUDNESS_PASSING_SEED = 0xFA57
 ROLE_TOKEN = {"pm": "PM", "dx": "DX", "mx": "MX", "fx": "FX", "me": "ME"}
 ME_BAND_LOW_HZ = 200.0
 ME_BAND_HIGH_HZ = 4000.0
@@ -125,6 +126,30 @@ def exact_sum_components(
     fx *= scale
     pm *= scale
     return {"pm": pm, "dx": dx, "mx": mx, "fx": fx, "me": mx + fx}
+
+
+def true_peak_over_program(
+    *,
+    seconds: float = SECONDS,
+    n_channels: int = 2,
+    base_seed: int = LOUDNESS_PASSING_SEED,
+    base_target_dbfs: float = -23.0,
+    burst_region: tuple[float, float] = (5.0, 5.002),
+    burst_frequency_hz: float = 997.0,
+    sr: int = SR,
+) -> np.ndarray:
+    data = scale_to_dbfs(
+        pink_noise(int(round(seconds * sr)), n_channels, base_seed),
+        base_target_dbfs,
+    )
+    start = int(round(burst_region[0] * sr))
+    end = int(round(burst_region[1] * sr))
+    burst_length = max(1, end - start)
+    t = np.arange(burst_length, dtype=np.float64) / float(sr)
+    burst = np.clip(np.sin(2.0 * np.pi * burst_frequency_hz * t) * 2.0, -1.0, 1.0)
+    for channel in range(n_channels):
+        data[start : start + burst_length, channel] = burst
+    return data
 
 
 def me_check_components(
