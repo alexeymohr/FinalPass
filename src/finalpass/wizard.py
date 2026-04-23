@@ -1278,7 +1278,7 @@ def _existing_artifacts(out_dir: Path) -> list[Path]:
         return []
     matches = {
         path
-        for pattern in ("report*.json", "report*.html", "markers*.aaf")
+        for pattern in ("*report*.json", "*report*.html", "*markers*.aaf")
         for path in out_dir.glob(pattern)
         if path.is_file()
     }

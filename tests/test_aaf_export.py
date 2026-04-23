@@ -108,6 +108,12 @@ def _read_marker_aaf(path: Path) -> dict[str, object]:
         }
 
 
+def _assert_no_artifacts(out_dir: Path) -> None:
+    assert list(out_dir.glob("*report*.json")) == []
+    assert list(out_dir.glob("*report*.html")) == []
+    assert list(out_dir.glob("*markers*.aaf")) == []
+
+
 def test_standalone_loudness_tp_only_fail_writes_aaf(tmp_path: Path) -> None:
     file_path = _write_tp_case(tmp_path / "case", filename="tp_over_primary.wav")
     runner = CliRunner()
@@ -197,7 +203,7 @@ def test_standalone_null_failing_case_writes_aaf(tmp_path: Path) -> None:
         "--out", str(out_dir),
     ])
     assert result.exit_code == 1, result.output
-    aaf_path = out_dir / "markers.aaf"
+    aaf_path = out_dir / "show-s01e04-markers.aaf"
     assert aaf_path.exists()
     parsed = _read_marker_aaf(aaf_path)
     assert parsed["slot_name"] == "FinalPass Markers"
@@ -233,7 +239,7 @@ def test_standalone_me_failing_case_writes_aaf(tmp_path: Path) -> None:
         "--out", str(out_dir),
     ])
     assert result.exit_code == 1, result.output
-    aaf_path = out_dir / "markers.aaf"
+    aaf_path = out_dir / "show-s01e04-markers.aaf"
     assert aaf_path.exists()
     parsed = _read_marker_aaf(aaf_path)
     markers = parsed["markers"]
@@ -271,9 +277,9 @@ def test_clean_standalone_runs_write_no_aaf(tmp_path: Path, command_name: str) -
 
     result = runner.invoke(main, argv)
     assert result.exit_code == 0, result.output
-    assert (out_dir / "report.json").exists()
-    assert (out_dir / "report.html").exists()
-    assert not (out_dir / "markers.aaf").exists()
+    assert (out_dir / "show-s01e04-report.json").exists()
+    assert (out_dir / "show-s01e04-report.html").exists()
+    assert not (out_dir / "show-s01e04-markers.aaf").exists()
     assert "No exportable timed markers" in result.output
 
 
@@ -303,7 +309,7 @@ def test_all_run_writes_combined_aaf(tmp_path: Path) -> None:
         "--out", str(out_dir),
     ])
     assert result.exit_code == 1, result.output
-    aaf_path = out_dir / "markers.aaf"
+    aaf_path = out_dir / "show-s01e03-s01e04-markers.aaf"
     assert aaf_path.exists()
     parsed = _read_marker_aaf(aaf_path)
     markers = parsed["markers"]
@@ -330,7 +336,7 @@ def test_all_run_with_tp_only_group_writes_loudness_aaf(tmp_path: Path) -> None:
         "--out", str(out_dir),
     ])
     assert result.exit_code == 1, result.output
-    aaf_path = out_dir / "markers.aaf"
+    aaf_path = out_dir / "show-s01e05-markers.aaf"
     assert aaf_path.exists()
     parsed = _read_marker_aaf(aaf_path)
     markers = parsed["markers"]
@@ -355,7 +361,7 @@ def test_all_run_bext_start_shifts_combined_aaf_timeline_and_marker_times(tmp_pa
         "--out", str(out_dir),
     ])
     assert result.exit_code == 1, result.output
-    parsed = _read_marker_aaf(out_dir / "markers.aaf")
+    parsed = _read_marker_aaf(out_dir / "show-s01e03-s01e04-markers.aaf")
     assert parsed["timecode_start"] == sample_to_edit_units(0, SR, 23.976, start_time_reference_samples=168648480)
     assert parsed["markers"][0]["time"].startswith("00:58:35:")
     assert not any("[NULL]" in marker["title"] for marker in parsed["markers"])
@@ -372,9 +378,9 @@ def test_clean_all_run_writes_no_aaf(tmp_path: Path) -> None:
         "--out", str(out_dir),
     ])
     assert result.exit_code == 0, result.output
-    assert (out_dir / "report.json").exists()
-    assert (out_dir / "report.html").exists()
-    assert not (out_dir / "markers.aaf").exists()
+    assert (out_dir / "show-s01e03-s01e04-report.json").exists()
+    assert (out_dir / "show-s01e03-s01e04-report.html").exists()
+    assert not (out_dir / "show-s01e03-s01e04-markers.aaf").exists()
     assert "No exportable timed markers" in result.output
 
 
@@ -395,9 +401,7 @@ def test_json_only_writes_no_aaf(tmp_path: Path) -> None:
         "--json-only",
     ])
     assert result.exit_code == 1, result.output
-    assert not (out_dir / "report.json").exists()
-    assert not (out_dir / "report.html").exists()
-    assert not (out_dir / "markers.aaf").exists()
+    _assert_no_artifacts(out_dir)
 
 
 def test_no_partial_aaf_left_on_export_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -409,7 +413,7 @@ def test_no_partial_aaf_left_on_export_failure(tmp_path: Path, monkeypatch: pyte
     )
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    stale = out_dir / "markers.aaf"
+    stale = out_dir / "show-s01e04-markers.aaf"
     stale.write_bytes(b"stale")
 
     def boom(*args, **kwargs) -> None:
@@ -425,7 +429,7 @@ def test_no_partial_aaf_left_on_export_failure(tmp_path: Path, monkeypatch: pyte
     ])
     assert result.exit_code == 2
     assert stale.exists()
-    assert not (out_dir / "markers-01.aaf").exists()
+    assert not (out_dir / "show-s01e04-markers-01.aaf").exists()
 
 
 def test_repeated_aaf_runs_reserve_new_marker_filename(tmp_path: Path) -> None:
@@ -452,11 +456,11 @@ def test_repeated_aaf_runs_reserve_new_marker_filename(tmp_path: Path) -> None:
 
     assert first.exit_code == 1, first.output
     assert second.exit_code == 1, second.output
-    assert (out_dir / "markers.aaf").exists()
-    assert (out_dir / "markers-01.aaf").exists()
-    assert (out_dir / "report.json").exists()
-    assert (out_dir / "report-01.json").exists()
-    assert "markers-01.aaf" in second.output
+    assert (out_dir / "show-s01e04-markers.aaf").exists()
+    assert (out_dir / "show-s01e04-markers-01.aaf").exists()
+    assert (out_dir / "show-s01e04-report.json").exists()
+    assert (out_dir / "show-s01e04-report-01.json").exists()
+    assert "show-s01e04-markers-01.aaf" in second.output
 
 
 def test_collect_marker_candidates_from_all_uses_only_timed_flags(tmp_path: Path) -> None:

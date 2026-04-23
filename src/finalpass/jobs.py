@@ -16,6 +16,7 @@ from . import (
     __version__,
 )
 from . import aaf_export
+from .artifact_naming import derive_program_name_from_report
 from .all_assets import (
     AssetFolderScan,
     ClassifiedLogicalAsset,
@@ -688,7 +689,12 @@ def write_report_artifacts(
 ) -> WrittenArtifacts:
     candidates = aaf_export.collect_marker_candidates(report)
     out_dir.mkdir(parents=True, exist_ok=True)
-    json_path, html_path, aaf_path = _reserve_artifact_paths(out_dir=out_dir, include_aaf=bool(candidates))
+    program_name = derive_program_name_from_report(report)
+    json_path, html_path, aaf_path = _reserve_artifact_paths(
+        out_dir=out_dir,
+        include_aaf=bool(candidates),
+        name_slug=program_name.slug if program_name is not None else None,
+    )
     artifacts = tuple(
         path.name
         for path in (json_path, html_path, aaf_path)
@@ -728,13 +734,15 @@ def write_report_artifacts(
     return WrittenArtifacts(json_path=json_path, html_path=html_path, aaf_path=aaf_path)
 
 
-def _reserve_artifact_paths(*, out_dir: Path, include_aaf: bool) -> tuple[Path, Path, Path | None]:
+def _reserve_artifact_paths(*, out_dir: Path, include_aaf: bool, name_slug: str | None = None) -> tuple[Path, Path, Path | None]:
+    report_stem = f"{name_slug}-report" if name_slug else "report"
+    markers_stem = f"{name_slug}-markers" if name_slug else "markers"
     index = 0
     while True:
         suffix = "" if index == 0 else f"-{index:02d}"
-        json_path = out_dir / f"report{suffix}.json"
-        html_path = out_dir / f"report{suffix}.html"
-        aaf_path = out_dir / f"markers{suffix}.aaf" if include_aaf else None
+        json_path = out_dir / f"{report_stem}{suffix}.json"
+        html_path = out_dir / f"{report_stem}{suffix}.html"
+        aaf_path = out_dir / f"{markers_stem}{suffix}.aaf" if include_aaf else None
         candidates = [json_path, html_path]
         if aaf_path is not None:
             candidates.append(aaf_path)

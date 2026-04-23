@@ -20,6 +20,24 @@ def _copy_family(members: dict[str, Path], target_dir: Path) -> None:
         shutil.copy2(path, target_dir / path.name)
 
 
+def _single_artifact(out_dir: Path, pattern: str) -> Path:
+    matches = sorted(out_dir.glob(pattern))
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _report_path(out_dir: Path) -> Path:
+    return _single_artifact(out_dir, "*report.json")
+
+
+def _html_path(out_dir: Path) -> Path:
+    return _single_artifact(out_dir, "*report.html")
+
+
+def _read_payload(out_dir: Path) -> dict:
+    return json.loads(_report_path(out_dir).read_text(encoding="utf-8"))
+
+
 def test_wizard_all_flow_succeeds_on_split_folder(tmp_path: Path) -> None:
     folder = tmp_path / "delivery"
     build_split_group(
@@ -39,8 +57,10 @@ def test_wizard_all_flow_succeeds_on_split_folder(tmp_path: Path) -> None:
         input=f"{folder}\n1\n1\n1\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
-    report_path = out_dir / "report.json"
-    html_path = out_dir / "report.html"
+    report_path = _report_path(out_dir)
+    html_path = _html_path(out_dir)
+    assert report_path.name == "show-s01e03-report.json"
+    assert html_path.name == "show-s01e03-report.html"
     assert report_path.exists()
     assert html_path.exists()
     payload = json.loads(report_path.read_text(encoding="utf-8"))
@@ -78,7 +98,7 @@ def test_wizard_all_family_selection_measures_both_pm_presentations(tmp_path: Pa
         input="1\n1\n1\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
-    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    payload = _read_payload(out_dir)
     assert payload["command"] == "all"
     assert payload["spec"]["name"] == "atsc_a85"
     pm_layouts = sorted(
@@ -111,7 +131,7 @@ def test_wizard_loudness_flow_succeeds_on_split_asset(tmp_path: Path) -> None:
         input="1\n2\n1\n2\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
-    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    payload = _read_payload(out_dir)
     assert payload["schema_version"] == 3
     assert payload["files"][0]["source_kind"] == "split_mono"
     assert payload["files"][0]["member_legs"] == ["L", "R"]
@@ -141,7 +161,7 @@ def test_wizard_loudness_family_selection_auto_resolves_matching_spec(tmp_path: 
         input="1\n2\n2\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
-    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    payload = _read_payload(out_dir)
     assert payload["spec"]["name"] == "netflix_51"
     assert payload["files"][0]["channel_config_actual"] == "5.1"
     assert "Loudness standard: Netflix Original (auto -> netflix_51 for 5.1 asset layout)" in result.output
@@ -165,9 +185,9 @@ def test_wizard_null_flow_succeeds_with_auto_stem_plan(tmp_path: Path) -> None:
         input="1\n3\n1\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
-    report_path = out_dir / "report.json"
-    html_path = out_dir / "report.html"
-    aaf_path = out_dir / "markers.aaf"
+    report_path = _report_path(out_dir)
+    html_path = _html_path(out_dir)
+    aaf_path = out_dir / "show-s01e03-markers.aaf"
     assert report_path.exists()
     assert html_path.exists()
     assert not aaf_path.exists()
@@ -195,8 +215,8 @@ def test_wizard_me_flow_succeeds(tmp_path: Path) -> None:
         input="1\n4\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
-    report_path = out_dir / "report.json"
-    html_path = out_dir / "report.html"
+    report_path = _report_path(out_dir)
+    html_path = _html_path(out_dir)
     assert report_path.exists()
     assert html_path.exists()
     payload = json.loads(report_path.read_text(encoding="utf-8"))
@@ -240,7 +260,7 @@ def test_wizard_review_step_requires_confirmation(tmp_path: Path) -> None:
     assert "Review:" in result.output
     assert "Ready to run?" in result.output
     assert "Run job" in result.output
-    assert not (out_dir / "report.json").exists()
+    assert list(out_dir.glob("*report.json")) == []
 
 
 def test_wizard_discovery_errors_can_be_viewed_and_continue(tmp_path: Path) -> None:
@@ -271,7 +291,7 @@ def test_wizard_discovery_errors_can_be_viewed_and_continue(tmp_path: Path) -> N
     )
     assert result.exit_code == 0, result.output
     assert "Discovery errors:" in result.output
-    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    payload = _read_payload(out_dir)
     assert payload["schema_version"] == 7
     assert payload["discovery_errors"]
 
@@ -345,7 +365,7 @@ def test_wizard_auto_resumes_existing_prep_layout_and_ignores_outside_files(tmp_
     assert "I found an existing FinalPass prep layout." in result.output
     assert "Create FinalPass prep folders" not in result.output
 
-    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    payload = _read_payload(out_dir)
     assert payload["command"] == "all"
     assert payload["discovery_errors"] == []
     asset_paths = {
@@ -398,7 +418,7 @@ def test_wizard_resume_after_restart_uses_populated_prep_buckets(tmp_path: Path)
     )
     assert second.exit_code == 0, second.output
     assert "I found an existing FinalPass prep layout." in second.output
-    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    payload = _read_payload(out_dir)
     assert payload["schema_version"] == 3
     assert payload["files"][0]["source_kind"] == "split_mono"
 
@@ -438,7 +458,7 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
     assert result.exit_code == 0, result.output
     assert "Mode: prep" in result.output
     assert "Populated prep buckets: 6" in result.output
-    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    payload = _read_payload(out_dir)
     assert payload["command"] == "all"
     assert payload["spec"]["name"] == "netflix"
     assert payload["summary"]["groups_total"] == 1
@@ -492,7 +512,7 @@ def test_wizard_all_family_selection_uses_best_supported_printmaster_layout(tmp_
         input="1\n1\n2\n1\n1\n1\n3\n",
     )
     assert result.exit_code == 0, result.output
-    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    payload = _read_payload(out_dir)
     assert payload["command"] == "all"
     assert payload["spec"]["name"] == "ebu_r128"
     assert payload["groups"][0]["files"][0]["channel_config_actual"] == "stereo"

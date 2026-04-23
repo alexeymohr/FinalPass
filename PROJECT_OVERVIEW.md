@@ -20,11 +20,11 @@ FinalPass is that tool, CLI-first so it can be automated, scripted, and trusted.
 
 ## Output
 
-For any normal run, FinalPass writes to `./finalpass-report/`:
+For any normal run, FinalPass writes to `./finalpass-report/`. Artifact names use the historical `report.*` / `markers.aaf` shape when no program name can be inferred; when source stems carry a show/episode pattern, FinalPass prefixes the artifacts, for example `show-s01e03-report.json`:
 
-- `report.json` — full machine-readable record, the stable contract for downstream tooling.
-- `report.html` — self-contained single file, pass/fail summary, loudness tables, and flagged-region lanes for null, M&E, and timed true-peak overs.
-- `markers.aaf` — written only when the run contains exportable timed `null` / `me` flags or true-peak-over regions.
+- `report.json` or `<program>-report.json` — full machine-readable record, the stable contract for downstream tooling.
+- `report.html` or `<program>-report.html` — self-contained single file, pass/fail summary, loudness tables, and flagged-region lanes for null, M&E, and timed true-peak overs.
+- `markers.aaf` or `<program>-markers.aaf` — written only when the run contains exportable timed `null` / `me` flags or true-peak-over regions.
 - `summary.txt` — not a current output artifact.
 
 AAF stays intentionally strict in Phase 6: only persisted timed flags export. That includes `null`, `me`, and timed true-peak-over regions. Integrated/LRA/dialog loudness failures, group-level errors, and skipped checks remain JSON/HTML-only because they have no honest timeline positions.

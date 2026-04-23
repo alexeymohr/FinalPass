@@ -334,15 +334,15 @@ def test_all_normal_run_writes_json_and_html(tmp_path: Path) -> None:
         "--out", str(out_dir),
     ])
     assert result.exit_code == 1, result.output
-    json_path = out_dir / "report.json"
-    html_path = out_dir / "report.html"
-    aaf_path = out_dir / "markers.aaf"
+    json_path = out_dir / "show-s01e03-s01e04-report.json"
+    html_path = out_dir / "show-s01e03-s01e04-report.html"
+    aaf_path = out_dir / "show-s01e03-s01e04-markers.aaf"
     assert json_path.exists()
     assert html_path.exists()
     assert aaf_path.exists()
-    assert "report.json" in result.output
-    assert "report.html" in result.output
-    assert "markers.aaf" in result.output
+    assert "show-s01e03-s01e04-report.json" in result.output
+    assert "show-s01e03-s01e04-report.html" in result.output
+    assert "show-s01e03-s01e04-markers.aaf" in result.output
     html = html_path.read_text(encoding="utf-8")
     assert "Measured assets" in html
     assert "Null check" in html
@@ -360,9 +360,9 @@ def test_all_json_only_writes_no_files(tmp_path: Path) -> None:
         "--json-only",
     ])
     assert result.exit_code == 0, result.output
-    assert not (out_dir / "report.json").exists()
-    assert not (out_dir / "report.html").exists()
-    assert not (out_dir / "markers.aaf").exists()
+    assert list(out_dir.glob("*report*.json")) == []
+    assert list(out_dir.glob("*report*.html")) == []
+    assert list(out_dir.glob("*markers*.aaf")) == []
 
 
 def test_all_clean_normal_run_writes_no_aaf(tmp_path: Path) -> None:
@@ -375,9 +375,9 @@ def test_all_clean_normal_run_writes_no_aaf(tmp_path: Path) -> None:
         "--out", str(out_dir),
     ])
     assert result.exit_code == 0, result.output
-    assert (out_dir / "report.json").exists()
-    assert (out_dir / "report.html").exists()
-    assert not (out_dir / "markers.aaf").exists()
+    assert (out_dir / "show-s01e03-s01e04-report.json").exists()
+    assert (out_dir / "show-s01e03-s01e04-report.html").exists()
+    assert not (out_dir / "show-s01e03-s01e04-markers.aaf").exists()
     assert "No exportable timed markers" in result.output
 
 

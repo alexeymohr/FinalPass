@@ -2,7 +2,7 @@
 
 Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, a minimal folder-first terminal wizard, prep-folder guided filtering for messy deliveries, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for exportable timed flags, example smoke flows, and CI.
 
-**Status: Phase 7 release candidate plus SM-6 prep-folder guided filtering.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, runs the same internal job/report pipeline as the direct commands, presents logical assets with polished split-mono labels instead of raw leg filenames wherever practical, and can create or resume a `FinalPass Prep/` layout so messy folders can be curated before analysis. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed flags from `null`, `me`, or loudness true-peak-over regions.
+**Status: Phase 7 release candidate plus SM-6 prep-folder guided filtering.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, runs the same internal job/report pipeline as the direct commands, presents logical assets with polished split-mono labels instead of raw leg filenames wherever practical, and can create or resume a `FinalPass Prep/` layout so messy folders can be curated before analysis. Normal runs always write JSON and HTML report artifacts, prefix those artifact names with an inferred program/episode slug when possible, and write a matching marker AAF only when the run contains exportable timed flags from `null`, `me`, or loudness true-peak-over regions.
 
 ## Install (dev)
 
@@ -66,14 +66,14 @@ generator, disposable smoke outputs under `examples/out/`, and representative
 
 ## Artifacts
 
-Normal runs always write these files to `--out` (default `./finalpass-report/`):
+Normal runs always write these files to `--out` (default `./finalpass-report/`). When FinalPass can infer a program name from the source filenames, the report artifacts are prefixed with that slug, for example `show-s01e03-report.json`; otherwise the historical names are used:
 
-- `report.json` — the stable machine-readable contract.
-- `report.html` — a self-contained local HTML report rendered from the persisted report model only.
+- `report.json` or `<program>-report.json` — the stable machine-readable contract.
+- `report.html` or `<program>-report.html` — a self-contained local HTML report rendered from the persisted report model only.
 
 Conditional artifact:
 
-- `markers.aaf` — written only when the run contains one or more exportable timed flags.
+- `markers.aaf` or `<program>-markers.aaf` — written only when the run contains one or more exportable timed flags.
 
 `--json-only` writes no files and emits JSON to stdout only.
 

@@ -619,9 +619,19 @@ def _announce_written_artifacts(written: WrittenArtifacts) -> None:
 
 
 def _expected_aaf_path(written: WrittenArtifacts) -> Path:
-    stem = written.json_path.stem
-    suffix = stem[len("report"):] if stem.startswith("report") else ""
-    return written.json_path.with_name(f"markers{suffix}.aaf")
+    json_stem = written.json_path.stem
+    suffix = ""
+    base = json_stem
+    if len(json_stem) > 3 and json_stem[-3] == "-" and json_stem[-2:].isdigit():
+        suffix = json_stem[-3:]
+        base = json_stem[:-3]
+    if base == "report":
+        marker_stem = "markers"
+    elif base.endswith("-report"):
+        marker_stem = f"{base.removesuffix('-report')}-markers"
+    else:
+        marker_stem = f"{base}-markers"
+    return written.json_path.with_name(f"{marker_stem}{suffix}.aaf")
 
 
 def _format_target_limit(check) -> str:
