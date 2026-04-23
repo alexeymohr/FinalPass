@@ -1,27 +1,143 @@
 # FinalPass
 
-Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, a minimal folder-first terminal wizard, prep-folder guided filtering for messy deliveries, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for exportable timed flags, example smoke flows, and CI.
+FinalPass is a local command-line QC tool for post-production sound deliverables.
+It measures WAV/BWF printmasters and stems, produces a machine-readable JSON
+report, renders a self-contained HTML report for review, and optionally writes
+an AAF marker session for timed failures that need to be inspected in a DAW.
 
-**Status: Phase 7 release candidate plus SM-6 prep-folder guided filtering.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, runs the same internal job/report pipeline as the direct commands, presents logical assets with polished split-mono labels instead of raw leg filenames wherever practical, and can create or resume a `FinalPass Prep/` layout so messy folders can be curated before analysis. Normal runs always write JSON and HTML report artifacts, prefix those artifact names with an inferred program/episode slug when possible, and write a matching marker AAF only when the run contains exportable timed flags from `null`, `me`, or loudness true-peak-over regions.
+FinalPass is built for the practical delivery-QC pass before handoff: loudness,
+true peak, stem-sum null checks, M&E dialogue-bleed checks, split-mono handling,
+prep-folder curation, and readable reporting. It is not a certification service
+and does not replace current delivery paperwork or platform-specific tools.
 
-## Install (dev)
+## Current Status
 
-```
+This repository is a `0.1.0` release candidate. The implemented commands are:
+
+- `finalpass loudness` - measure one or more program files against a bundled or
+  user loudness spec.
+- `finalpass null` - compare a printmaster against a supplied stem sum.
+- `finalpass me` - check an M&E stem against its matching DX stem for likely
+  dialogue bleed.
+- `finalpass all` - analyze a folder of deliverables, classify logical assets,
+  select the correct presentation for the chosen spec, then run the applicable
+  loudness, null, and M&E checks.
+- `finalpass wizard` - guide a user through folder-first analysis and optional
+  `FinalPass Prep/` curation.
+- `finalpass specs list` and `finalpass specs show` - inspect bundled spec
+  presets.
+
+Normal runs write report artifacts under `./finalpass-report/` unless `--out` is
+provided. `--json-only` suppresses file writing and prints JSON to stdout.
+
+## Capabilities
+
+FinalPass currently supports:
+
+- WAV/BWF input with local, offline analysis.
+- PCM WAV/BWF at common bit depths and sample rates.
+- BWF `bext` time references for timecode-aware flag strings and marker
+  placement.
+- Interleaved mono, stereo, 5.1, and 7.1 sources in SMPTE channel order.
+- Canonical split-mono stereo, 5.0, 5.1, and 7.1 sources.
+- Special handling for common 5.0 split stems, especially dialog stems: the real
+  five source legs are reported, and analysis uses a temporary silent LFE channel
+  where a 5.1-compatible comparison is needed.
+- Folder-level logical-asset discovery, including split-mono family assembly.
+- Conservative filename classification for printmaster, DX, MX, FX, M&E, and
+  optional stems.
+- Prep-folder guided filtering for messy deliveries.
+- ITU-R BS.1770-4 loudness measurement, 4x oversampled true peak, and LRA.
+- Standalone and automatic stem-sum null checks.
+- Standalone and automatic M&E dialogue-bleed checks.
+- Program-window comparison logic for null and M&E checks when files differ only
+  by pre-program or tail MOS.
+- Self-contained HTML reports rendered from the persisted report model.
+- Optional AAF marker export for timed loudness, null, and M&E flags.
+- Deterministic examples and a GitHub Actions test/smoke workflow.
+
+FinalPass intentionally does not make network calls during analysis. There is no
+telemetry, cloud upload, or LLM/API dependency in the runtime path.
+
+## Installation
+
+FinalPass is currently intended to run from source.
+
+Requirements:
+
+- Python 3.11 or newer.
+- `uv` for dependency sync and command execution.
+
+From the repository root:
+
+```bash
 uv sync
 uv run finalpass --version
 uv run finalpass --help
 ```
 
-Python 3.11+. WAV/BWF input.
+For development and CI parity:
 
-## Commands
-
+```bash
+uv sync --dev --frozen
+uv run pytest
+uv run python examples/_smoke.py
 ```
+
+## Quick Start
+
+Inspect the bundled specs:
+
+```bash
+uv run finalpass specs list
+uv run finalpass specs show netflix_51
+```
+
+Analyze a prepared delivery folder:
+
+```bash
+uv run finalpass all /path/to/delivery --spec netflix_51 --out /path/to/qc-report
+```
+
+Use the interactive wizard for a real-world delivery that may contain extra
+files, alternates, exports, or non-analysis material:
+
+```bash
+uv run finalpass wizard /path/to/delivery --out /path/to/qc-report
+```
+
+Run standalone loudness:
+
+```bash
+uv run finalpass loudness /path/to/SHOW_S01E03_COMP_5.1.wav --spec netflix_51
+```
+
+Run a standalone null check:
+
+```bash
+uv run finalpass null \
+  /path/to/SHOW_S01E03_COMP_5.1.wav \
+  /path/to/SHOW_S01E03_DX_5.1.wav \
+  /path/to/SHOW_S01E03_MX_5.1.wav \
+  /path/to/SHOW_S01E03_FX_5.1.wav
+```
+
+Run a standalone M&E dialogue-bleed check:
+
+```bash
+uv run finalpass me \
+  /path/to/SHOW_S01E03_ME_5.1.wav \
+  --dx /path/to/SHOW_S01E03_DX_5.1.wav
+```
+
+## Command Reference
+
+```bash
 uv run finalpass --version
 uv run finalpass specs list
 uv run finalpass specs show <name>
 uv run finalpass wizard [folder] [--out <dir>] [--fps <rate>]
-uv run finalpass loudness <file>... --spec <name> [--dx <file>] [--out <dir>] [--json-only] [--fps <rate>]
+uv run finalpass loudness <file>... --spec <name-or-yaml> [--dx <file>] [--out <dir>] [--json-only] [--fps <rate>]
 uv run finalpass null <pm> <stems>... [--out <dir>] [--json-only] [--fps <rate>]
                                       [--window-ms <ms>] [--hop-ms <ms>] [--threshold-dbfs <dbfs>]
 uv run finalpass me <me_file> --dx <dx_file> [--out <dir>] [--json-only] [--fps <rate>]
@@ -30,208 +146,498 @@ uv run finalpass me <me_file> --dx <dx_file> [--out <dir>] [--json-only] [--fps 
                                              [--corr-threshold <value>]
                                              [--coherence-threshold <value>]
                                              [--dx-gate-dbfs <dbfs>] [--me-floor-dbfs <dbfs>]
-uv run finalpass all <folder> --spec <name> [--out <dir>] [--json-only] [--fps <rate>]
-                                            [--patterns <config.yaml>] [--include-unclassified]
-                                            [--null-window-ms <ms>] [--null-hop-ms <ms>]
-                                            [--null-threshold-dbfs <dbfs>]
-                                            [--me-window-ms <ms>] [--me-hop-ms <ms>]
-                                            [--me-band-low-hz <hz>] [--me-band-high-hz <hz>]
-                                            [--me-corr-threshold <value>]
-                                            [--me-coherence-threshold <value>]
-                                            [--me-dx-gate-dbfs <dbfs>]
-                                            [--me-me-floor-dbfs <dbfs>]
+uv run finalpass all <folder> --spec <name-or-yaml> [--out <dir>] [--json-only] [--fps <rate>]
+                                                    [--patterns <config.yaml>] [--include-unclassified]
+                                                    [--null-window-ms <ms>] [--null-hop-ms <ms>]
+                                                    [--null-threshold-dbfs <dbfs>]
+                                                    [--me-window-ms <ms>] [--me-hop-ms <ms>]
+                                                    [--me-band-low-hz <hz>] [--me-band-high-hz <hz>]
+                                                    [--me-corr-threshold <value>]
+                                                    [--me-coherence-threshold <value>]
+                                                    [--me-dx-gate-dbfs <dbfs>]
+                                                    [--me-me-floor-dbfs <dbfs>]
 ```
 
-Exit codes: `0` all pass, `1` failures found, `2` tool error.
+Exit codes:
 
-Wizard note:
-- `finalpass wizard` is a minimal guided terminal flow. It starts from a folder, presents logical assets rather than raw mono legs, and can run `all`, standalone `loudness`, standalone `null`, and standalone `me` end-to-end with numbered menus.
-- For messy deliveries, the preferred path is prep mode: the wizard can create `FinalPass Prep/`, let you move/copy the stems you want into fixed 5.1/stereo buckets, and then analyze only those populated prep buckets.
-- If a valid `FinalPass Prep/` layout already exists in the chosen folder, the wizard auto-resumes prep mode and ignores files outside that prep root.
-- The wizard uses existing default null / M&E tuning only. Advanced parameter tuning still lives in the direct CLI commands.
-- For bundled loudness presets, the wizard asks for the overall loudness standard (`ATSC A/85`, `Netflix Original`, etc.). In standalone loudness it auto-resolves the concrete stereo / 5.1 preset from the selected asset; in folder analysis it applies the matching concrete preset per detected printmaster presentation. The direct CLI still takes exact `--spec` names.
+- `0` - all checks passed.
+- `1` - FinalPass completed and found one or more failures or blocking
+  discovery issues.
+- `2` - tool, validation, input, or runtime error.
 
-Standalone input note:
-- `finalpass loudness`, `finalpass null`, and `finalpass me` accept either an interleaved WAV/BWF path or a seed path to one member of a canonical split-mono family in the same directory.
-- Supported split layouts are stereo `L/R`, 5.0 `L/R/C/Ls/Rs`, 5.1 `L/R/C/LFE/Ls/Rs`, and 7.1 `L/R/C/LFE/Ls/Rs/Lss/Rss`. A 5.0 split source is analyzed as 5.1 with a temporary silent LFE channel; reports preserve the five real source legs.
-- `finalpass all` now does folder-level logical-asset discovery too. Interleaved files remain supported, but explicit split-mono families are assembled in memory, grouped by logical asset, and selected by actual layout for the chosen spec.
-- If an input WAV/BWF carries a BWF `bext` time reference, FinalPass anchors flagged-region timecode strings and exported AAF marker placement to that embedded start sample. The user still chooses the frame rate via `--fps` or the wizard; FinalPass does not currently infer FPS from file metadata.
-- For null only, when an input printmaster carries a BWF `bext` time reference, FinalPass ignores null-analysis material before absolute timecode `01:00:00:00`. If no embedded start sample is present, null analysis still runs across the full file.
+`--fps` is the frame rate used for timecode strings and AAF marker placement.
+FinalPass does not infer FPS from WAV/BWF metadata.
 
-## Examples / smoke flow
+## Main Workflows
 
-See [examples/README.md](examples/README.md) for the deterministic delivery
-generator, disposable smoke outputs under `examples/out/`, and representative
-`loudness`, `null`, `me`, `all`, and `wizard` commands.
+### Folder QC with `all`
 
-## Artifacts
+`finalpass all` is the main non-interactive workflow. It scans a folder for
+WAV/BWF files, assembles split-mono families into logical assets, classifies
+each logical asset by role, groups related deliverables by episode/reel/fallback
+identifier, selects the layout required by the spec, and runs the applicable
+checks.
 
-Normal runs always write these files to `--out` (default `./finalpass-report/`). When FinalPass can infer a program name from the source filenames, the report artifacts are prefixed with that slug, for example `show-s01e03-report.json`; otherwise the historical names are used:
+The automatic null strategy is intentionally narrow:
 
-- `report.json` or `<program>-report.json` — the stable machine-readable contract.
-- `report.html` or `<program>-report.html` — a self-contained local HTML report rendered from the persisted report model only.
+- Prefer `DX + MX + FX`.
+- Fall back to `DX + M&E`.
+- Otherwise record `Null: SKIPPED` with an honest reason.
 
-Conditional artifact:
+Automatic M&E analysis runs only when both `DX` and `M&E` are present. If either
+role is missing, the group records `M&E: SKIPPED`.
 
-- `markers.aaf` or `<program>-markers.aaf` — written only when the run contains one or more exportable timed flags.
-
-`--json-only` writes no files and emits JSON to stdout only.
-
-Still not implemented:
-
-- `summary.txt` — not a current output artifact.
-
-AAF export stays intentionally narrow in v0.1:
-
-- standalone `loudness` exports timed `files[].flags[]` for true-peak-over regions
-- standalone `null` exports `null_test.flags[]`
-- standalone `me` exports `me_check.flags[]`
-- `all` exports timed `groups[].files[].flags[]`, `groups[].null_test.flags[]`, and `groups[].me_check.flags[]`
-- no synthetic markers are created for loudness-only failures, group-level errors, or skipped checks
-
-### `finalpass all` quickstart
-
-Point it at a folder. FinalPass first discovers logical assets, so one
-interleaved multichannel file is one asset and one valid split-mono family is
-also one asset. It then classifies those logical assets by role (PM, DX, MX,
-FX, M&E, optional), groups them by episode/reel/fallback identifier, selects
-the correct presentation for the chosen spec, runs the loudness pass on each
-group, auto-runs the null pass when a group has a reconstructable stem set,
-and auto-runs the M&E bleed heuristic when a group has both `dx` and `me`.
-
-```
-uv run python examples/_generate.py          # synthesize a two-episode delivery
-uv run finalpass all examples/delivery_two_episodes --spec ebu_r128
-```
-
-With a dialog-anchored spec (`netflix_stereo`, `netflix_51`), the classified
-DX file is automatically measured against `dialog_lufs` — no `--dx` flag.
-
-Auto-null stem selection is intentionally narrow:
-- prefer `dx + mx + fx`
-- fallback to `dx + me`
-- otherwise the group records `Null: SKIPPED — insufficient_stems_for_auto_null`
-
-Auto-M&E runs only on `dx + me`. If either role is missing, the group records
-`M&E: SKIPPED — missing_dx_or_me`.
-
-Use standalone `finalpass null` for any unusual or manual stem combination.
-Use standalone `finalpass me` when you want to tune the speech-band, gate, or
+Use standalone `finalpass null` for unusual or manual stem combinations. Use
+standalone `finalpass me` when you need to tune band, gate, hop, window, or
 threshold settings directly.
 
-### Split-mono quickstart
+### Wizard and Prep Folders
 
-The deterministic examples generator writes a split-mono delivery under
-`examples/delivery_split_assets/`. The standalone commands take a seed path to
-one member of the family; FinalPass resolves the rest of the canonical family
-in memory.
+The wizard is a minimal terminal flow for real delivery folders. It presents
+logical assets rather than raw mono legs wherever practical and uses the same
+job/report pipeline as the direct commands.
 
-```bash
-uv run python examples/_generate.py
-uv run finalpass loudness \
-  examples/delivery_split_assets/SHOW_S01E03_Comp_5.1.L.wav \
-  --spec netflix_51 \
-  --out examples/out/split_loudness
-
-uv run finalpass null \
-  examples/delivery_split_assets/SHOW_S01E03_Comp_5.1.L.wav \
-  examples/delivery_split_assets/SHOW_S01E03_DX_5.1.L.wav \
-  examples/delivery_split_assets/SHOW_S01E03_MX_5.1.L.wav \
-  examples/delivery_split_assets/SHOW_S01E03_FX_5.1.L.wav \
-  --out examples/out/split_null
-
-uv run finalpass me \
-  examples/delivery_split_assets/SHOW_S01E03_ME_5.1.L.wav \
-  --dx examples/delivery_split_assets/SHOW_S01E03_DX_5.1.L.wav \
-  --out examples/out/split_me
-
-uv run finalpass all \
-  examples/delivery_split_assets \
-  --spec netflix_51 \
-  --out examples/out/split_all
-
-uv run finalpass wizard examples/delivery_split_assets --out examples/out/split_wizard
-```
-
-### Prep-folder quickstart
-
-For a messy delivery folder, use the wizard instead of running `all` on the whole directory immediately:
+For messy deliveries, use prep mode:
 
 ```bash
 uv run finalpass wizard /path/to/delivery
 ```
 
-Typical flow:
+Typical prep flow:
 
 1. Choose `Create FinalPass prep folders`.
-2. Move or copy only the stems you want analyzed into `FinalPass Prep/`.
-3. Re-run the wizard, or choose `Re-scan prep folders now`.
-4. Run `all`, `loudness`, `null`, or `me` from the curated prep assets.
+2. Move or copy only the files that should be analyzed into `FinalPass Prep/`.
+3. Put explicit non-analysis material into `FinalPass Prep/Ignore/`, or leave it
+   outside the prep root.
+4. Re-run the wizard or choose `Re-scan prep folders now`.
+5. Run `all`, `loudness`, `null`, or `me` from the curated prep assets.
 
-In prep mode, FinalPass scans only the populated non-`Ignore` buckets under `FinalPass Prep/`. Files outside that prep root are ignored for wizard analysis.
+If a valid `FinalPass Prep/` layout already exists, the wizard auto-resumes prep
+mode and ignores files outside that prep root for wizard analysis.
 
-Schema versions:
-- `finalpass loudness` emits `schema_version: 3`
-- `finalpass null` emits `schema_version: 3`
-- `finalpass me` emits `schema_version: 3`
-- `finalpass all` emits `schema_version: 8` with `groups[].assets[]`,
-  `groups[].null_test`, `groups[].me_check`, `unclassified[]`,
-  `discovery_errors[]`, `command: "all"`, `folder`, honest split-mono
-  provenance on measured file reports, and timed loudness true-peak flags on
-  measured file reports where present
+### Standalone Split-Mono Inputs
 
-### Filename conventions
+The standalone `loudness`, `null`, and `me` commands accept either an
+interleaved file path or a seed path to one member of a canonical split-mono
+family in the same directory.
 
-The classifier looks for boundary-delimited role tokens in the filename stem.
-Tokens are case-insensitive and must be bracketed by start-of-string or one
-of `_`, `-`, `.`.
+Supported split layouts:
+
+- Stereo: `L`, `R`
+- 5.0: `L`, `R`, `C`, `Ls`, `Rs`
+- 5.1: `L`, `R`, `C`, `LFE`, `Ls`, `Rs`
+- 7.1: `L`, `R`, `C`, `LFE`, `Ls`, `Rs`, `Lss`, `Rss`
+
+For a 5.0 split source, FinalPass analyzes the source as 5.1 with a temporary
+silent LFE channel where needed. Reports still preserve the real five source
+legs so reviewers can see what was actually delivered.
+
+### Examples and Smoke Runs
+
+Generate deterministic example deliveries:
+
+```bash
+uv run python examples/_generate.py
+```
+
+Run the smoke flow used by CI:
+
+```bash
+uv run python examples/_smoke.py
+```
+
+See [examples/README.md](examples/README.md) for representative interleaved,
+split-mono, and prep-folder commands.
+
+## Outputs and Artifact Naming
+
+Normal runs write artifacts to `--out`, defaulting to `./finalpass-report/`.
+
+FinalPass tries to derive a program slug from source filenames or delivery
+folder names. For TV-style names it tries to preserve show and episode
+information. Examples:
+
+- `NLA1120_262_51_DXSM_2398_48_20200408.L.wav` -> `nla-1120-report.html`
+- `SHOW_S01E03_COMP_5.1.wav` -> `show-s01e03-report.html`
+- multi-episode folder input can become `show-s01e03-s01e04-report.html`
+
+If no stable program name can be inferred, FinalPass uses the historical names:
+
+- `report.json`
+- `report.html`
+- `markers.aaf`, only when exportable timed markers exist.
+
+When an output filename already exists, FinalPass writes a numbered sibling such
+as `show-s01e03-report-01.html` instead of overwriting the previous run.
+
+Artifacts:
+
+- `<program>-report.json` - stable machine-readable output.
+- `<program>-report.html` - self-contained HTML report rendered only from the
+  persisted report model.
+- `<program>-markers.aaf` - optional AAF marker session written only when the
+  report contains exportable timed flags.
+
+`--json-only` writes no files and emits the JSON report to stdout.
+
+## HTML Report Sections
+
+The HTML report is designed for local review and handoff. It does not reopen
+audio or recompute measurements; it renders the same model persisted to JSON.
+
+Common sections:
+
+- **Header and verdict** - identifies the report type and overall pass/fail
+  state.
+- **Run metadata** - command, FinalPass version, schema version, run ID, run
+  timestamp, and artifact names.
+- **Source files** - a registry of every unique source file with full paths.
+  Later sections use filenames only so long split-mono paths do not dominate the
+  page.
+- **Run summary** - group/check totals, skipped checks, failures, and blocking
+  issue count.
+- **Discovery issues** - incomplete split families, ambiguous classification,
+  missing legs, unsupported layouts, and other folder-level blockers.
+- **Unclassified logical assets** - valid WAV/BWF assets that did not match a
+  role pattern.
+- **Group sections** - per-episode or per-reel analysis blocks for `all`.
+- **Logical assets** - classified assets, source kind, layout, source members,
+  how each asset was used, and selection notes.
+- **Measured assets** - sample rate, bit depth, channel configuration, duration,
+  source provenance, measurements, and per-metric checks.
+- **Null check** - auto or standalone null strategy, selected roles, analysis
+  summary, comparison window, timeline, flagged regions, and errors.
+- **M&E check** - analysis signal, gate/band/threshold summary, comparison
+  window, timeline, flagged regions, and errors.
+- **Comparison window** - the exact sample/timecode span used for null and M&E
+  comparison, plus ignored head, ignored tail, and padded tail per input.
+
+The report uses compact tables, basename-only file references after the source
+registry, and fixed-width source chips for split-mono members.
+
+## AAF Marker Session
+
+FinalPass writes an AAF marker session only when the report contains timed
+flags. It never creates synthetic markers for skipped checks, group-level
+errors, discovery errors, or untimed loudness failures.
+
+Exportable timed flags:
+
+- Standalone `loudness`: `files[].flags[]` for true-peak-over regions.
+- Standalone `null`: `null_test.flags[]`.
+- Standalone `me`: `me_check.flags[]`.
+- `all`: `groups[].files[].flags[]`, `groups[].null_test.flags[]`, and
+  `groups[].me_check.flags[]`.
+
+The exported AAF contains:
+
+- A top-level composition named `FinalPass Markers`.
+- A timecode timeline at the edit rate derived from `--fps`.
+- A marker guide audio slot with filler, so common DAW/NLE imports have a real
+  timeline container.
+- A marker event slot containing `CommentMarker` events.
+- Marker names like `[1] FAIL: null mismatch`, `[2] FAIL: dialog bleed`, or
+  `[3] FAIL: true peak over`.
+- User comments/tags containing label, comment, detail, failure code, metric,
+  measured value, threshold, group context, and source context where available.
+
+Marker placement is based on the same sample positions and timecode strings in
+the JSON report. If the source carries a BWF time reference, FinalPass anchors
+the flag timecode and AAF edit-unit position to that reference. If there is no
+BWF time reference, placement starts from file sample zero. The frame rate still
+comes from `--fps`.
+
+For loudness true-peak regions, markers are throttled to at most one marker per
+second per source so a clipped passage does not flood the marker lane.
+
+## How Analysis Works
+
+### Loudness
+
+`finalpass loudness` and the loudness portions of `finalpass all` measure:
+
+- Integrated loudness.
+- True peak.
+- Loudness range.
+- Short-term maximum.
+- Momentary maximum.
+
+The implementation follows the current open FinalPass measurement path:
+ITU-R BS.1770-4 style gating through `pyloudnorm`, 4x oversampled true peak, and
+LRA per the EBU Tech 3342 approach. Dialog-anchored bundled specs can measure a
+classified DX file or a standalone `--dx` file against `dialog_lufs`.
+
+### Null
+
+The null check sums supplied stems and compares the result against the
+printmaster. It reports residual RMS windows and flags regions whose residual
+exceeds the configured threshold.
+
+Automatic null in `all` uses conservative known stem sets. The standalone
+command exists for manual or unusual deliverables.
+
+### M&E Dialogue-Bleed
+
+The M&E check compares an M&E stem against its matching DX stem. It downmixes for
+analysis while excluding LFE, gates windows by DX level, band-limits to a
+speech-oriented range, and flags windows that exceed the configured correlation
+and coherence thresholds.
+
+This is an honest heuristic for likely dialogue bleed. It is not speech
+recognition, transcription, diarization, or Dolby Dialogue Intelligence.
+
+### Program-Window Comparison
+
+Null and M&E comparisons often encounter files with different head builds or MOS
+tail lengths. FinalPass handles that by deriving a comparison window before
+analysis:
+
+- If all comparison inputs have BWF time references and share a whole-hour
+  program boundary, analysis starts at that boundary, such as `01:00:00:00` or
+  `10:00:00:00`.
+- If files share the same start reference but no whole-hour boundary is present,
+  analysis starts at file start and records that mode.
+- If time references are unavailable, analysis starts at file sample zero.
+- A uniquely longer file is accepted only when the overrun after every other
+  input ends is MOS under the configured RMS and peak gates.
+- Shorter inputs are padded with silence inside the comparable range.
+- The report records ignored head, ignored tail, and padded tail for each input.
+
+This lets FinalPass compare the actual program region when one delivery has
+extra pre-program material or post-program dead air while still rejecting a file
+whose unique overrun contains signal.
+
+## Filename Conventions
+
+The bundled classifier looks for boundary-delimited role tokens in each filename
+stem. Tokens are case-insensitive and must be bracketed by start-of-string or
+one of `_`, `-`, `.`, or a space.
 
 | Role | Accepted tokens |
-|---|---|
-| `pm` (printmaster) | `PM`, `PRINTMASTER`, `MIX`, `FINAL`, `COMP` |
-| `dx` (dialog)      | `DX`, `DIA`, `DIALOG`, `DIALOGUE` |
-| `mx` (music)       | `MX`, `MUS`, `MUSIC` |
-| `fx` (effects)     | `FX`, `SFX`, `EFFECTS` |
-| `me` (M&E)         | `ME`, `M&E`, `M_AND_E`, `MANDE` |
-| `opt` (optional)   | `OPT`, `OPTIONAL`, `NARR`, `NARRATION` |
+| --- | --- |
+| `pm` printmaster | `PM`, `PRINTMASTER`, `MIX`, `FINAL`, `COMP` |
+| `dx` dialog | `DX`, `DIA`, `DIALOG`, `DIALOGUE` |
+| `mx` music | `MX`, `MUS`, `MUSIC` |
+| `fx` effects | `FX`, `SFX`, `EFFECTS` |
+| `me` M&E | `ME`, `M&E`, `M_AND_E`, `MANDE` |
+| `opt` optional | `OPT`, `OPTIONAL`, `NARR`, `NARRATION` |
 
-Example: `SHOW_S01E03_PM_STEREO.wav` → role `pm`, group `S01E03`, channel hint
-`stereo`. `SHOW_S01E04_DX_STEREO.wav` → role `dx`, same group. A filename
-that matches two role patterns fails with `AmbiguousClassificationError` —
-rename it rather than letting the tool guess.
+Group IDs come from the first matching pattern:
 
-Group id comes from the first of these that matches the stem: `S##E##`,
-`EP##`, `R##`. If none match, the group id is the stem with role + channel
-tokens stripped — so `MYSHOW_PM_STEREO.wav` and `MYSHOW_DX_STEREO.wav` group
-together under `MYSHOW`.
+- `S##E##`
+- `EP##`
+- `R##`
+- fallback stem after role and channel tokens are stripped.
 
-Override the patterns with `--patterns path/to/patterns.yaml` (same top-level
-keys as [_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml)).
+Examples:
 
-## Scope — v0.1 release candidate
+- `SHOW_S01E03_COMP_5.1.wav` -> role `pm`, group `S01E03`.
+- `SHOW_S01E03_DX_5.1.L.wav` -> role `dx`, group `S01E03`, split member `L`.
+- `MYSHOW_PM_STEREO.wav` and `MYSHOW_DX_STEREO.wav` group together under
+  `MYSHOW`.
 
-**Current:** WAV/BWF input, any PCM bit depth, any sample rate (homogeneous across a single asset or checked operation). Mono, stereo, 5.1, 7.1 (SMPTE channel order). Interleaved assets plus canonical split stereo / 5.0 / 5.1 / 7.1 logical assets; 5.0 split stems are padded with silent LFE for 5.1 analysis while reports keep the real five-leg provenance. Loudness (ITU-R BS.1770-4, 4× oversampled true peak, LRA per EBU Tech 3342), standalone stem-sum null, standalone M&E dialogue-bleed, and `all` with logical-asset selection plus conservative auto-null/auto-M&E. Null and M&E comparisons derive a shared program window from a common whole-hour BWF timecode boundary when available, ignore pre-program material before that boundary, pad shorter inputs with silence inside the comparable range, and permit a uniquely longer overrun only when that extra tail is MOS. Bundled spec presets plus user-overridable YAML. JSON output + self-contained HTML report + conditional timed-marker AAF export + terminal summary.
+A filename that matches multiple roles fails with an ambiguous-classification
+error. Rename it or provide a custom classifier pattern file rather than letting
+FinalPass guess.
 
-**Out (non-goals for v0.1):** Atmos/ADM BWF. MXF audio. DCP audio. Auto time-alignment of misaligned stems. Speech recognition, transcription, diarization, or ML/VAD. Dolby-grade dialog gating. Watch folders. Network/cloud. GUI. Per-platform certification — FinalPass measures, it does not bless.
+Override the bundled classifier with:
 
-## Bundled specs (Phase 1)
+```bash
+uv run finalpass all /path/to/delivery --spec netflix_51 --patterns path/to/patterns.yaml
+```
 
-- `atsc_a85` — stereo, −24 LKFS ±2, TP −2 dBTP, LRA ≤ 18 (ATSC A/85 content-exchange target; current official version is A/85:2013 with Corrigendum No. 1, approved 2021; LRA cap is a FinalPass convention).
-- `atsc_a85_51` — 5.1, −24 LKFS ±2, TP −2 dBTP, LRA ≤ 18 (same current A/85 baseline, for direct 5.1 program measurement; stereo downmix should be checked separately if required).
-- `ebu_r128` — stereo, −23 LUFS ±0.5 (R128 pre-produced), TP −1 dBTP, LRA ≤ 18 (convention).
-- `netflix_stereo` — stereo, −27 LKFS ±2, TP −2 dBTP, dialog-anchored, LRA ≤ 18.
-- `netflix_51` — 5.1, same targets, dialog-anchored.
-- `streaming_-14` — stereo, −14 LUFS ±1, TP −1 dBTP, LRA ≤ 18. This is a streaming *normalization* target (Spotify / YouTube / Tidal), not an official delivery spec.
+Use the same top-level shape as
+[src/finalpass/_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml).
 
-Values are current best-public-knowledge targets; they are not official platform certifications. Each YAML cites its source URL. Verify against your current delivery paperwork.
+## Bundled Specs
 
-## Channel order
+Bundled presets:
 
-SMPTE throughout: `L R C LFE Ls Rs [Lss Rss]`. A 5.0 split stem is the one accepted exception: FinalPass inserts a silent LFE channel for analysis and reports the real source legs. It does not otherwise remap; if your file is in a different order, flag and relabel before measuring.
+- `atsc_a85` - stereo, -24 LKFS +/-2, true peak <= -2 dBTP, LRA <= 18.
+- `atsc_a85_51` - 5.1, -24 LKFS +/-2, true peak <= -2 dBTP, LRA <= 18.
+- `ebu_r128` - stereo, -23 LUFS +/-0.5, true peak <= -1 dBTP, LRA <= 18.
+- `netflix_stereo` - stereo, -27 LKFS +/-2, true peak <= -2 dBTP,
+  dialog-anchored, LRA <= 18.
+- `netflix_51` - 5.1, -27 LKFS +/-2, true peak <= -2 dBTP,
+  dialog-anchored, LRA <= 18.
+- `streaming_-14` - stereo, -14 LUFS +/-1, true peak <= -1 dBTP, LRA <= 18.
 
-## Non-goals — ever
+Each YAML spec includes notes and source URLs. The values are best-public
+knowledge presets and FinalPass conventions, not platform certification. Always
+check current delivery paperwork.
 
-No network calls. No telemetry. No cloud. No LLM API calls. No DAW functionality — FinalPass analyzes and reports, it does not edit audio. No reimplementation of proprietary measurement algorithms behind closed specs (e.g. Dolby Dialogue Intelligence); where a spec depends on one, FinalPass measures an honest substitute and says so.
+User specs can be supplied by passing a YAML path to `--spec`.
+
+## JSON Schemas
+
+The JSON reports are Pydantic v2 models with `extra="forbid"` to keep the
+on-disk contract explicit.
+
+Current schema versions:
+
+- `loudness`: `schema_version: 3`
+- `null`: `schema_version: 3`
+- `me`: `schema_version: 3`
+- `all`: `schema_version: 8`
+
+Important persisted fields include:
+
+- `finalpass_version`, `schema_version`, `run_id`, `run_started_at`, and `fps`.
+- `spec` references for loudness and folder analysis.
+- Source provenance: `source_kind`, `source_paths`, `member_legs`, and
+  `presentation_label`.
+- `flags[]` for timed loudness, null, and M&E failures.
+- `analysis_window` for null and M&E comparisons.
+- `groups[].assets[]`, `groups[].files[]`, `groups[].null_test`,
+  `groups[].me_check`, `unclassified[]`, and `discovery_errors[]` for `all`.
+
+## Channel Order
+
+FinalPass uses SMPTE order throughout:
+
+```text
+L R C LFE Ls Rs [Lss Rss]
+```
+
+A 5.0 split source is the accepted exception. FinalPass inserts a temporary
+silent LFE channel for analysis compatibility and reports the true 5.0 source
+provenance. It does not otherwise remap channels. If a file uses a different
+order, fix or relabel it before analysis.
+
+## Codebase Overview
+
+The repository is intentionally small and module-oriented.
+
+Core package:
+
+- [src/finalpass/cli.py](src/finalpass/cli.py) - Click command definitions,
+  option validation, terminal rendering, exit-code behavior, and artifact
+  announcements.
+- [src/finalpass/jobs.py](src/finalpass/jobs.py) - orchestration for direct and
+  folder jobs, report model construction, auto-null/auto-M&E selection, and
+  artifact writing.
+- [src/finalpass/models.py](src/finalpass/models.py) - Pydantic report models
+  and schema-versioned output contracts.
+- [src/finalpass/errors.py](src/finalpass/errors.py) - user-facing error types.
+- [src/finalpass/specs.py](src/finalpass/specs.py) and
+  [src/finalpass/_bundled_specs](src/finalpass/_bundled_specs) - bundled and
+  user loudness specs.
+- [src/finalpass/audio_io.py](src/finalpass/audio_io.py) - WAV/BWF loading,
+  audio metadata, channel handling, and BWF time-reference extraction.
+- [src/finalpass/loudness.py](src/finalpass/loudness.py) - loudness,
+  true-peak, LRA, and timed true-peak flag generation.
+- [src/finalpass/null_test.py](src/finalpass/null_test.py) - stem-sum null
+  analysis and residual flagging.
+- [src/finalpass/me_check.py](src/finalpass/me_check.py) - M&E dialogue-bleed
+  heuristic, speech-band filtering, gating, correlation, and coherence.
+- [src/finalpass/analysis_window.py](src/finalpass/analysis_window.py) - shared
+  comparison-window preflight for null and M&E checks.
+- [src/finalpass/assets.py](src/finalpass/assets.py),
+  [src/finalpass/all_assets.py](src/finalpass/all_assets.py), and
+  [src/finalpass/standalone_ingest.py](src/finalpass/standalone_ingest.py) -
+  interleaved and split-mono discovery, logical-asset assembly, strict family
+  validation, and standalone seed-path resolution.
+- [src/finalpass/classify.py](src/finalpass/classify.py) and
+  [src/finalpass/_bundled_patterns.yaml](src/finalpass/_bundled_patterns.yaml) -
+  role, group, and channel-hint classification.
+- [src/finalpass/artifact_naming.py](src/finalpass/artifact_naming.py) - derived
+  show/episode slugs for report and marker artifact names.
+- [src/finalpass/prep_folders.py](src/finalpass/prep_folders.py),
+  [src/finalpass/wizard.py](src/finalpass/wizard.py), and
+  [src/finalpass/wizard_io.py](src/finalpass/wizard_io.py) - terminal wizard
+  and prep-folder workflow.
+- [src/finalpass/report.py](src/finalpass/report.py) and
+  [src/finalpass/templates](src/finalpass/templates) - self-contained HTML
+  rendering from persisted models.
+- [src/finalpass/aaf_export.py](src/finalpass/aaf_export.py) - AAF marker
+  candidate collection and `pyaaf2` export.
+- [src/finalpass/timecode.py](src/finalpass/timecode.py) - sample/timecode and
+  edit-unit conversions for reports and markers.
+- [src/finalpass/presentation.py](src/finalpass/presentation.py) - shared
+  human-readable labels, verdict descriptions, and source summaries.
+
+Supporting files:
+
+- [tests](tests) - unit and integration coverage for specs, CLI behavior,
+  reports, examples, split-mono discovery, artifact naming, AAF export, null,
+  M&E, and wizard flows.
+- [examples](examples) - deterministic synthetic deliveries and smoke commands.
+- [.github/workflows/ci.yml](.github/workflows/ci.yml) - CI on Python 3.11 and
+  3.12, including the example smoke flow.
+- [specs](specs) and [docs](docs) - implementation notes, phase specs, and
+  handoff/reference documents from development.
+
+## Development
+
+Set up the environment:
+
+```bash
+uv sync --dev --frozen
+```
+
+Run tests:
+
+```bash
+uv run pytest
+```
+
+Run the example smoke flow:
+
+```bash
+uv run python examples/_smoke.py
+```
+
+Check CLI help:
+
+```bash
+uv run finalpass --help
+uv run finalpass all --help
+uv run finalpass me --help
+```
+
+CI runs the test suite and smoke helper on Python 3.11 and 3.12.
+
+## Scope and Non-Goals
+
+In scope for this release candidate:
+
+- Local WAV/BWF delivery QC.
+- Interleaved and canonical split-mono source handling.
+- Folder-first and prep-folder workflows.
+- Loudness, true peak, LRA, null, and M&E heuristic checks.
+- JSON, HTML, terminal summary, and conditional AAF marker output.
+
+Out of scope:
+
+- Atmos, ADM BWF, MXF, DCP, or video-container audio.
+- Automatic time alignment of genuinely misaligned stems.
+- Speech recognition, transcription, diarization, or ML/VAD.
+- Dolby Dialogue Intelligence or other closed proprietary algorithms.
+- Watch folders, background services, cloud processing, telemetry, or GUI.
+- DAW editing. FinalPass reports problems; it does not modify audio.
+
+## Privacy and Security
+
+FinalPass analyzes local files in place and writes local report artifacts. The
+runtime path does not call network services, upload media, or collect telemetry.
+
+Development dependencies are pinned through `uv.lock`. This repository follows a
+conservative dependency policy during development: newly released package
+versions should age before adoption, and install scripts should not be enabled
+without explicit review.
+
+## Contributing
+
+This is an early release candidate. Useful contributions should include:
+
+- A clear description of the delivery layout or failure case.
+- Small reproducible fixtures when possible.
+- Tests for classifier, split-mono, report, or analysis behavior.
+- Notes about whether the issue affects interleaved input, split-mono input,
+  prep-folder mode, direct commands, `all`, or the wizard.
+
+Generated media and local report outputs should stay out of commits unless they
+are intentionally added as small deterministic fixtures.
 
 ## License
 
