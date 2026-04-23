@@ -242,9 +242,28 @@ def test_split_loudness_html_shows_provenance(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     html = (out_dir / "report.html").read_text(encoding="utf-8")
     assert "Source provenance" in html
-    assert "split_mono" in html
+    assert "split mono" in html
+    assert "Comp LtRt" in html
     assert "Comp LtRt.L.wav" in html
     assert "Comp LtRt.R.wav" in html
+
+
+def test_split_loudness_terminal_output_uses_polished_label_and_raw_path(tmp_path: Path) -> None:
+    data = exact_sum_components(base_seed=SEED + 112, n_channels=2)
+    family = write_split_from_array(tmp_path / "case", "Comp LtRt", "stereo", data["pm"])
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness",
+        str(family["L"]),
+        "--spec", "ebu_r128",
+    ])
+    assert result.exit_code == 0, result.output
+    assert "Comp LtRt" in result.output
+    assert "source:" in result.output
+    assert "split mono" in result.output
+    assert "path:" in result.output
+    assert "Comp LtRt.L.wav" in result.output
 
 
 def test_split_json_only_writes_no_files(tmp_path: Path) -> None:

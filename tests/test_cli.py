@@ -8,6 +8,8 @@ from click.testing import CliRunner
 
 from finalpass import __version__
 from finalpass.cli import main
+from finalpass.jobs import WrittenArtifacts
+from finalpass.models import Report, SpecRef, Summary
 
 
 def test_specs_list_contains_all_bundled() -> None:
@@ -150,6 +152,82 @@ def test_version_flag_matches_package_metadata() -> None:
     assert result.exit_code == 0
     assert __version__ in result.output
     assert importlib.metadata.version("finalpass") == __version__
+
+
+def test_loudness_command_routes_through_shared_runner(monkeypatch, pink_stereo_10s: Path) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_execute_loudness(*, files, spec_name, dx_file, fps):
+        calls["files"] = files
+        calls["spec_name"] = spec_name
+        calls["dx_file"] = dx_file
+        calls["fps"] = fps
+        return Report(
+            finalpass_version=__version__,
+            schema_version=2,
+            run_id="test-run",
+            run_started_at="2026-04-22T00:00:00Z",
+            spec=SpecRef(name="ebu_r128", display_name="EBU R128", source="bundled"),
+            fps=fps,
+            files=[],
+            summary=Summary(total_checks=0, passed=0, failed=0, skipped=0, overall_pass=True),
+        )
+
+    monkeypatch.setattr("finalpass.cli.execute_loudness", fake_execute_loudness)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness",
+        str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--json-only",
+    ])
+    assert result.exit_code == 0, result.output
+    assert calls["files"] == (pink_stereo_10s,)
+    assert calls["spec_name"] == "ebu_r128"
+    assert calls["dx_file"] is None
+    assert calls["fps"] == 23.976
+
+
+def test_loudness_command_routes_artifact_writes_through_shared_seam(monkeypatch, pink_stereo_10s: Path, tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    report = Report(
+        finalpass_version=__version__,
+        schema_version=2,
+        run_id="test-run",
+        run_started_at="2026-04-22T00:00:00Z",
+        spec=SpecRef(name="ebu_r128", display_name="EBU R128", source="bundled"),
+        fps=23.976,
+        files=[],
+        summary=Summary(total_checks=0, passed=0, failed=0, skipped=0, overall_pass=True),
+    )
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr("finalpass.cli.execute_loudness", lambda **_: report)
+
+    def fake_persist_report_artifacts(*, report, payload, out_dir):
+        calls["report"] = report
+        calls["payload"] = payload
+        calls["out_dir"] = out_dir
+        return WrittenArtifacts(
+            json_path=out_dir / "report.json",
+            html_path=out_dir / "report.html",
+            aaf_path=None,
+        )
+
+    monkeypatch.setattr("finalpass.cli.persist_report_artifacts", fake_persist_report_artifacts)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness",
+        str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 0, result.output
+    assert calls["report"] == report
+    assert calls["out_dir"] == out_dir
+    assert '"schema_version": 2' in calls["payload"]
 
 
 def test_loudness_terminal_output_shows_full_input_path_on_separate_line(

@@ -6,10 +6,11 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from finalpass.cli import _run_all, _run_loudness, _run_me, _run_null, main
+from finalpass.cli import main
+from finalpass.jobs import run_all, run_loudness, run_me, run_null
 from finalpass.models import AllReport, MEReport
 from finalpass.report import grouped_templates_present, render_report_html
-from tests.audio_cases import SEED, SR, build_two_episodes, exact_sum_components, me_check_components, write_audio
+from tests.audio_cases import SEED, SR, build_split_group, build_two_episodes, exact_sum_components, me_check_components, write_audio
 
 
 def _build_null_fail_report(root: Path):
@@ -21,14 +22,14 @@ def _build_null_fail_report(root: Path):
     dx = write_audio(root / "SHOW_S01E04_DX_STEREO.wav", data["dx"])
     mx = write_audio(root / "SHOW_S01E04_MX_STEREO.wav", data["mx"])
     fx = write_audio(root / "SHOW_S01E04_FX_STEREO.wav", data["fx"])
-    return _run_null(pm=pm, stems=(dx, mx, fx), fps=23.976, window_ms=1000.0, hop_ms=100.0, threshold_dbfs=-40.0)
+    return run_null(pm=pm, stems=(dx, mx, fx), fps=23.976, window_ms=1000.0, hop_ms=100.0, threshold_dbfs=-40.0)
 
 
 def _build_me_fail_report(root: Path):
     data = me_check_components(base_seed=SEED + 1001, bleed_region=(5.0, 7.0), bleed_gain=0.08)
     me = write_audio(root / "SHOW_S01E04_ME_STEREO.wav", data["me"])
     dx = write_audio(root / "SHOW_S01E04_DX_STEREO.wav", data["dx"])
-    return _run_me(
+    return run_me(
         me_file=me,
         dx_file=dx,
         fps=23.976,
@@ -44,7 +45,7 @@ def _build_me_fail_report(root: Path):
 
 
 def test_render_loudness_html_smoke(pink_stereo_10s: Path) -> None:
-    report = _run_loudness(files=(pink_stereo_10s,), spec_name="ebu_r128", dx_file=None, fps=23.976)
+    report = run_loudness(files=(pink_stereo_10s,), spec_name="ebu_r128", dx_file=None, fps=23.976)
     html = render_report_html(report)
     assert "<html" in html.lower()
     assert "<style" in html.lower()
@@ -81,7 +82,7 @@ def test_render_all_html_smoke(tmp_path: Path) -> None:
         e04_null_defect=True,
         e04_me_bleed_defect=True,
     )
-    report = _run_all(
+    report = run_all(
         folder=folder,
         spec_name="ebu_r128",
         patterns_path=None,
@@ -109,7 +110,7 @@ def test_render_all_html_smoke(tmp_path: Path) -> None:
 
 
 def test_rendered_html_has_no_external_assets(pink_stereo_10s: Path) -> None:
-    report = _run_loudness(files=(pink_stereo_10s,), spec_name="ebu_r128", dx_file=None, fps=23.976)
+    report = run_loudness(files=(pink_stereo_10s,), spec_name="ebu_r128", dx_file=None, fps=23.976)
     html = render_report_html(report)
     lowered = html.lower()
     assert "http://" not in lowered
@@ -123,9 +124,59 @@ def test_packaged_templates_load_via_importlib_resources(pink_stereo_10s: Path) 
     assert grouped_templates_present() is True
     template_root = importlib.resources.files("finalpass.templates")
     assert template_root.joinpath("base.html.j2").is_file()
-    report = _run_loudness(files=(pink_stereo_10s,), spec_name="ebu_r128", dx_file=None, fps=23.976)
+    report = run_loudness(files=(pink_stereo_10s,), spec_name="ebu_r128", dx_file=None, fps=23.976)
     html = render_report_html(report)
     assert "FinalPass HTML Report" in html
+
+
+def test_render_split_loudness_html_uses_polished_display_label(tmp_path: Path) -> None:
+    family = build_split_group(
+        tmp_path / "delivery",
+        "S01E03",
+        layout="stereo",
+        write_roles=("pm",),
+        base_seed=SEED + 1100,
+    )["pm"]
+    report = run_loudness(files=(family["L"],), spec_name="ebu_r128", dx_file=None, fps=23.976)
+    html = render_report_html(report)
+    assert "SHOW_S01E03_Comp_LtRt" in html
+    assert "SHOW_S01E03_Comp_LtRt.L.wav" in html
+    assert "split mono" in html
+    assert "2 mono files" in html
+
+
+def test_render_split_all_html_uses_polished_display_label(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="stereo",
+        write_roles=("pm", "dx", "mx", "fx", "me"),
+        me_mode="independent",
+        base_seed=SEED + 1110,
+    )
+    report = run_all(
+        folder=folder,
+        spec_name="ebu_r128",
+        patterns_path=None,
+        include_unclassified=False,
+        fps=23.976,
+        null_window_ms=1000.0,
+        null_hop_ms=100.0,
+        null_threshold_dbfs=-40.0,
+        me_window_ms=500.0,
+        me_hop_ms=100.0,
+        me_band_low_hz=200.0,
+        me_band_high_hz=4000.0,
+        me_corr_threshold=0.65,
+        me_coherence_threshold=0.60,
+        me_dx_gate_dbfs=-45.0,
+        me_me_floor_dbfs=-60.0,
+    )
+    html = render_report_html(report)
+    assert "SHOW_S01E03_Comp_LtRt" in html
+    assert "SHOW_S01E03_Comp_LtRt.L.wav" in html
+    assert "split mono" in html
 
 
 def test_round_trip_me_json_renders_html(tmp_path: Path) -> None:

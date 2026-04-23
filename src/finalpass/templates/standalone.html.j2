@@ -28,7 +28,8 @@
     <h2>Null Summary</h2>
     {{ macros.summary_stats([
       ("Overall", macros.badge(report.summary.overall_pass|verdict_label(false), report.summary.overall_pass|verdict_class(false))),
-      ("Printmaster", report.printmaster.path),
+      ("Printmaster", display_label(report.printmaster)),
+      ("Printmaster source", source_summary(report.printmaster)),
       ("Stem count", report.stems|length),
       ("Window / hop / threshold", "%.0f ms / %.0f ms / %.1f dBFS"|format(report.null_test.window_ms, report.null_test.hop_ms, report.null_test.threshold_dbfs)),
     ]) }}
@@ -38,7 +39,8 @@
     <h2>Input metadata</h2>
     <div class="section-stack">
       <div class="card card-muted">
-        <h3>Printmaster</h3>
+        <h3>{{ display_label(report.printmaster) }}</h3>
+        <p class="muted">{{ source_summary(report.printmaster) }}</p>
         <div class="meta-grid">
           <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ report.printmaster.path }}</div></div>
           <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ report.printmaster.sample_rate }} Hz</div></div>
@@ -52,12 +54,16 @@
         <h3>Stems</h3>
         <table>
           <thead>
-            <tr><th>Path</th><th>Sample rate</th><th>Bit depth</th><th>Channels</th><th>Duration</th></tr>
+            <tr><th>Asset</th><th>Sample rate</th><th>Bit depth</th><th>Channels</th><th>Duration</th></tr>
           </thead>
           <tbody>
             {% for stem in report.stems %}
             <tr>
-              <td class="mono">{{ stem.path }}</td>
+              <td>
+                <strong>{{ display_label(stem) }}</strong>
+                <div class="muted">{{ source_summary(stem) }}</div>
+                <div class="mono">{{ stem.path }}</div>
+              </td>
               <td>{{ stem.sample_rate }} Hz</td>
               <td>{{ stem.bit_depth }}-bit</td>
               <td>{{ channel_display(stem.channel_config_actual, stem.channel_count) }}</td>
@@ -98,8 +104,10 @@
     <h2>M&amp;E Summary</h2>
     {{ macros.summary_stats([
       ("Overall", macros.badge(report.summary.overall_pass|verdict_label(false), report.summary.overall_pass|verdict_class(false))),
-      ("M&E", report.me_file.path),
-      ("DX", report.dx_file.path),
+      ("M&E", display_label(report.me_file)),
+      ("M&E source", source_summary(report.me_file)),
+      ("DX", display_label(report.dx_file)),
+      ("DX source", source_summary(report.dx_file)),
       ("Window / hop / band", "%.0f ms / %.0f ms / %.0f-%.0f Hz"|format(report.me_check.window_ms, report.me_check.hop_ms, report.me_check.band_low_hz, report.me_check.band_high_hz)),
       ("Thresholds", "corr %.2f / coh %.2f / dx %.1f dBFS / me %.1f dBFS"|format(report.me_check.corr_threshold, report.me_check.coherence_threshold, report.me_check.dx_gate_dbfs, report.me_check.me_floor_dbfs)),
     ]) }}
@@ -109,7 +117,8 @@
     <h2>Input metadata</h2>
     <div class="section-stack">
       <div class="card card-muted">
-        <h3>M&amp;E file</h3>
+        <h3>{{ display_label(report.me_file) }}</h3>
+        <p class="muted">{{ source_summary(report.me_file) }}</p>
         <div class="meta-grid">
           <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ report.me_file.path }}</div></div>
           <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ report.me_file.sample_rate }} Hz</div></div>
@@ -120,7 +129,8 @@
         {{ macros.source_provenance(report.me_file) }}
       </div>
       <div class="card card-muted">
-        <h3>DX file</h3>
+        <h3>{{ display_label(report.dx_file) }}</h3>
+        <p class="muted">{{ source_summary(report.dx_file) }}</p>
         <div class="meta-grid">
           <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ report.dx_file.path }}</div></div>
           <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ report.dx_file.sample_rate }} Hz</div></div>

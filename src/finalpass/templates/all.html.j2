@@ -47,13 +47,16 @@
   <h2>Unclassified logical assets</h2>
   <table>
     <thead>
-      <tr><th>Path</th><th>Source kind</th><th>Reason</th></tr>
+      <tr><th>Asset</th><th>Reason</th></tr>
     </thead>
     <tbody>
       {% for entry in report.unclassified %}
       <tr>
-        <td class="mono">{{ entry.path }}</td>
-        <td>{{ entry.source_kind }}</td>
+        <td>
+          <strong>{{ display_label(entry) }}</strong>
+          <div class="muted">{{ source_summary(entry) }}</div>
+          <div class="mono">{{ entry.path }}</div>
+        </td>
         <td>{{ entry.reason }}</td>
       </tr>
       {% endfor %}
@@ -84,9 +87,8 @@
       <thead>
         <tr>
           <th>Role</th>
-          <th>Path</th>
+          <th>Asset</th>
           <th>Layout</th>
-          <th>Source kind</th>
           <th>Used by</th>
           <th>Selection</th>
         </tr>
@@ -95,9 +97,12 @@
         {% for asset in group.assets %}
         <tr>
           <td>{{ asset.role }}</td>
-          <td class="mono">{{ asset.path }}</td>
+          <td>
+            <strong>{{ display_label(asset) }}</strong>
+            <div class="muted">{{ source_summary(asset) }}</div>
+            <div class="mono">{{ asset.path }}</div>
+          </td>
           <td>{{ asset.channel_config_actual }}</td>
-          <td>{{ asset.source_kind }}</td>
           <td>{{ asset.used_by|join(", ") if asset.used_by else "—" }}</td>
           <td>{{ asset.selection_note or "—" }}</td>
         </tr>
@@ -112,12 +117,16 @@
     <h3>Measured files</h3>
     <table>
       <thead>
-        <tr><th>Path</th><th>Role</th><th>Sample rate</th><th>Bit depth</th><th>Channels</th><th>Duration</th></tr>
+        <tr><th>Measured asset</th><th>Role</th><th>Sample rate</th><th>Bit depth</th><th>Channels</th><th>Duration</th></tr>
       </thead>
       <tbody>
         {% for file_report in group.files %}
         <tr>
-          <td class="mono">{{ file_report.path }}</td>
+          <td>
+            <strong>{{ display_label(file_report) }}</strong>
+            <div class="muted">{{ source_summary(file_report) }}</div>
+            <div class="mono">{{ file_report.path }}</div>
+          </td>
           <td>{{ file_report.role }}</td>
           <td>{{ file_report.sample_rate }} Hz</td>
           <td>{{ file_report.bit_depth }}-bit</td>

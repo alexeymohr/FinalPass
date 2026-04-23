@@ -36,7 +36,10 @@ def test_wizard_all_flow_succeeds_on_split_folder(tmp_path: Path) -> None:
     assert payload["schema_version"] == 6
     assert payload["command"] == "all"
     assert "Folder summary:" in result.output
+    assert "Job: all" in result.output
     assert "Status: PASS" in result.output
+    assert "Artifacts written to:" in result.output
+    assert "Produced artifacts:" in result.output
 
 
 def test_wizard_loudness_flow_succeeds_on_split_asset(tmp_path: Path) -> None:
@@ -61,8 +64,12 @@ def test_wizard_loudness_flow_succeeds_on_split_asset(tmp_path: Path) -> None:
     assert payload["schema_version"] == 2
     assert payload["files"][0]["source_kind"] == "split_mono"
     assert payload["files"][0]["member_legs"] == ["L", "R"]
-    assert "split_mono · 2 files" in result.output
+    assert "split mono (2 mono files)" in result.output or "split mono · stereo · LtRt · 2 mono files" in result.output
+    assert "SHOW_S01E03_Comp_LtRt" in result.output
     assert ".L.wav" not in result.output
+    assert "Job: loudness" in result.output
+    assert "Artifacts written to:" in result.output
+    assert "Produced artifacts:" in result.output
 
 
 def test_wizard_null_flow_succeeds_with_auto_stem_plan(tmp_path: Path) -> None:
@@ -141,6 +148,24 @@ def test_wizard_back_and_quit_work(tmp_path: Path) -> None:
     result = runner.invoke(main, ["wizard", str(folder)], input="1\n0\nq\n")
     assert result.exit_code == 0, result.output
     assert result.output.count("Select a job type.") == 2
+
+
+def test_wizard_review_step_requires_confirmation(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="stereo", write_roles=("pm",), base_seed=SEED + 2055)
+    out_dir = tmp_path / "out"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["wizard", str(folder), "--out", str(out_dir)],
+        input="2\n1\n1\n1\n0\nq\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "Review:" in result.output
+    assert "Ready to run?" in result.output
+    assert "Run job" in result.output
+    assert not (out_dir / "report.json").exists()
 
 
 def test_wizard_discovery_errors_can_be_viewed_and_continue(tmp_path: Path) -> None:

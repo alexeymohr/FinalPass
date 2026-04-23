@@ -33,6 +33,7 @@ from .null_test import (
     DEFAULT_NULL_THRESHOLD_DBFS,
     DEFAULT_NULL_WINDOW_MS,
 )
+from .presentation import asset_menu_label, logical_asset_display_name, source_summary
 from .specs import Spec, list_bundled, load_spec
 from .wizard_io import Choice, WizardBack, WizardQuit, choose_many, choose_one, print_section, prompt_text
 
@@ -62,8 +63,10 @@ class FlowResult:
 
 @dataclass(frozen=True)
 class JobExecutionResult:
+    job_name: str
     status: WizardStatus
     summary_line: str
+    discovery_issue_count: int
     artifacts: list[Path]
     error_message: str | None = None
 
@@ -224,20 +227,22 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
 
                 try:
                     _review_and_confirm([
-                        f"Folder: {folder_context.folder}",
                         "Job: all",
+                        f"Folder: {folder_context.folder}",
                         f"Spec: {spec_selection.source_label}",
-                        f"Output dir: {out_dir}",
+                        f"Output: {out_dir}",
                         f"FPS: {fps:g}",
                     ])
                 except WizardBack:
                     continue
 
                 result = _execute_report_job(
+                    job_name="all",
                     out_dir=out_dir,
                     summary_builder=lambda report: (
                         f"{report.summary.groups_passed} groups passed, "
-                        f"{report.summary.groups_failed} failed."
+                        f"{report.summary.groups_failed} failed, "
+                        f"{len(report.discovery_errors)} discovery issue(s)."
                     ),
                     runner=lambda: run_all(
                         folder=folder_context.folder,
@@ -305,13 +310,13 @@ def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, defa
 
                             try:
                                 review_lines = [
-                                    f"Folder: {folder_context.folder}",
                                     "Job: loudness",
+                                    f"Folder: {folder_context.folder}",
                                     f"Group: {group_id}",
-                                    f"Asset: {_asset_label(asset)}",
+                                    _review_asset_line("Asset", asset),
                                     f"Spec: {spec_selection.source_label}",
-                                    f"DX asset: {_asset_label(dx_asset) if dx_asset is not None else 'No DX asset'}",
-                                    f"Output dir: {out_dir}",
+                                    _review_asset_line("DX asset", dx_asset),
+                                    f"Output: {out_dir}",
                                     f"FPS: {fps:g}",
                                 ]
                                 _review_and_confirm(review_lines)
@@ -319,6 +324,7 @@ def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, defa
                                 continue
 
                             result = _execute_report_job(
+                                job_name="loudness",
                                 out_dir=out_dir,
                                 summary_builder=lambda report: (
                                     f"{report.summary.passed} passed, {report.summary.failed} failed, "
@@ -377,18 +383,19 @@ def _null_flow(folder_context: FolderContext, *, default_out_dir: Path, default_
 
                         try:
                             _review_and_confirm([
-                                f"Folder: {folder_context.folder}",
                                 "Job: null",
+                                f"Folder: {folder_context.folder}",
                                 f"Group: {group_id}",
-                                f"Printmaster: {_asset_label(pm_asset)}",
-                                f"Stems: {', '.join(_asset_label(asset) for asset in stem_assets)}",
-                                f"Output dir: {out_dir}",
+                                _review_asset_line("Printmaster", pm_asset),
+                                f"Stems: {', '.join(logical_asset_display_name(asset) for asset in stem_assets)}",
+                                f"Output: {out_dir}",
                                 f"FPS: {fps:g}",
                             ])
                         except WizardBack:
                             continue
 
                         result = _execute_report_job(
+                            job_name="null",
                             out_dir=out_dir,
                             summary_builder=_null_summary_line,
                             runner=lambda: run_null(
@@ -446,18 +453,19 @@ def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fp
 
                         try:
                             _review_and_confirm([
-                                f"Folder: {folder_context.folder}",
                                 "Job: me",
+                                f"Folder: {folder_context.folder}",
                                 f"Group: {group_id}",
-                                f"M&E asset: {_asset_label(me_asset)}",
-                                f"DX asset: {_asset_label(dx_asset)}",
-                                f"Output dir: {out_dir}",
+                                _review_asset_line("M&E asset", me_asset),
+                                _review_asset_line("DX asset", dx_asset),
+                                f"Output: {out_dir}",
                                 f"FPS: {fps:g}",
                             ])
                         except WizardBack:
                             continue
 
                         result = _execute_report_job(
+                            job_name="me",
                             out_dir=out_dir,
                             summary_builder=_me_summary_line,
                             runner=lambda: run_me(
@@ -509,7 +517,7 @@ def _choose_asset(
     title: str,
     auto_select_notice: str,
 ) -> ClassifiedLogicalAsset:
-    options = [Choice(_asset_label(asset), asset) for asset in assets]
+    options = [Choice(asset_menu_label(asset), asset) for asset in assets]
     return choose_one(title, options, auto_select_notice=auto_select_notice)
 
 
@@ -624,7 +632,7 @@ def _choose_null_stem_plan(
     while True:
         selected = choose_many(
             "Choose one or more stems.",
-            [Choice(_asset_label(asset), asset) for asset in same_layout_assets],
+            [Choice(asset_menu_label(asset), asset) for asset in same_layout_assets],
         )
         if selected:
             return selected
@@ -650,7 +658,7 @@ def _choose_dx_for_me(
     if same_layout and len(same_layout) == 1:
         return choose_one(
             "Choose the DX asset.",
-            [Choice(_asset_label(same_layout[0]), same_layout[0])],
+            [Choice(asset_menu_label(same_layout[0]), same_layout[0])],
             auto_select_notice="Auto-selected the only same-layout DX asset.",
         )
     return _choose_asset(candidates, title="Choose the DX asset.", auto_select_notice=notice)
@@ -660,7 +668,7 @@ def _choose_output_dir(default_out_dir: Path) -> Path:
     choice = choose_one(
         "Choose an output directory.",
         [
-            Choice(f"Use current default output directory ({default_out_dir})", "default"),
+            Choice(f"Keep current default output directory ({default_out_dir})", "default"),
             Choice("Enter a custom output directory", "custom"),
         ],
         default_index=1,
@@ -691,11 +699,11 @@ def _choose_fps(default_fps: float) -> float:
     choice = choose_one(
         "Choose the frame rate.",
         [
-            Choice("23.976", 23.976),
-            Choice("24", 24.0),
-            Choice("25", 25.0),
-            Choice("29.97", 29.97),
-            Choice("30", 30.0),
+            Choice("23.976 fps", 23.976),
+            Choice("24 fps", 24.0),
+            Choice("25 fps", 25.0),
+            Choice("29.97 fps", 29.97),
+            Choice("30 fps", 30.0),
             Choice("Enter a custom value", "__custom__"),
         ],
         default_index=default_index,
@@ -722,7 +730,7 @@ def _choose_fps(default_fps: float) -> float:
 def _review_and_confirm(lines: list[str]) -> None:
     print_section("Review:")
     for line in lines:
-        click.echo(f"- {line}")
+        click.echo(line)
     choose_one(
         "Ready to run?",
         [Choice("Run job", "run")],
@@ -732,30 +740,36 @@ def _review_and_confirm(lines: list[str]) -> None:
     )
 
 
-def _execute_report_job(*, out_dir: Path, summary_builder, runner) -> JobExecutionResult:
+def _execute_report_job(*, job_name: str, out_dir: Path, summary_builder, runner) -> JobExecutionResult:
     try:
         report = runner()
         payload = report.model_dump_json(indent=2, by_alias=True)
         written = write_report_artifacts(report=report, payload=payload, out_dir=out_dir)
     except FinalPassError as exc:
         return JobExecutionResult(
+            job_name=job_name,
             status="TOOL ERROR",
             summary_line="The job could not be completed.",
+            discovery_issue_count=0,
             artifacts=_existing_artifacts(out_dir),
             error_message=str(exc),
         )
     except Exception as exc:  # pragma: no cover - defensive wizard wrapper
         return JobExecutionResult(
+            job_name=job_name,
             status="TOOL ERROR",
             summary_line="The job could not be completed.",
+            discovery_issue_count=0,
             artifacts=_existing_artifacts(out_dir),
             error_message=str(exc),
         )
 
     status: WizardStatus = "PASS" if report.summary.overall_pass else "FAIL"
     return JobExecutionResult(
+        job_name=job_name,
         status=status,
         summary_line=summary_builder(report),
+        discovery_issue_count=len(report.discovery_errors) if isinstance(report, AllReport) else 0,
         artifacts=_written_artifacts(written),
         error_message=None,
     )
@@ -763,16 +777,21 @@ def _execute_report_job(*, out_dir: Path, summary_builder, runner) -> JobExecuti
 
 def _result_screen(result: JobExecutionResult, *, out_dir: Path, fps: float) -> FlowResult:
     print_section("Result:")
+    click.echo(f"Job: {result.job_name}")
     click.echo(f"Status: {result.status}")
+    if result.discovery_issue_count:
+        click.echo(f"Discovery issues: {result.discovery_issue_count}")
     click.echo(result.summary_line)
     if result.error_message:
         click.echo(f"Error: {result.error_message}")
     if result.artifacts:
-        click.echo("Artifacts:")
+        click.echo(f"Artifacts written to: {out_dir}")
+        click.echo("Produced artifacts:")
         for path in result.artifacts:
             click.echo(f"- {path}")
     else:
-        click.echo("Artifacts: none")
+        click.echo(f"Artifacts written to: {out_dir}")
+        click.echo("Produced artifacts: none")
 
     action = choose_one(
         "What do you want to do next?",
@@ -815,19 +834,10 @@ def _group_label(group_id: str, assets: list[ClassifiedLogicalAsset]) -> str:
     )
 
 
-def _asset_label(asset: ClassifiedLogicalAsset | None) -> str:
+def _review_asset_line(label: str, asset: ClassifiedLogicalAsset | None) -> str:
     if asset is None:
-        return "None"
-    logical_asset = asset.logical_asset
-    member_count = len(logical_asset.source_paths)
-    presentation = logical_asset.presentation_label or logical_asset.channel_config_actual
-    file_word = "file" if member_count == 1 else "files"
-    name = _logical_asset_name(asset)
-    return (
-        f"{asset.role} · {logical_asset.channel_config_actual} · {presentation} · "
-        f"{logical_asset.source_kind} · {member_count} {file_word} · "
-        f"{name}"
-    )
+        return f"{label}: none"
+    return f"{label}: {logical_asset_display_name(asset)} ({source_summary(asset)})"
 
 
 def _null_summary_line(report: NullReport) -> str:
@@ -860,13 +870,3 @@ def _existing_artifacts(out_dir: Path) -> list[Path]:
         out_dir / "markers.aaf",
     ]
     return [path for path in candidates if path.exists()]
-
-
-def _logical_asset_name(asset: ClassifiedLogicalAsset) -> str:
-    logical_asset = asset.logical_asset
-    stem = logical_asset.canonical_path.stem
-    if logical_asset.source_kind == "split_mono" and logical_asset.member_legs:
-        suffix = f".{logical_asset.member_legs[0]}"
-        if stem.upper().endswith(suffix.upper()):
-            return stem[:-len(suffix)]
-    return logical_asset.canonical_path.name

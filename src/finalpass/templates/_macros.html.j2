@@ -75,7 +75,8 @@
 
 {% macro file_report(file_report) -%}
 <section class="card section-stack">
-  <h3>{{ file_report.path|basename }}</h3>
+  <h3>{{ display_label(file_report) }}</h3>
+  <p class="muted">{{ source_summary(file_report) }}</p>
   <div class="meta-grid">
     <div class="stat"><div class="stat-label">Path</div><div class="stat-value mono">{{ file_report.path }}</div></div>
     <div class="stat"><div class="stat-label">Role</div><div class="stat-value">{{ file_report.role }}</div></div>
@@ -111,7 +112,7 @@
   <div>
     <h4>Source provenance</h4>
     <div class="meta-grid">
-      <div class="stat"><div class="stat-label">Source kind</div><div class="stat-value">{{ item.source_kind }}</div></div>
+      <div class="stat"><div class="stat-label">Source kind</div><div class="stat-value">{{ source_kind_label(item.source_kind) }}</div></div>
       <div class="stat"><div class="stat-label">Presentation</div><div class="stat-value">{{ item.presentation_label or "—" }}</div></div>
       <div class="stat"><div class="stat-label">Member legs</div><div class="stat-value">{{ item.member_legs|join(", ") if item.member_legs else "—" }}</div></div>
       <div class="stat">

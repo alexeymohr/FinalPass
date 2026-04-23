@@ -16,6 +16,7 @@ from jinja2 import Environment, FunctionLoader, TemplateNotFound, select_autoesc
 
 from .errors import ReportRenderError
 from .models import AllReport, FileReport, FlaggedRegion, Group, MEReport, NullReport, Report
+from .presentation import logical_asset_display_name, source_kind_label, source_summary
 
 RenderableReport: TypeAlias = Report | NullReport | MEReport | AllReport
 
@@ -90,6 +91,9 @@ def _environment() -> Environment:
         group_duration_seconds=_group_duration_seconds,
         group_sample_rate=_group_sample_rate,
         channel_display=_channel_display,
+        display_label=logical_asset_display_name,
+        source_summary=source_summary,
+        source_kind_label=source_kind_label,
     )
     return env
 
@@ -123,9 +127,9 @@ def _subtitle_for_report(report: RenderableReport) -> str:
     if isinstance(report, (Report, AllReport)):
         return f"{report.spec.display_name} ({report.spec.source})"
     if isinstance(report, NullReport):
-        return report.printmaster.path
+        return logical_asset_display_name(report.printmaster)
     if isinstance(report, MEReport):
-        return report.me_file.path
+        return logical_asset_display_name(report.me_file)
     return ""
 
 

@@ -2,7 +2,7 @@
 
 Delivery QC CLI for post-production sound. The v0.1 release candidate ships loudness, standalone stem-sum null, standalone M&E dialogue-bleed checks, split-mono support for the standalone commands and for `all`, a minimal folder-first terminal wizard, folder-level auto-null / auto-M&E against a named spec, a self-contained HTML report, conditional AAF marker export for timed null/M&E flags, example smoke flows, and CI.
 
-**Status: Phase 7 release candidate plus SM-4 minimal wizard flow.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, and runs the same internal job/report pipeline as the direct commands. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
+**Status: Phase 7 release candidate plus SM-5 split-mono/wizard polish.** `loudness`, standalone `null`, standalone `me`, `all`, and `wizard` are implemented. Standalone `loudness` / `null` / `me` accept either a normal interleaved WAV/BWF path or a seed path to one member of a canonical split stereo / 5.1 / 7.1 family. `all` discovers logical assets at the folder level, so one split stereo/5.1/7.1 family is treated as one analyzable asset, alternate presentations are preserved in inventory, and invalid split families surface as discovery errors. `wizard` stays folder-first and numbered-menu based, runs the same internal job/report pipeline as the direct commands, and presents logical assets with polished split-mono labels instead of raw leg filenames wherever practical. Normal runs always write `report.json` and `report.html`, and write `markers.aaf` only when the run contains exportable timed `null` / `me` flagged regions.
 
 ## Install (dev)
 
@@ -57,7 +57,7 @@ Standalone input note:
 
 See [examples/README.md](examples/README.md) for the deterministic delivery
 generator, disposable smoke outputs under `examples/out/`, and representative
-`loudness`, `null`, `me`, and `all` commands.
+`loudness`, `null`, `me`, `all`, and `wizard` commands.
 
 ## Artifacts
 
@@ -112,6 +112,40 @@ Auto-M&E runs only on `dx + me`. If either role is missing, the group records
 Use standalone `finalpass null` for any unusual or manual stem combination.
 Use standalone `finalpass me` when you want to tune the speech-band, gate, or
 threshold settings directly.
+
+### Split-mono quickstart
+
+The deterministic examples generator writes a split-mono delivery under
+`examples/delivery_split_assets/`. The standalone commands take a seed path to
+one member of the family; FinalPass resolves the rest of the canonical family
+in memory.
+
+```bash
+uv run python examples/_generate.py
+uv run finalpass loudness \
+  examples/delivery_split_assets/SHOW_S01E03_Comp_5.1.L.wav \
+  --spec netflix_51 \
+  --out examples/out/split_loudness
+
+uv run finalpass null \
+  examples/delivery_split_assets/SHOW_S01E03_Comp_5.1.L.wav \
+  examples/delivery_split_assets/SHOW_S01E03_DX_5.1.L.wav \
+  examples/delivery_split_assets/SHOW_S01E03_MX_5.1.L.wav \
+  examples/delivery_split_assets/SHOW_S01E03_FX_5.1.L.wav \
+  --out examples/out/split_null
+
+uv run finalpass me \
+  examples/delivery_split_assets/SHOW_S01E03_ME_5.1.L.wav \
+  --dx examples/delivery_split_assets/SHOW_S01E03_DX_5.1.L.wav \
+  --out examples/out/split_me
+
+uv run finalpass all \
+  examples/delivery_split_assets \
+  --spec netflix_51 \
+  --out examples/out/split_all
+
+uv run finalpass wizard examples/delivery_split_assets --out examples/out/split_wizard
+```
 
 Schema versions:
 - `finalpass loudness` emits `schema_version: 2`

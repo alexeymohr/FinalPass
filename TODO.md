@@ -26,7 +26,16 @@ Features outside the current phase's spec go here, not into the code.
     of raw mono legs, and can run `all`, standalone `loudness`, standalone
     `null`, and standalone `me` through numbered menus while reusing the same
     internal command runners and artifact-writing path as the direct CLI.
-- **Still deferred beyond SM-4:**
+- **SM-5 landed the split-mono UX / execution cleanup polish.**
+  - `src/finalpass/jobs.py` is now the authoritative shared execution seam for
+    direct commands and the wizard; the old duplicate runner bodies are gone
+    from `cli.py`.
+  - user-facing split-mono labels are now derived from existing provenance in
+    shared presentation helpers and applied across terminal, HTML, and wizard
+    surfaces without changing report schemas.
+  - maintainer docs now call out the shared-venv/worktree `PYTHONPATH=src`
+    verification caveat.
+- **Still deferred beyond SM-5:**
   - saved presets / persistent wizard state
   - advanced null / M&E tuning inside the wizard
   - any CLI surface redesign beyond the current commands

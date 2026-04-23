@@ -471,6 +471,30 @@ def test_all_split_mono_auto_me_runs(tmp_path: Path) -> None:
     assert group["me_check"]["flags"] == []
 
 
+def test_all_terminal_output_uses_polished_split_labels(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="stereo",
+        write_roles=("pm", "dx", "mx", "fx", "me"),
+        me_mode="independent",
+        base_seed=SEED + 1025,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+    ])
+    assert result.exit_code in (0, 1), result.output
+    assert "SHOW_S01E03_Comp_LtRt" in result.output
+    assert "split mono" in result.output
+    assert "path:" in result.output
+    assert "SHOW_S01E03_Comp_LtRt.L.wav" in result.output
+
+
 def test_all_dialog_loudness_falls_back_to_alternate_layout_dx_only(tmp_path: Path) -> None:
     folder = tmp_path / "delivery"
     build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "mx", "fx"), base_seed=SEED + 1030)
