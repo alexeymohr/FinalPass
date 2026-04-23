@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import aaf2
@@ -125,6 +126,35 @@ def test_standalone_loudness_tp_only_fail_writes_aaf(tmp_path: Path) -> None:
     assert marker["time"].startswith("00:00:05:")
     assert marker["user_comments"]["Label"] == "[1] FAIL: true peak over"
     assert "[LOUDNESS]" in marker["user_comments"]["Detail"]
+
+
+def test_standalone_loudness_tp_markers_are_limited_to_one_per_second(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    file_path = write_audio(
+        root / "tp_over_dense.wav",
+        true_peak_over_program(
+            burst_regions=((5.0, 5.002), (5.4, 5.402), (6.2, 6.202)),
+        ),
+    )
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "loudness",
+        str(file_path),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 1, result.output
+
+    report_data = (out_dir / "report.json").read_text(encoding="utf-8")
+    parsed = _read_marker_aaf(out_dir / "markers.aaf")
+    markers = parsed["markers"]
+    assert len(markers) == 2
+    assert markers[0]["time"].startswith("00:00:05:")
+    assert markers[1]["time"].startswith("00:00:06:")
+
+    data = json.loads(report_data)
+    assert len(data["files"][0]["flags"]) == 3
 
 
 def test_standalone_null_failing_case_writes_aaf(tmp_path: Path) -> None:

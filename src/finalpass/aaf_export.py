@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover - explicit tool error path
 ExportableReport: TypeAlias = Report | NullReport | MEReport | AllReport
 
 EXPORT_TRACK_NAME = "FinalPass Markers"
+LOUDNESS_MARKER_MIN_SPACING_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                     flags=file_report.flags,
                     sample_rate=file_report.sample_rate,
                     fps=report.fps,
+                    asset_label=logical_asset_display_name(file_report),
                 )
             )
     elif isinstance(report, NullReport):
@@ -121,6 +123,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
             candidate.metric,
         ),
     )
+    candidates = _throttle_loudness_candidates(candidates)
     return [
         replace(
             candidate,
@@ -293,6 +296,32 @@ def _timeline_length_edit_units(candidates: list[MarkerCandidate]) -> int:
             for candidate in candidates
         ),
     )
+
+
+def _throttle_loudness_candidates(
+    candidates: list[MarkerCandidate],
+) -> list[MarkerCandidate]:
+    if not candidates:
+        return []
+
+    throttled: list[MarkerCandidate] = []
+    last_kept_seconds: dict[tuple[str | None, str | None], float] = {}
+    for candidate in candidates:
+        if candidate.code != "LOUDNESS":
+            throttled.append(candidate)
+            continue
+
+        source_key = (candidate.group_id, candidate.asset_label)
+        start_seconds = candidate.start_sample / float(candidate.sample_rate)
+        last_seconds = last_kept_seconds.get(source_key)
+        if (
+            last_seconds is not None
+            and start_seconds < last_seconds + LOUDNESS_MARKER_MIN_SPACING_SECONDS
+        ):
+            continue
+        last_kept_seconds[source_key] = start_seconds
+        throttled.append(candidate)
+    return throttled
 
 
 def _create_comment_marker(

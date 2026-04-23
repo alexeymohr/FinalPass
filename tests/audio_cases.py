@@ -135,6 +135,7 @@ def true_peak_over_program(
     base_seed: int = LOUDNESS_PASSING_SEED,
     base_target_dbfs: float = -23.0,
     burst_region: tuple[float, float] = (5.0, 5.002),
+    burst_regions: tuple[tuple[float, float], ...] | None = None,
     burst_frequency_hz: float = 997.0,
     sr: int = SR,
 ) -> np.ndarray:
@@ -142,13 +143,15 @@ def true_peak_over_program(
         pink_noise(int(round(seconds * sr)), n_channels, base_seed),
         base_target_dbfs,
     )
-    start = int(round(burst_region[0] * sr))
-    end = int(round(burst_region[1] * sr))
-    burst_length = max(1, end - start)
-    t = np.arange(burst_length, dtype=np.float64) / float(sr)
-    burst = np.clip(np.sin(2.0 * np.pi * burst_frequency_hz * t) * 2.0, -1.0, 1.0)
-    for channel in range(n_channels):
-        data[start : start + burst_length, channel] = burst
+    regions = burst_regions or (burst_region,)
+    for region in regions:
+        start = int(round(region[0] * sr))
+        end = int(round(region[1] * sr))
+        burst_length = max(1, end - start)
+        t = np.arange(burst_length, dtype=np.float64) / float(sr)
+        burst = np.clip(np.sin(2.0 * np.pi * burst_frequency_hz * t) * 2.0, -1.0, 1.0)
+        for channel in range(n_channels):
+            data[start : start + burst_length, channel] = burst
     return data
 
 
