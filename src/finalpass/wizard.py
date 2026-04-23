@@ -1150,7 +1150,7 @@ def _execute_report_job(*, job_name: str, out_dir: Path, summary_builder, runner
             status="TOOL ERROR",
             summary_line="The job could not be completed.",
             discovery_issue_count=0,
-            artifacts=_existing_artifacts(out_dir),
+            artifacts=[],
             error_message=str(exc),
         )
     except Exception as exc:  # pragma: no cover - defensive wizard wrapper
@@ -1159,7 +1159,7 @@ def _execute_report_job(*, job_name: str, out_dir: Path, summary_builder, runner
             status="TOOL ERROR",
             summary_line="The job could not be completed.",
             discovery_issue_count=0,
-            artifacts=_existing_artifacts(out_dir),
+            artifacts=[],
             error_message=str(exc),
         )
 
@@ -1200,7 +1200,7 @@ def _result_screen(result: JobExecutionResult, *, out_dir: Path, fps: float) -> 
             Choice("Exit", "exit"),
         ],
         allow_back=False,
-        default_index=1,
+        default_index=3,
     )
     return FlowResult(action=action, out_dir=out_dir, fps=fps)
 
@@ -1271,18 +1271,6 @@ def _written_artifacts(written: WrittenArtifacts) -> list[Path]:
     if written.aaf_path is not None:
         out.append(written.aaf_path)
     return out
-
-
-def _existing_artifacts(out_dir: Path) -> list[Path]:
-    if not out_dir.is_dir():
-        return []
-    matches = {
-        path
-        for pattern in ("*report*.json", "*report*.html", "*markers*.aaf")
-        for path in out_dir.glob(pattern)
-        if path.is_file()
-    }
-    return sorted(matches)
 
 
 @contextmanager

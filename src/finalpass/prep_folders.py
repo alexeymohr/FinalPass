@@ -118,7 +118,7 @@ def scan_prep_layout(layout: PrepLayout) -> PrepScanResult:
     ignored_buckets: list[PrepBucket] = []
     analyzable_paths: list[Path] = []
     path_hints: dict[Path, PrepBucketHint] = {}
-    shared_group_hint = layout.folder.name.upper()
+    shared_group_hint = _shared_group_hint(layout.folder)
 
     for bucket in refreshed.buckets:
         if not bucket.populated:
@@ -143,6 +143,12 @@ def scan_prep_layout(layout: PrepLayout) -> PrepScanResult:
         analyzable_paths=tuple(analyzable_paths),
         path_hints=path_hints,
     )
+
+
+def _shared_group_hint(folder: Path) -> str:
+    if folder.name.casefold() == "audio files" and folder.parent != folder:
+        return folder.parent.name.upper()
+    return folder.name.upper()
 
 
 def _direct_files(folder: Path) -> tuple[Path, ...]:

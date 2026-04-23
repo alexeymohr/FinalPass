@@ -188,11 +188,7 @@ def _apply_prep_hints_to_assets(
             for path in asset.source_paths
             if (hint := path_hints.get(path.resolve())) is not None and hint.group_hint
         }
-        if (
-            asset.group_hint is None
-            and len(prep_hints) == 1
-            and asset.group_id == asset.canonical_path.parent.name.upper()
-        ):
+        if len(prep_hints) == 1:
             group_hint = next(iter(prep_hints))
             out.append(replace(asset, group_id=group_hint, group_hint=group_hint))
             continue

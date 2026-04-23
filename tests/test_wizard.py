@@ -20,6 +20,12 @@ def _copy_family(members: dict[str, Path], target_dir: Path) -> None:
         shutil.copy2(path, target_dir / path.name)
 
 
+def _copy_family_without_show_prefix(members: dict[str, Path], target_dir: Path) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for path in members.values():
+        shutil.copy2(path, target_dir / path.name.removeprefix("SHOW_"))
+
+
 def _single_artifact(out_dir: Path, pattern: str) -> Path:
     matches = sorted(out_dir.glob(pattern))
     assert len(matches) == 1
@@ -485,6 +491,47 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
         for group in payload["groups"]
         for asset in group["assets"]
     )
+
+
+def test_wizard_prep_mode_groups_role_specific_stem_names_as_one_delivery(tmp_path: Path) -> None:
+    folder = tmp_path / "NLA1120_262_Stems_Deliverables" / "Audio Files"
+    families = build_split_group(
+        folder,
+        "NLA1120_262_2398_48_20200408",
+        layout="5.1",
+        write_roles=("pm", "dx", "mx", "fx"),
+        role_stem_tokens={
+            "pm": "PM",
+            "dx": "DXSM",
+            "mx": "MXSM",
+            "fx": "FXSM",
+        },
+        base_seed=SEED + 2112,
+    )
+    create_prep_layout(folder)
+    prep_root = folder / PREP_ROOT_NAME
+    _copy_family_without_show_prefix(families["pm"], prep_root / "5.1 Printmaster")
+    _copy_family_without_show_prefix(families["dx"], prep_root / "5.1 Dialogue")
+    _copy_family_without_show_prefix(families["mx"], prep_root / "5.1 Music")
+    _copy_family_without_show_prefix(families["fx"], prep_root / "5.1 Effects")
+
+    out_dir = tmp_path / "out"
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["wizard", str(folder), "--out", str(out_dir)],
+        input="1\n2\n1\n1\n1\n3\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert _report_path(out_dir).name == "nla-1120-report.json"
+    assert _html_path(out_dir).name == "nla-1120-report.html"
+    payload = _read_payload(out_dir)
+    assert payload["summary"]["groups_total"] == 1
+    group = payload["groups"][0]
+    assert group["group_id"] == "NLA1120_262_STEMS_DELIVERABLES"
+    assert group["errors"] == []
+    assert {asset["role"] for asset in group["assets"]} == {"pm", "dx", "mx", "fx"}
+    assert group["null_test"]["pass"] is True
 
 
 def test_wizard_all_family_selection_uses_best_supported_printmaster_layout(tmp_path: Path) -> None:

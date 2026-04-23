@@ -279,12 +279,14 @@ def test_split_loudness_html_shows_provenance(tmp_path: Path) -> None:
 def test_split_loudness_terminal_output_uses_polished_label_and_raw_path(tmp_path: Path) -> None:
     data = exact_sum_components(base_seed=SEED + 112, n_channels=2)
     family = write_split_from_array(tmp_path / "case", "Comp LtRt", "stereo", data["pm"])
+    out_dir = tmp_path / "out"
 
     runner = CliRunner()
     result = runner.invoke(main, [
         "loudness",
         str(family["L"]),
         "--spec", "ebu_r128",
+        "--out", str(out_dir),
     ])
     assert result.exit_code == 0, result.output
     assert "Comp LtRt" in result.output

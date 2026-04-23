@@ -50,3 +50,19 @@ def test_scan_prep_layout_reads_direct_files_only_and_excludes_ignore(tmp_path: 
     assert scan.path_hints[direct.resolve()].role_hint == "pm"
     assert scan.path_hints[direct.resolve()].layout_hint == "stereo"
     assert scan.path_hints[direct.resolve()].group_hint == folder.name.upper()
+
+
+def test_scan_prep_layout_uses_delivery_folder_hint_for_audio_files_folder(tmp_path: Path) -> None:
+    folder = tmp_path / "NLA1120_262_Stems_Deliverables" / "Audio Files"
+    folder.mkdir(parents=True)
+    create_prep_layout(folder)
+    prep_root = folder / PREP_ROOT_NAME
+
+    direct = prep_root / "Stereo Printmaster" / "pm.wav"
+    direct.write_text("pm\n", encoding="utf-8")
+
+    layout = detect_prep_layout(folder)
+    assert layout is not None
+    scan = scan_prep_layout(layout)
+
+    assert scan.path_hints[direct.resolve()].group_hint == "NLA1120_262_STEMS_DELIVERABLES"
