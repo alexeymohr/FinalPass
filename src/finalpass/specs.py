@@ -60,6 +60,12 @@ class BundledSpecFamily:
     def supports_channel_config(self, channel_config: str) -> bool:
         return any(spec.channel_config == channel_config for spec in self.specs)
 
+    def spec_for_channel_config(self, channel_config: str) -> Spec | None:
+        for spec in self.specs:
+            if spec.channel_config == channel_config:
+                return spec
+        return None
+
     def best_spec_for_channel_configs(self, channel_configs: set[str] | frozenset[str]) -> Spec | None:
         matches = [spec for spec in self.specs if spec.channel_config in channel_configs]
         if not matches:

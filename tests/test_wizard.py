@@ -53,6 +53,46 @@ def test_wizard_all_flow_succeeds_on_split_folder(tmp_path: Path) -> None:
     assert "Produced artifacts:" in result.output
 
 
+def test_wizard_all_family_selection_measures_both_pm_presentations(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="stereo",
+        write_roles=("pm", "dx"),
+        base_seed=SEED + 2005,
+    )
+    build_split_group(
+        folder,
+        "S01E03",
+        layout="5.1",
+        write_roles=("pm", "dx", "mx", "fx"),
+        base_seed=SEED + 2006,
+    )
+    out_dir = tmp_path / "out"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["wizard", str(folder), "--out", str(out_dir)],
+        input="1\n1\n1\n1\n1\n1\n3\n",
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+    assert payload["command"] == "all"
+    assert payload["spec"]["name"] == "atsc_a85"
+    pm_layouts = sorted(
+        file_report["channel_config_actual"]
+        for file_report in payload["groups"][0]["files"]
+        if file_report["role"] == "pm"
+    )
+    assert pm_layouts == ["5.1", "stereo"]
+    pm_assets = [asset for asset in payload["groups"][0]["assets"] if asset["role"] == "pm"]
+    assert any("selected_for_target_layout" in (asset["selection_note"] or "") for asset in pm_assets)
+    assert any("selected_for_family_loudness" in (asset["selection_note"] or "") for asset in pm_assets)
+    assert "Loudness standard: ATSC A/85 (auto per printmaster layout)" in result.output
+
+
 def test_wizard_loudness_flow_succeeds_on_split_asset(tmp_path: Path) -> None:
     folder = tmp_path / "delivery"
     build_split_group(
@@ -400,7 +440,7 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
     assert "Populated prep buckets: 6" in result.output
     payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
     assert payload["command"] == "all"
-    assert payload["spec"]["name"] == "netflix_51"
+    assert payload["spec"]["name"] == "netflix"
     assert payload["summary"]["groups_total"] == 1
     assert payload["groups"][0]["group_id"] not in {
         "5.1 DIALOGUE",
@@ -414,6 +454,12 @@ def test_wizard_prep_mode_handles_mixed_presentations_coherently(tmp_path: Path)
     assert payload["groups"][0]["null_test"]["pass"] is True
     assert payload["groups"][0]["null_test"]["stem_strategy"] == "dx_mx_fx"
     assert payload["groups"][0]["me_check"]["skipped"] is True
+    pm_layouts = sorted(
+        file_report["channel_config_actual"]
+        for file_report in payload["groups"][0]["files"]
+        if file_report["role"] == "pm"
+    )
+    assert pm_layouts == ["5.1", "stereo"]
     assert any(
         asset["channel_config_actual"] == "5.1"
         for group in payload["groups"]
@@ -450,7 +496,7 @@ def test_wizard_all_family_selection_uses_best_supported_printmaster_layout(tmp_
     assert payload["command"] == "all"
     assert payload["spec"]["name"] == "ebu_r128"
     assert payload["groups"][0]["files"][0]["channel_config_actual"] == "stereo"
-    assert "Loudness standard: EBU R128 (auto -> ebu_r128 for stereo printmaster layout)" in result.output
+    assert "Loudness standard: EBU R128 (auto per printmaster layout)" in result.output
 
 
 def test_job_spinner_writes_dot_progress_on_tty(monkeypatch) -> None:

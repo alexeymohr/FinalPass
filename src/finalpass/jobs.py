@@ -65,7 +65,7 @@ from .me_check import (
 from .null_test import analyze_null
 from .prep_folders import PrepBucketHint
 from .report import render_report_html
-from .specs import Spec, load_spec
+from .specs import BundledSpecFamily, CHANNEL_COUNTS, Spec, load_spec
 from .standalone_ingest import describe_analysis_input, resolve_standalone_asset
 
 
@@ -391,6 +391,90 @@ def run_all_filtered(
     )
 
 
+def run_all_with_spec_family(
+    *,
+    folder: Path,
+    family: BundledSpecFamily,
+    patterns_path: Path | None,
+    include_unclassified: bool,
+    fps: float,
+    null_window_ms: float,
+    null_hop_ms: float,
+    null_threshold_dbfs: float,
+    me_window_ms: float,
+    me_hop_ms: float,
+    me_band_low_hz: float,
+    me_band_high_hz: float,
+    me_corr_threshold: float,
+    me_coherence_threshold: float,
+    me_dx_gate_dbfs: float,
+    me_me_floor_dbfs: float,
+) -> AllReport:
+    cfg = load_config(patterns_path)
+    scan: AssetFolderScan = discover_folder_assets(folder, cfg)
+    return run_all_family_from_scan(
+        folder=folder,
+        scan=scan,
+        family=family,
+        include_unclassified=include_unclassified,
+        fps=fps,
+        null_window_ms=null_window_ms,
+        null_hop_ms=null_hop_ms,
+        null_threshold_dbfs=null_threshold_dbfs,
+        me_window_ms=me_window_ms,
+        me_hop_ms=me_hop_ms,
+        me_band_low_hz=me_band_low_hz,
+        me_band_high_hz=me_band_high_hz,
+        me_corr_threshold=me_corr_threshold,
+        me_coherence_threshold=me_coherence_threshold,
+        me_dx_gate_dbfs=me_dx_gate_dbfs,
+        me_me_floor_dbfs=me_me_floor_dbfs,
+    )
+
+
+def run_all_filtered_with_spec_family(
+    *,
+    folder: Path,
+    paths: tuple[Path, ...],
+    path_hints: dict[Path, PrepBucketHint],
+    family: BundledSpecFamily,
+    patterns_path: Path | None,
+    include_unclassified: bool,
+    fps: float,
+    null_window_ms: float,
+    null_hop_ms: float,
+    null_threshold_dbfs: float,
+    me_window_ms: float,
+    me_hop_ms: float,
+    me_band_low_hz: float,
+    me_band_high_hz: float,
+    me_corr_threshold: float,
+    me_coherence_threshold: float,
+    me_dx_gate_dbfs: float,
+    me_me_floor_dbfs: float,
+) -> AllReport:
+    cfg = load_config(patterns_path)
+    scan = discover_assets_from_paths(paths, cfg, path_hints=path_hints)
+    return run_all_family_from_scan(
+        folder=folder,
+        scan=scan,
+        family=family,
+        include_unclassified=include_unclassified,
+        fps=fps,
+        null_window_ms=null_window_ms,
+        null_hop_ms=null_hop_ms,
+        null_threshold_dbfs=null_threshold_dbfs,
+        me_window_ms=me_window_ms,
+        me_hop_ms=me_hop_ms,
+        me_band_low_hz=me_band_low_hz,
+        me_band_high_hz=me_band_high_hz,
+        me_corr_threshold=me_corr_threshold,
+        me_coherence_threshold=me_coherence_threshold,
+        me_dx_gate_dbfs=me_dx_gate_dbfs,
+        me_me_floor_dbfs=me_me_floor_dbfs,
+    )
+
+
 def run_all_from_scan(
     *,
     folder: Path,
@@ -478,6 +562,103 @@ def run_all_from_scan(
         run_id=run_id,
         run_started_at=now.isoformat().replace("+00:00", "Z"),
         spec=SpecRef(name=spec.name, display_name=spec.display_name, source=source),
+        fps=fps,
+        command="all",
+        folder=str(folder.resolve()),
+        groups=groups_out,
+        files=flat_files,
+        unclassified=unclassified,
+        discovery_errors=discovery_errors,
+        summary=summary,
+    )
+
+
+def run_all_family_from_scan(
+    *,
+    folder: Path,
+    scan: AssetFolderScan,
+    family: BundledSpecFamily,
+    include_unclassified: bool,
+    fps: float,
+    null_window_ms: float,
+    null_hop_ms: float,
+    null_threshold_dbfs: float,
+    me_window_ms: float,
+    me_hop_ms: float,
+    me_band_low_hz: float,
+    me_band_high_hz: float,
+    me_corr_threshold: float,
+    me_coherence_threshold: float,
+    me_dx_gate_dbfs: float,
+    me_me_floor_dbfs: float,
+) -> AllReport:
+    if not scan.groups and not scan.discovery_errors and not scan.unclassified:
+        raise NoAudioFilesError(
+            f"No WAV/BWF files found in {folder}. "
+            "Provide a folder containing at least one .wav file."
+        )
+
+    groups_out: list[Group] = []
+    flat_files: list[FileReport] = []
+
+    for group_id, classified_assets in scan.groups.items():
+        group = _process_group_with_spec_family(
+            group_id=group_id,
+            classified_assets=classified_assets,
+            family=family,
+            include_unclassified=include_unclassified,
+            fps=fps,
+            null_window_ms=null_window_ms,
+            null_hop_ms=null_hop_ms,
+            null_threshold_dbfs=null_threshold_dbfs,
+            me_window_ms=me_window_ms,
+            me_hop_ms=me_hop_ms,
+            me_band_low_hz=me_band_low_hz,
+            me_band_high_hz=me_band_high_hz,
+            me_corr_threshold=me_corr_threshold,
+            me_coherence_threshold=me_coherence_threshold,
+            me_dx_gate_dbfs=me_dx_gate_dbfs,
+            me_me_floor_dbfs=me_me_floor_dbfs,
+        )
+        groups_out.append(group)
+        flat_files.extend(group.files)
+
+    unclassified = [
+        _unclassified_entry(asset, reason="no_role_pattern_match")
+        for asset in scan.unclassified
+    ]
+    discovery_errors = [
+        _discovery_issue(error)
+        for error in scan.discovery_errors
+    ]
+
+    total_checks = sum(g.group_summary.total_checks for g in groups_out)
+    passed = sum(g.group_summary.passed for g in groups_out)
+    failed = sum(g.group_summary.failed for g in groups_out)
+    skipped = sum(g.group_summary.skipped for g in groups_out)
+    groups_passed = sum(1 for g in groups_out if g.group_summary.overall_pass)
+    groups_failed = len(groups_out) - groups_passed
+    overall_pass = failed == 0 and groups_failed == 0 and not discovery_errors
+
+    summary = AllSummary(
+        groups_total=len(groups_out),
+        groups_passed=groups_passed,
+        groups_failed=groups_failed,
+        total_checks=total_checks,
+        passed=passed,
+        failed=failed,
+        skipped=skipped,
+        overall_pass=overall_pass,
+    )
+
+    now, run_id = _run_timestamp()
+
+    return AllReport(
+        finalpass_version=__version__,
+        schema_version=ALL_SCHEMA_VERSION,
+        run_id=run_id,
+        run_started_at=now.isoformat().replace("+00:00", "Z"),
+        spec=SpecRef(name=family.key, display_name=family.display_name, source="bundled"),
         fps=fps,
         command="all",
         folder=str(folder.resolve()),
@@ -801,6 +982,348 @@ def _process_group(
     )
 
 
+def _process_group_with_spec_family(
+    *,
+    group_id: str,
+    classified_assets: list[ClassifiedLogicalAsset],
+    family: BundledSpecFamily,
+    include_unclassified: bool,
+    fps: float,
+    null_window_ms: float,
+    null_hop_ms: float,
+    null_threshold_dbfs: float,
+    me_window_ms: float,
+    me_hop_ms: float,
+    me_band_low_hz: float,
+    me_band_high_hz: float,
+    me_corr_threshold: float,
+    me_coherence_threshold: float,
+    me_dx_gate_dbfs: float,
+    me_me_floor_dbfs: float,
+) -> Group:
+    errors: list[GroupError] = []
+    used_by: dict[str, list[str]] = {asset.logical_asset.asset_id: [] for asset in classified_assets}
+    selection_notes: dict[str, str | None] = {asset.logical_asset.asset_id: None for asset in classified_assets}
+    role_to_assets: dict[FileRole, list[ClassifiedLogicalAsset]] = {}
+    for asset in classified_assets:
+        role_to_assets.setdefault(asset.role, []).append(asset)
+
+    pm_layouts = {
+        asset.logical_asset.channel_config_actual
+        for asset in role_to_assets.get("pm", [])
+        if family.supports_channel_config(asset.logical_asset.channel_config_actual)
+    }
+    primary_spec = family.best_spec_for_channel_configs(pm_layouts)
+
+    file_reports: list[FileReport] = []
+    selected_target_assets: dict[FileRole, ClassifiedLogicalAsset] = {}
+    null_test: AutoNullTestResult
+    me_check: MECheckResult
+
+    if primary_spec is None:
+        errors.append(GroupError(
+            type="MissingFamilyLayoutPrintmaster",
+            message=(
+                f"group {group_id!r} has no printmaster asset matching any "
+                f"{family.display_name} layout ({', '.join(family.supported_channel_configs)})."
+            ),
+        ))
+        for asset in role_to_assets.get("unknown", []):
+            _append_selection_note(selection_notes, asset, "unknown_skipped")
+        null_test = AutoNullTestResult(
+            **{"pass": None},
+            skipped=True,
+            reason="missing_target_layout_printmaster",
+            stem_strategy=None,
+            selected_roles=[],
+            window_ms=null_window_ms,
+            hop_ms=null_hop_ms,
+            threshold_dbfs=null_threshold_dbfs,
+            summary=None,
+            flags=[],
+            errors=[],
+        )
+        me_check = MECheckResult(
+            **{"pass": None},
+            skipped=True,
+            reason="missing_dx_or_me",
+            analysis_signal=ANALYSIS_SIGNAL_NAME,
+            window_ms=me_window_ms,
+            hop_ms=me_hop_ms,
+            band_low_hz=me_band_low_hz,
+            band_high_hz=me_band_high_hz,
+            corr_threshold=me_corr_threshold,
+            coherence_threshold=me_coherence_threshold,
+            dx_gate_dbfs=me_dx_gate_dbfs,
+            me_floor_dbfs=me_me_floor_dbfs,
+            summary=None,
+            flags=[],
+            errors=[],
+        )
+    else:
+        target_layout = _target_layout_for_spec(primary_spec)
+        target_layout_matches: dict[FileRole, list[ClassifiedLogicalAsset]] = {
+            role: [
+                asset for asset in assets
+                if asset.logical_asset.channel_config_actual == target_layout
+            ]
+            for role, assets in role_to_assets.items()
+        }
+
+        def has_target(role: FileRole) -> bool:
+            return bool(target_layout_matches.get(role, []))
+
+        dx_duplicate_is_blocking = (
+            primary_spec.dialog_lufs is not None
+            or has_target("me")
+            or (has_target("mx") and has_target("fx"))
+        )
+        mx_duplicate_is_blocking = has_target("dx") and has_target("fx")
+        fx_duplicate_is_blocking = has_target("dx") and has_target("mx")
+        me_duplicate_is_blocking = has_target("dx")
+
+        pm_asset, _, _ = _select_target_layout_asset(
+            group_id=group_id,
+            role="pm",
+            assets=role_to_assets.get("pm", []),
+            target_layout=target_layout,
+            errors=errors,
+            selection_notes=selection_notes,
+            required=True,
+            missing_type="MissingTargetLayoutPrintmaster",
+            duplicate_is_blocking=True,
+        )
+        dx_target, _, dx_alternates = _select_target_layout_asset(
+            group_id=group_id,
+            role="dx",
+            assets=role_to_assets.get("dx", []),
+            target_layout=target_layout,
+            errors=errors,
+            selection_notes=selection_notes,
+            required=False,
+            duplicate_is_blocking=dx_duplicate_is_blocking,
+        )
+        mx_target, _, _ = _select_target_layout_asset(
+            group_id=group_id,
+            role="mx",
+            assets=role_to_assets.get("mx", []),
+            target_layout=target_layout,
+            errors=errors,
+            selection_notes=selection_notes,
+            required=False,
+            duplicate_is_blocking=mx_duplicate_is_blocking,
+        )
+        fx_target, _, _ = _select_target_layout_asset(
+            group_id=group_id,
+            role="fx",
+            assets=role_to_assets.get("fx", []),
+            target_layout=target_layout,
+            errors=errors,
+            selection_notes=selection_notes,
+            required=False,
+            duplicate_is_blocking=fx_duplicate_is_blocking,
+        )
+        me_target, _, _ = _select_target_layout_asset(
+            group_id=group_id,
+            role="me",
+            assets=role_to_assets.get("me", []),
+            target_layout=target_layout,
+            errors=errors,
+            selection_notes=selection_notes,
+            required=False,
+            duplicate_is_blocking=me_duplicate_is_blocking,
+        )
+
+        for role, asset in (
+            ("pm", pm_asset),
+            ("dx", dx_target),
+            ("mx", mx_target),
+            ("fx", fx_target),
+            ("me", me_target),
+        ):
+            if asset is not None:
+                selected_target_assets[role] = asset
+
+        if pm_asset is not None:
+            _mark_used(used_by, pm_asset, "pm_loudness")
+
+        dialog_dx: ClassifiedLogicalAsset | None = None
+        if primary_spec.dialog_lufs is not None:
+            if dx_target is not None:
+                dialog_dx = dx_target
+                _mark_used(used_by, dx_target, "dialog_loudness")
+            elif len(dx_alternates) == 1:
+                dialog_dx = dx_alternates[0]
+                _mark_used(used_by, dialog_dx, "dialog_loudness")
+                _append_selection_note(selection_notes, dialog_dx, "selected_for_dialog_fallback")
+            elif len(dx_alternates) > 1:
+                errors.append(GroupError(
+                    type="DialogFallbackAmbiguity",
+                    message=(
+                        f"group {group_id!r} has no target-layout DX asset for {target_layout}, "
+                        f"and {len(dx_alternates)} alternate-layout DX assets compete for dialog fallback."
+                    ),
+                ))
+                for asset in dx_alternates:
+                    _append_selection_note(selection_notes, asset, "dialog_fallback_ambiguous")
+
+        unknown_assets = role_to_assets.get("unknown", [])
+        if include_unclassified:
+            for asset in unknown_assets:
+                _mark_used(used_by, asset, "unknown_loudness")
+                _append_selection_note(selection_notes, asset, "selected_for_loudness_only")
+        else:
+            for asset in unknown_assets:
+                _append_selection_note(selection_notes, asset, "unknown_skipped")
+
+        measure_targets: list[tuple[ClassifiedLogicalAsset, FileRole, Spec]] = []
+        if pm_asset is not None:
+            measure_targets.append((pm_asset, "pm", primary_spec))
+        if dialog_dx is not None:
+            measure_targets.append((dialog_dx, "dx", primary_spec))
+        if include_unclassified:
+            measure_targets.extend((asset, "unknown", primary_spec) for asset in unknown_assets)
+
+        for layout in sorted(pm_layouts, key=lambda value: CHANNEL_COUNTS[value]):
+            if layout == target_layout:
+                continue
+            layout_spec = family.spec_for_channel_config(layout)
+            if layout_spec is None:
+                continue
+            extra_pm, _, _ = _select_target_layout_asset(
+                group_id=group_id,
+                role="pm",
+                assets=role_to_assets.get("pm", []),
+                target_layout=layout,
+                errors=errors,
+                selection_notes=selection_notes,
+                required=True,
+                missing_type="MissingFamilyLayoutPrintmaster",
+                duplicate_is_blocking=True,
+                selection_note_for_match="selected_for_family_loudness",
+                selection_note_for_alternates=None,
+            )
+            if extra_pm is not None:
+                _mark_used(used_by, extra_pm, "pm_loudness")
+                measure_targets.append((extra_pm, "pm", layout_spec))
+
+            if layout_spec.dialog_lufs is not None:
+                extra_dx, _, _ = _select_target_layout_asset(
+                    group_id=group_id,
+                    role="dx",
+                    assets=role_to_assets.get("dx", []),
+                    target_layout=layout,
+                    errors=errors,
+                    selection_notes=selection_notes,
+                    required=False,
+                    duplicate_is_blocking=True,
+                    selection_note_for_match="selected_for_family_dialog_loudness",
+                    selection_note_for_alternates=None,
+                )
+                if extra_dx is not None:
+                    _mark_used(used_by, extra_dx, "dialog_loudness")
+                    measure_targets.append((extra_dx, "dx", layout_spec))
+
+        seen_measurements: set[tuple[str, FileRole]] = set()
+        for asset, role, spec in measure_targets:
+            measurement_key = (asset.logical_asset.asset_id, role)
+            if measurement_key in seen_measurements:
+                continue
+            seen_measurements.add(measurement_key)
+            try:
+                audio = read_classified_audio(asset)
+                fr = _measure_asset_file(asset, audio, spec, role, fps=fps)
+            except ChannelMismatchError as exc:
+                errors.append(GroupError(type="ChannelMismatchError", message=str(exc)))
+                continue
+            except FinalPassError as exc:
+                errors.append(GroupError(type=exc.__class__.__name__, message=str(exc)))
+                continue
+            file_reports.append(fr)
+
+        null_test = _run_group_null_test(
+            printmaster=pm_asset,
+            selected_assets=selected_target_assets,
+            used_by=used_by,
+            fps=fps,
+            window_ms=null_window_ms,
+            hop_ms=null_hop_ms,
+            threshold_dbfs=null_threshold_dbfs,
+        )
+        me_check = _run_group_me_check(
+            selected_assets=selected_target_assets,
+            used_by=used_by,
+            fps=fps,
+            window_ms=me_window_ms,
+            hop_ms=me_hop_ms,
+            band_low_hz=me_band_low_hz,
+            band_high_hz=me_band_high_hz,
+            corr_threshold=me_corr_threshold,
+            coherence_threshold=me_coherence_threshold,
+            dx_gate_dbfs=me_dx_gate_dbfs,
+            me_floor_dbfs=me_me_floor_dbfs,
+        )
+
+    inventory = [
+        _inventory_entry(
+            asset,
+            used_by=used_by[asset.logical_asset.asset_id],
+            selection_note=selection_notes[asset.logical_asset.asset_id],
+        )
+        for asset in classified_assets
+    ]
+    inventory.sort(key=lambda item: (item.role, item.path.lower()))
+    file_reports.sort(key=lambda item: (item.role, -item.channel_count, item.path.lower()))
+    summary = _group_summary_from_results(
+        file_reports=file_reports,
+        null_test=null_test,
+        me_check=me_check,
+        errors=errors,
+    )
+
+    return Group(
+        group_id=group_id,
+        assets=inventory,
+        files=file_reports,
+        null_test=null_test,
+        me_check=me_check,
+        group_summary=summary,
+        errors=errors,
+    )
+
+
+def _group_summary_from_results(
+    *,
+    file_reports: list[FileReport],
+    null_test: AutoNullTestResult,
+    me_check: MECheckResult,
+    errors: list[GroupError],
+) -> GroupSummary:
+    all_checks = [c for fr in file_reports for c in fr.checks]
+    passed = sum(1 for c in all_checks if c.pass_ is True)
+    failed = sum(1 for c in all_checks if c.pass_ is False)
+    skipped = sum(1 for c in all_checks if c.skipped)
+    if null_test.pass_ is True:
+        passed += 1
+    elif null_test.pass_ is False:
+        failed += 1
+    if null_test.skipped:
+        skipped += 1
+    if me_check.pass_ is True:
+        passed += 1
+    elif me_check.pass_ is False:
+        failed += 1
+    if me_check.skipped:
+        skipped += 1
+    return GroupSummary(
+        total_checks=len(all_checks) + 2,
+        passed=passed,
+        failed=failed,
+        skipped=skipped,
+        overall_pass=failed == 0 and not errors,
+    )
+
+
 def _measure_asset_file(
     asset: ClassifiedLogicalAsset,
     audio: AudioFile,
@@ -1083,15 +1606,19 @@ def _select_target_layout_asset(
     required: bool,
     missing_type: str | None = None,
     duplicate_is_blocking: bool,
+    selection_note_for_match: str = "selected_for_target_layout",
+    selection_note_for_alternates: str | None = "alternate_presentation",
+    selection_note_for_duplicate: str = "duplicate_target_layout",
 ) -> tuple[ClassifiedLogicalAsset | None, list[ClassifiedLogicalAsset], list[ClassifiedLogicalAsset]]:
     matching = [asset for asset in assets if asset.logical_asset.channel_config_actual == target_layout]
     alternates = [asset for asset in assets if asset.logical_asset.channel_config_actual != target_layout]
 
-    for asset in alternates:
-        _append_selection_note(selection_notes, asset, "alternate_presentation")
+    if selection_note_for_alternates is not None:
+        for asset in alternates:
+            _append_selection_note(selection_notes, asset, selection_note_for_alternates)
 
     if len(matching) == 1:
-        _append_selection_note(selection_notes, matching[0], "selected_for_target_layout")
+        _append_selection_note(selection_notes, matching[0], selection_note_for_match)
         return matching[0], matching, alternates
 
     if len(matching) == 0:
@@ -1112,7 +1639,7 @@ def _select_target_layout_asset(
             ),
         ))
     for asset in matching:
-        _append_selection_note(selection_notes, asset, "duplicate_target_layout")
+        _append_selection_note(selection_notes, asset, selection_note_for_duplicate)
     return None, matching, alternates
 
 

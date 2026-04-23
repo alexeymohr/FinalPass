@@ -16,6 +16,8 @@ from .jobs import (
     WrittenArtifacts,
     run_all,
     run_all_filtered,
+    run_all_filtered_with_spec_family,
+    run_all_with_spec_family,
     run_loudness,
     run_me,
     run_null,
@@ -84,9 +86,10 @@ class JobExecutionResult:
 
 @dataclass(frozen=True)
 class SpecSelection:
-    spec_name: str
-    spec: Spec
+    spec_name: str | None
+    spec: Spec | None
     review_label: str
+    family: BundledSpecFamily | None = None
 
 
 def run_wizard(*, folder: Path | None, out_dir: Path, fps: float) -> None:
@@ -297,7 +300,7 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
                     break
 
                 try:
-                        _review_and_confirm([
+                    _review_and_confirm([
                         "Job: all",
                         *_context_review_lines(folder_context),
                         f"Loudness standard: {spec_selection.review_label}",
@@ -318,6 +321,7 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
                     runner=lambda: _run_all_for_context(
                         folder_context,
                         spec_name=spec_selection.spec_name,
+                        family=spec_selection.family,
                         fps=fps,
                     ),
                 )
@@ -709,7 +713,60 @@ def _me_available(folder_context: FolderContext) -> bool:
     return False
 
 
-def _run_all_for_context(folder_context: FolderContext, *, spec_name: str, fps: float) -> AllReport:
+def _run_all_for_context(
+    folder_context: FolderContext,
+    *,
+    spec_name: str | None,
+    family: BundledSpecFamily | None,
+    fps: float,
+) -> AllReport:
+    if family is not None:
+        if folder_context.mode == "prep":
+            prep_scan = folder_context.prep_scan
+            if prep_scan is None:
+                raise FinalPassError("Prep mode is active, but no prep scan is available.")
+            return run_all_filtered_with_spec_family(
+                folder=folder_context.folder,
+                paths=prep_scan.analyzable_paths,
+                path_hints=prep_scan.path_hints,
+                family=family,
+                patterns_path=None,
+                include_unclassified=False,
+                fps=fps,
+                null_window_ms=DEFAULT_NULL_WINDOW_MS,
+                null_hop_ms=DEFAULT_NULL_HOP_MS,
+                null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
+                me_window_ms=DEFAULT_ME_WINDOW_MS,
+                me_hop_ms=DEFAULT_ME_HOP_MS,
+                me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
+                me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
+                me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
+                me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
+                me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
+                me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
+            )
+        return run_all_with_spec_family(
+            folder=folder_context.folder,
+            family=family,
+            patterns_path=None,
+            include_unclassified=False,
+            fps=fps,
+            null_window_ms=DEFAULT_NULL_WINDOW_MS,
+            null_hop_ms=DEFAULT_NULL_HOP_MS,
+            null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
+            me_window_ms=DEFAULT_ME_WINDOW_MS,
+            me_hop_ms=DEFAULT_ME_HOP_MS,
+            me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
+            me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
+            me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
+            me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
+            me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
+            me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
+        )
+
+    if spec_name is None:
+        raise FinalPassError("Wizard all flow requires either a concrete spec or a bundled spec family.")
+
     if folder_context.mode == "prep":
         prep_scan = folder_context.prep_scan
         if prep_scan is None:
@@ -800,7 +857,12 @@ def _choose_spec_for_all(folder_context: FolderContext) -> SpecSelection:
         "Choose a loudness standard. FinalPass will auto-match the correct spec layout to the detected printmaster.",
         options,
     )
-    return _resolve_spec_selection(choice, auto_channel_configs=detected_layouts, auto_scope="printmaster layout")
+    return _resolve_spec_selection(
+        choice,
+        auto_channel_configs=detected_layouts,
+        auto_scope="printmaster layout",
+        preserve_family=True,
+    )
 
 
 def _choose_spec_for_loudness(asset: ClassifiedLogicalAsset) -> SpecSelection:
@@ -826,6 +888,7 @@ def _resolve_spec_selection(
     *,
     auto_channel_configs: set[str] | None = None,
     auto_scope: str | None = None,
+    preserve_family: bool = False,
 ) -> SpecSelection:
     if isinstance(choice, BundledSpecFamily):
         if not auto_channel_configs:
@@ -838,6 +901,13 @@ def _resolve_spec_selection(
                 f"({detected})."
             )
         scope = auto_scope or "layout"
+        if preserve_family:
+            return SpecSelection(
+                spec_name=None,
+                spec=None,
+                review_label=f"{choice.display_name} (auto per {scope})",
+                family=choice,
+            )
         return SpecSelection(
             spec_name=spec.name,
             spec=spec,
