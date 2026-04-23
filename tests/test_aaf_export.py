@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from finalpass import aaf_export
 from finalpass.cli import main
 from finalpass.errors import AAFExportError
+from finalpass.jobs import run_all
 from finalpass.models import AllReport
 from finalpass.timecode import sample_to_edit_units
 from tests.audio_cases import (
@@ -472,3 +473,44 @@ def test_collect_marker_candidates_from_all_uses_only_timed_flags(tmp_path: Path
     assert candidates
     assert {candidate.code for candidate in candidates} == {"NULL", "ME"}
     assert all(candidate.group_id == "S01E04" for candidate in candidates)
+
+
+def test_all_me_marker_candidates_use_me_analysis_sample_rate(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    folder.mkdir()
+    pm_samples = exact_sum_components(seconds=10.0, base_seed=SEED + 520, sr=48000)["pm"]
+    me_samples = me_check_components(
+        seconds=10.0,
+        base_seed=SEED + 521,
+        bleed_region=(5.0, 7.0),
+        bleed_gain=0.08,
+        sr=44100,
+    )
+    write_audio(folder / "SHOW_S01E04_PM_STEREO.wav", pm_samples, sr=48000)
+    write_audio(folder / "SHOW_S01E04_DX_STEREO.wav", me_samples["dx"], sr=44100)
+    write_audio(folder / "SHOW_S01E04_ME_STEREO.wav", me_samples["me"], sr=44100)
+
+    report = run_all(
+        folder=folder,
+        spec_name="ebu_r128",
+        patterns_path=None,
+        include_unclassified=False,
+        fps=24.0,
+        null_window_ms=1000.0,
+        null_hop_ms=100.0,
+        null_threshold_dbfs=-40.0,
+        me_window_ms=500.0,
+        me_hop_ms=100.0,
+        me_band_low_hz=200.0,
+        me_band_high_hz=4000.0,
+        me_corr_threshold=0.65,
+        me_coherence_threshold=0.60,
+        me_dx_gate_dbfs=-45.0,
+        me_me_floor_dbfs=-60.0,
+    )
+
+    flag = report.groups[0].me_check.flags[0]
+    candidate = next(candidate for candidate in aaf_export.collect_marker_candidates(report) if candidate.code == "ME")
+    assert candidate.sample_rate == 44100
+    assert candidate.start_edit_unit == sample_to_edit_units(flag.start_sample, 44100, 24.0)
+    assert candidate.start_edit_unit != sample_to_edit_units(flag.start_sample, 48000, 24.0)

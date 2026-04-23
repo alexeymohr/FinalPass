@@ -4,6 +4,7 @@ import importlib.metadata
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from finalpass import __version__
@@ -61,6 +62,23 @@ def test_loudness_hot_file_fails(pink_stereo_10s_hot: Path, tmp_path: Path) -> N
         "--out", str(tmp_path / "out"),
     ])
     assert result.exit_code == 1, f"expected fail, got: {result.output}"
+
+
+@pytest.mark.parametrize("fps_value", ["0", "-1", "nan"])
+def test_direct_loudness_rejects_invalid_fps(pink_stereo_10s_hot: Path, fps_value: str) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness",
+        str(pink_stereo_10s_hot),
+        "--spec", "ebu_r128",
+        "--fps", fps_value,
+        "--json-only",
+    ])
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--fps'" in result.output
+    assert "finite number greater than zero" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_json_only_is_parseable(pink_stereo_10s: Path, tmp_path: Path) -> None:

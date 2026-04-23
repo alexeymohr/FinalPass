@@ -58,6 +58,10 @@ def describe_audio(audio: AudioFile) -> NullInputFile:
         channel_count=audio.channel_count,
         channel_config_actual=channel_config_from_count(audio.channel_count),
         duration_seconds=round(audio.duration_seconds, 3),
+        source_kind="interleaved",
+        source_paths=[str(audio.path)],
+        member_legs=[],
+        presentation_label=None,
     )
     item._time_reference_samples = audio.time_reference_samples
     return item

@@ -8,7 +8,7 @@
 
 patterns:
   - role: pm
-    regex: '(?i)(^|[ _\-\.])(PM|PRINTMASTER|MIX|FINAL)([ _\-\.]|$)'
+    regex: '(?i)(^|[ _\-\.])(PM|PRINTMASTER|MIX|FINAL|COMP)([ _\-\.]|$)'
   - role: dx
     regex: '(?i)(^|[ _\-\.])(DX|DIA|DIALOG|DIALOGUE)([ _\-\.]|$)'
   - role: mx

@@ -5,7 +5,9 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+from finalpass.audio_io import read_wav
 from finalpass.cli import main
+from finalpass.null_test import describe_audio as describe_null_audio
 from finalpass.timecode import tc_to_sample_start
 from tests.audio_cases import SEED, SR, exact_sum_components, shift_with_zeros, write_audio
 
@@ -47,6 +49,18 @@ def test_null_exact_sum_passes(tmp_path: Path) -> None:
     assert data["null_test"]["pass"] is True
     assert data["null_test"]["flags"] == []
     assert data["summary"]["overall_pass"] is True
+
+
+def test_null_describe_audio_includes_interleaved_provenance(tmp_path: Path) -> None:
+    data = exact_sum_components(seconds=1.0, base_seed=SEED + 50)
+    path = write_audio(tmp_path / "SHOW_PM_STEREO.wav", data["pm"])
+
+    described = describe_null_audio(read_wav(path))
+
+    assert described.source_kind == "interleaved"
+    assert described.source_paths == [str(path.resolve())]
+    assert described.member_legs == []
+    assert described.presentation_label is None
 
 
 def test_null_injected_gross_error_fails_with_flagged_region(tmp_path: Path) -> None:

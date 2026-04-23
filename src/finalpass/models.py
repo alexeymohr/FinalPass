@@ -207,6 +207,7 @@ class MECheckResult(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     _time_reference_samples: int | None = PrivateAttr(default=None)
+    _sample_rate: int | None = PrivateAttr(default=None)
 
     pass_: bool | None = Field(alias="pass")
     skipped: bool = False

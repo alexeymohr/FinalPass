@@ -9,6 +9,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -60,6 +61,12 @@ _err_console = Console(stderr=True)
 _out_console = Console()
 
 
+def _validate_fps_option(_ctx: click.Context, _param: click.Parameter, value: float) -> float:
+    if not math.isfinite(value) or value <= 0:
+        raise click.BadParameter("must be a finite number greater than zero")
+    return value
+
+
 @click.group(help="FinalPass — delivery QC for post-production sound.")
 @click.version_option(__version__, prog_name="finalpass")
 def main() -> None:
@@ -72,7 +79,7 @@ def main() -> None:
 @click.option("--dx", "dx_file", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None, help="Dialog stem — checked against spec's dialog_lufs target.")
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress the table; emit JSON to stdout.")
-@click.option("--fps", type=float, default=23.976, show_default=True, help="Frame rate (for downstream TC display).")
+@click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate (for downstream TC display).")
 def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, out_dir: Path, json_only: bool, fps: float) -> None:
     try:
         effective_dx = dx_file
@@ -137,7 +144,7 @@ def specs_show_cmd(name: str) -> None:
 @main.command("wizard")
 @click.argument("folder", required=False, type=click.Path(path_type=Path))
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
-@click.option("--fps", type=float, default=23.976, show_default=True, help="Frame rate used as the wizard default.")
+@click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate used as the wizard default.")
 def wizard_cmd(folder: Path | None, out_dir: Path, fps: float) -> None:
     run_wizard(folder=folder, out_dir=out_dir, fps=fps)
 
@@ -147,7 +154,7 @@ def wizard_cmd(folder: Path | None, out_dir: Path, fps: float) -> None:
 @click.argument("stems", nargs=-1, type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
-@click.option("--fps", type=float, default=23.976, show_default=True, help="Frame rate for flagged-region timecode fields.")
+@click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate for flagged-region timecode fields.")
 @click.option("--window-ms", type=float, default=DEFAULT_NULL_WINDOW_MS, show_default=True, help="Residual RMS window size in milliseconds.")
 @click.option("--hop-ms", type=float, default=DEFAULT_NULL_HOP_MS, show_default=True, help="Residual RMS hop size in milliseconds.")
 @click.option("--threshold-dbfs", type=float, default=DEFAULT_NULL_THRESHOLD_DBFS, show_default=True, help="Flag windows whose residual RMS exceeds this dBFS threshold.")
@@ -178,7 +185,7 @@ def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, 
 @click.option("--dx", "dx_file", type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True, help="Matching dialogue stem.")
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
-@click.option("--fps", type=float, default=23.976, show_default=True, help="Frame rate for flagged-region timecode fields.")
+@click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate for flagged-region timecode fields.")
 @click.option("--window-ms", type=float, default=DEFAULT_ME_WINDOW_MS, show_default=True, help="Window size in milliseconds.")
 @click.option("--hop-ms", type=float, default=DEFAULT_ME_HOP_MS, show_default=True, help="Hop size in milliseconds.")
 @click.option("--band-low-hz", type=float, default=DEFAULT_ME_BAND_LOW_HZ, show_default=True, help="Speech-band low cutoff in Hz.")
@@ -233,7 +240,7 @@ def me_cmd(
 @click.option("--spec", "spec_name", required=True, help="Name of a bundled spec or path to a YAML.")
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
-@click.option("--fps", type=float, default=23.976, show_default=True, help="Frame rate (for downstream TC display).")
+@click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate (for downstream TC display).")
 @click.option("--patterns", "patterns_path", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None, help="Override bundled classifier patterns with a user YAML.")
 @click.option("--include-unclassified", is_flag=True, help="Measure unclassified files too (integrated/TP/LRA; no dialog check).")
 @click.option("--null-window-ms", type=float, default=DEFAULT_NULL_WINDOW_MS, show_default=True, help="Auto-null residual RMS window size in milliseconds.")

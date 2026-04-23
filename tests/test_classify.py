@@ -30,6 +30,7 @@ def default_cfg() -> ClassifierConfig:
     "stem,expected_role",
     [
         ("SHOW_S01E03_PM_STEREO", "pm"),
+        ("SHOW_S01E03_COMP_STEREO", "pm"),
         ("SHOW_S01E03_DX_STEREO", "dx"),
         ("SHOW_S01E03_MX_STEREO", "mx"),
         ("SHOW_S01E03_FX_STEREO", "fx"),

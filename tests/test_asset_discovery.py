@@ -76,6 +76,17 @@ def test_missing_leg_produces_clean_discovery_error(tmp_path: Path) -> None:
     assert result.assets == []
 
 
+def test_strict_unlabeled_single_split_member_produces_missing_leg(tmp_path: Path) -> None:
+    member = write_audio(tmp_path / "Comp.L.wav", np.zeros((16, 1), dtype=np.float64), sr=SR)
+
+    result = discover_logical_assets([member], strict_explicit_split_members=True)
+
+    errors = _errors_by_type(result)
+    assert "MissingLeg" in errors
+    assert "explicit split-mono member" in errors["MissingLeg"][0].message
+    assert result.assets == []
+
+
 def test_duplicate_leg_produces_clean_discovery_error(tmp_path: Path) -> None:
     write_split_family(tmp_path, "Comp 5.1", "5.1")
     write_audio(tmp_path / "Comp-5.1-L.wav", np.full((16, 1), 9.0, dtype=np.float64), sr=SR)

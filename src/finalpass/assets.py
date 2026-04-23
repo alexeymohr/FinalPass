@@ -860,5 +860,4 @@ def _looks_like_explicit_split_member(member: AssetMember) -> bool:
     return (
         member.channel_count == 1
         and member.leg_label is not None
-        and member.presentation_label is not None
     )

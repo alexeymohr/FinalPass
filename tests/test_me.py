@@ -5,7 +5,9 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+from finalpass.audio_io import read_wav
 from finalpass.cli import main
+from finalpass.me_check import describe_audio as describe_me_audio
 from tests.audio_cases import SEED, SR, me_check_components, shift_with_zeros, write_audio
 
 
@@ -51,6 +53,17 @@ def test_me_independent_content_passes(tmp_path: Path) -> None:
     assert data["me_check"]["pass"] is True
     assert data["me_check"]["flags"] == []
     assert data["summary"]["overall_pass"] is True
+
+
+def test_me_describe_audio_includes_interleaved_provenance(tmp_path: Path) -> None:
+    files = _write_me_case(tmp_path / "case", seconds=1.0, base_seed=SEED + 50)
+
+    described = describe_me_audio(read_wav(files["me"]))
+
+    assert described.source_kind == "interleaved"
+    assert described.source_paths == [str(files["me"].resolve())]
+    assert described.member_legs == []
+    assert described.presentation_label is None
 
 
 def test_me_injected_bleed_fails_with_flagged_region(tmp_path: Path) -> None:

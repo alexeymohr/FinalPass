@@ -110,10 +110,11 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                     )
                 )
             if group.me_check is not None:
+                me_sample_rate = _analysis_sample_rate(group.me_check) or sample_rate
                 candidates.extend(
                     _candidates_from_flags(
                         flags=group.me_check.flags,
-                        sample_rate=sample_rate,
+                        sample_rate=me_sample_rate,
                         fps=report.fps,
                         time_reference_samples=_time_reference_samples(group.me_check),
                         group_id=group.group_id,
@@ -421,3 +422,7 @@ def _create_string_tagged_value(handle, name: str, value: str):
 
 def _time_reference_samples(item) -> int | None:
     return getattr(item, "_time_reference_samples", None)
+
+
+def _analysis_sample_rate(item) -> int | None:
+    return getattr(item, "_sample_rate", None)

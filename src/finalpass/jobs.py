@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import math
 import os
 from pathlib import Path
 import secrets
@@ -77,6 +78,7 @@ class WrittenArtifacts:
 
 
 def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | None, fps: float) -> Report:
+    _validate_fps(fps)
     spec, source, _ = load_spec(spec_name)
 
     primary_inputs = [resolve_standalone_asset(f) for f in files]
@@ -180,6 +182,7 @@ def run_null(
     hop_ms: float,
     threshold_dbfs: float,
 ) -> NullReport:
+    _validate_fps(fps)
     pm_input = resolve_standalone_asset(pm)
     stem_inputs = [resolve_standalone_asset(stem) for stem in stems]
     pm_audio = pm_input.audio
@@ -243,6 +246,7 @@ def run_me(
     dx_gate_dbfs: float,
     me_floor_dbfs: float,
 ) -> MEReport:
+    _validate_fps(fps)
     me_input = resolve_standalone_asset(me_file)
     dx_input = resolve_standalone_asset(dx_file)
     me_audio = me_input.audio
@@ -322,6 +326,7 @@ def run_all(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> AllReport:
+    _validate_fps(fps)
     spec, source, _ = load_spec(spec_name)
     cfg = load_config(patterns_path)
     scan: AssetFolderScan = discover_folder_assets(folder, cfg)
@@ -367,6 +372,7 @@ def run_all_filtered(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> AllReport:
+    _validate_fps(fps)
     spec, source, _ = load_spec(spec_name)
     cfg = load_config(patterns_path)
     scan = discover_assets_from_paths(paths, cfg, path_hints=path_hints)
@@ -410,6 +416,7 @@ def run_all_with_spec_family(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> AllReport:
+    _validate_fps(fps)
     cfg = load_config(patterns_path)
     scan: AssetFolderScan = discover_folder_assets(folder, cfg)
     return run_all_family_from_scan(
@@ -453,6 +460,7 @@ def run_all_filtered_with_spec_family(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> AllReport:
+    _validate_fps(fps)
     cfg = load_config(patterns_path)
     scan = discover_assets_from_paths(paths, cfg, path_hints=path_hints)
     return run_all_family_from_scan(
@@ -495,6 +503,7 @@ def run_all_from_scan(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> AllReport:
+    _validate_fps(fps)
     if not scan.groups and not scan.discovery_errors and not scan.unclassified:
         raise NoAudioFilesError(
             f"No WAV/BWF files found in {folder}. "
@@ -592,6 +601,7 @@ def run_all_family_from_scan(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> AllReport:
+    _validate_fps(fps)
     if not scan.groups and not scan.discovery_errors and not scan.unclassified:
         raise NoAudioFilesError(
             f"No WAV/BWF files found in {folder}. "
@@ -750,6 +760,11 @@ def _validate_homogeneous_sample_rate(files) -> None:
             f"Sample-rate mismatch across inputs: {sorted(rates)}. "
             "All files in a single run must share a sample rate."
         )
+
+
+def _validate_fps(fps: float) -> None:
+    if not math.isfinite(fps) or fps <= 0:
+        raise FinalPassError(f"fps must be a finite number greater than zero; got {fps!r}.")
 
 
 def _process_group(
@@ -1545,7 +1560,7 @@ def _run_group_me_check(
         )
 
     passed = len(analysis.flags) == 0
-    return _attach_time_reference(
+    result = _attach_time_reference(
         MECheckResult(
             **{"pass": passed},
             skipped=False,
@@ -1565,6 +1580,8 @@ def _run_group_me_check(
         ),
         me_audio.time_reference_samples,
     )
+    result._sample_rate = me_audio.sample_rate
+    return result
 
 
 def _select_auto_null_stems(
