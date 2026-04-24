@@ -608,14 +608,21 @@ def _checks_table(file_report: FileReport) -> Table:
 
 
 def _announce_written_artifacts(written: WrittenArtifacts) -> None:
-    _out_console.print(f"\n[dim]Wrote[/dim] {written.json_path}")
-    _out_console.print(f"[dim]Wrote[/dim] {written.html_path}")
+    _announce_artifact_path("Wrote", written.json_path, leading_blank=True)
+    _announce_artifact_path("Wrote", written.html_path)
     if written.aaf_path is None:
-        _out_console.print(
-            f"[dim]No exportable timed markers; did not write[/dim] {_expected_aaf_path(written)}"
+        _announce_artifact_path(
+            "No exportable timed markers; did not write",
+            _expected_aaf_path(written),
         )
     else:
-        _out_console.print(f"[dim]Wrote[/dim] {written.aaf_path}")
+        _announce_artifact_path("Wrote", written.aaf_path)
+
+
+def _announce_artifact_path(label: str, path: Path, *, leading_blank: bool = False) -> None:
+    prefix = "\n" if leading_blank else ""
+    _out_console.print(f"{prefix}[dim]{escape(label)}[/dim] {escape(path.name)}")
+    _out_console.print(f"[dim]path:[/dim] {escape(str(path))}", soft_wrap=True)
 
 
 def _expected_aaf_path(written: WrittenArtifacts) -> Path:
