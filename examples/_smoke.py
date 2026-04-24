@@ -45,18 +45,29 @@ def _run(argv: list[str], *, expected_exit: int) -> None:
         )
 
 
+def _single_artifact(out_dir: Path, pattern: str) -> Path:
+    matches = sorted(out_dir.glob(pattern))
+    if not matches:
+        raise SystemExit(f"Missing smoke artifact matching {out_dir / pattern}")
+    if len(matches) > 1:
+        rendered = ", ".join(str(path) for path in matches)
+        raise SystemExit(
+            f"Expected one smoke artifact matching {out_dir / pattern}; found {rendered}"
+        )
+    return matches[0]
+
+
 def _assert_artifacts(out_dir: Path, *, expect_aaf: bool) -> None:
-    json_path = out_dir / "report.json"
-    html_path = out_dir / "report.html"
-    aaf_path = out_dir / "markers.aaf"
-    if not json_path.exists():
-        raise SystemExit(f"Missing smoke artifact: {json_path}")
-    if not html_path.exists():
-        raise SystemExit(f"Missing smoke artifact: {html_path}")
-    if expect_aaf and not aaf_path.exists():
-        raise SystemExit(f"Missing smoke artifact: {aaf_path}")
-    if not expect_aaf and aaf_path.exists():
-        raise SystemExit(f"Unexpected smoke artifact: {aaf_path}")
+    _single_artifact(out_dir, "*report.json")
+    _single_artifact(out_dir, "*report.html")
+    aaf_matches = sorted(out_dir.glob("*markers.aaf"))
+    if expect_aaf and len(aaf_matches) != 1:
+        raise SystemExit(
+            f"Expected one smoke artifact matching {out_dir / '*markers.aaf'}"
+        )
+    if not expect_aaf and aaf_matches:
+        rendered = ", ".join(str(path) for path in aaf_matches)
+        raise SystemExit(f"Unexpected smoke artifact: {rendered}")
 
 
 def main() -> None:

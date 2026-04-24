@@ -49,11 +49,11 @@ Smoke artifacts land in:
 - `examples/out/me_failing/`
 - `examples/out/all/`
 
-Each of those directories should contain:
+Each of those directories should contain one show-named set, for example:
 
-- `report.json`
-- `report.html`
-- `markers.aaf`
+- `show-s01e04-report.json`
+- `show-s01e04-report.html`
+- `show-s01e04-markers.aaf`
 
 `examples/out/` is gitignored.
 
@@ -169,7 +169,7 @@ Then:
 
 In SM-6 prep mode, FinalPass scans only files placed directly inside populated non-`Ignore` buckets. It does not recurse deeper inside those buckets yet, and it ignores files outside `FinalPass Prep/`.
 
-For any command, `markers.aaf` is written only when the report contains
-exportable timed flags. In the shipped example delivery, the failing
+For any command, the `*-markers.aaf` file is written only when the report
+contains exportable timed flags. In the shipped example delivery, the failing
 interleaved E04 case produces those timed flags on the `me` and `all` smoke
 paths, while the passing loudness example does not.

@@ -9,6 +9,7 @@ build/
 
 # Generated example deliveries (re-create with: uv run python examples/_generate.py)
 examples/delivery_two_episodes/
+examples/delivery_split_assets/
 examples/*.wav
 examples/out/
 
