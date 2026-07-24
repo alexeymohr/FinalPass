@@ -37,6 +37,11 @@
   family) now share one selection/measurement/check/finalize core instead
   of ~160 duplicated lines; the family path keeps its multi-layout
   measurement loop and report ordering. Output is unchanged.
+- New `group_plan.py` answers what a group's assets support and which stems
+  an auto-null strategy would use. The folder runner asks for the preferred
+  plan, the wizard lists every plan and its job-availability menu entries
+  come from the same queries, so the wizard can no longer offer a job the
+  runner would skip. The `dx_mx_fx` / `dx_me` vocabulary lives in one place.
 - Frame rate and drop-frame counting now travel as one validated
   `TimecodeMode` (built once per run by `jobs`), instead of as a loose
   `fps`/`drop_frame` pair on every analysis, window, and export interface.

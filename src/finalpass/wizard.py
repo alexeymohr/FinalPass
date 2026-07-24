@@ -12,6 +12,14 @@ import click
 from .all_assets import AssetFolderScan, ClassifiedLogicalAsset, discover_assets_from_paths, discover_folder_assets
 from .classify import load_config
 from .errors import FinalPassError
+from .group_plan import (
+    AutoNullPlan,
+    available_auto_null_plans,
+    same_layout_companions,
+    supports_loudness_job,
+    supports_me_job,
+    supports_null_job,
+)
 from .jobs import (
     WrittenArtifacts,
     run_all,
@@ -658,34 +666,15 @@ def _prep_job_options(folder_context: FolderContext) -> list[Choice[str]]:
 
 
 def _all_available(folder_context: FolderContext) -> bool:
-    for assets in folder_context.scan.groups.values():
-        if any(asset.role == "pm" for asset in assets):
-            return True
-    return False
+    return any(supports_loudness_job(assets) for assets in folder_context.scan.groups.values())
 
 
 def _null_available(folder_context: FolderContext) -> bool:
-    for assets in folder_context.scan.groups.values():
-        for pm_asset in assets:
-            if pm_asset.role != "pm":
-                continue
-            same_layout_assets = [
-                asset for asset in assets
-                if asset.logical_asset.channel_config_actual == pm_asset.logical_asset.channel_config_actual
-                and asset.logical_asset.asset_id != pm_asset.logical_asset.asset_id
-            ]
-            if same_layout_assets:
-                return True
-    return False
+    return any(supports_null_job(assets) for assets in folder_context.scan.groups.values())
 
 
 def _me_available(folder_context: FolderContext) -> bool:
-    for assets in folder_context.scan.groups.values():
-        has_me = any(asset.role == "me" for asset in assets)
-        has_dx = any(asset.role == "dx" for asset in assets)
-        if has_me and has_dx:
-            return True
-    return False
+    return any(supports_me_job(assets) for assets in folder_context.scan.groups.values())
 
 
 def _run_all_for_context(
@@ -933,18 +922,14 @@ def _choose_null_stem_plan(
     group_assets: list[ClassifiedLogicalAsset],
     pm_asset: ClassifiedLogicalAsset,
 ) -> list[ClassifiedLogicalAsset]:
-    same_layout_assets = [
-        asset for asset in group_assets
-        if asset.logical_asset.channel_config_actual == pm_asset.logical_asset.channel_config_actual
-        and asset.logical_asset.asset_id != pm_asset.logical_asset.asset_id
-    ]
+    same_layout_assets = same_layout_companions(group_assets, anchor=pm_asset)
     by_role = {asset.role: asset for asset in same_layout_assets}
 
-    options: list[Choice[str]] = []
-    if all(role in by_role for role in ("dx", "mx", "fx")):
-        options.append(Choice("Auto-select DX + MX + FX", "dx_mx_fx"))
-    if all(role in by_role for role in ("dx", "me")):
-        options.append(Choice("Auto-select DX + ME", "dx_me"))
+    auto_plans = available_auto_null_plans(by_role)
+    options: list[Choice[AutoNullPlan | str]] = [
+        Choice(f"Auto-select {' + '.join(role.upper() for role in plan.roles)}", plan)
+        for plan in auto_plans
+    ]
     if same_layout_assets:
         options.append(Choice("Choose stems manually", "manual"))
 
@@ -953,10 +938,8 @@ def _choose_null_stem_plan(
         raise WizardBack
 
     plan = choose_one("Choose a stem plan.", options)
-    if plan == "dx_mx_fx":
-        return [by_role["dx"], by_role["mx"], by_role["fx"]]
-    if plan == "dx_me":
-        return [by_role["dx"], by_role["me"]]
+    if isinstance(plan, AutoNullPlan):
+        return plan.stems
 
     while True:
         selected = choose_many(
@@ -974,8 +957,8 @@ def _choose_dx_for_me(
     me_asset: ClassifiedLogicalAsset,
 ) -> ClassifiedLogicalAsset:
     same_layout = [
-        asset for asset in group_assets
-        if asset.role == "dx" and asset.logical_asset.channel_config_actual == me_asset.logical_asset.channel_config_actual
+        asset for asset in same_layout_companions(group_assets, anchor=me_asset)
+        if asset.role == "dx"
     ]
     fallback = [asset for asset in group_assets if asset.role == "dx"]
     candidates = same_layout or fallback

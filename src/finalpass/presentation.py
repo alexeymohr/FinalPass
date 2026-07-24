@@ -181,6 +181,13 @@ def format_metric_value(value: float | None, *, metric: str) -> str:
     return f"{text} {unit}" if unit else text
 
 
+def stem_strategy_label(strategy: str | None) -> str:
+    """Render an auto-null stem strategy for display."""
+    if not strategy:
+        return "—"
+    return strategy.replace("_", "+")
+
+
 def metric_value_header(metric: str) -> str:
     """Column header for the value column of a flagged-region table."""
     _, _, header = _METRIC_DISPLAY.get(metric, _METRIC_DISPLAY_FALLBACK)

@@ -56,6 +56,7 @@ from .presentation import (
     logical_asset_display_name,
     metric_value_header,
     source_summary,
+    stem_strategy_label,
     verdict_explainer,
 )
 from .run_settings import AllSettings
@@ -517,7 +518,7 @@ def _render_all_report(report: AllReport) -> None:
                 _out_console.print(f"  [dim]Null:[/dim] SKIPPED — {humanize_code(null_test.reason)}")
             elif null_test.pass_ is True and null_test.summary is not None:
                 _out_console.print(
-                    f"  [green]Null:[/green] PASS — {_format_stem_strategy(null_test.stem_strategy)} — "
+                    f"  [green]Null:[/green] PASS — {stem_strategy_label(null_test.stem_strategy)} — "
                     f"max residual {null_test.summary.max_residual_rms_dbfs:.1f} dBFS"
                 )
             elif null_test.summary is not None:
@@ -700,14 +701,6 @@ def _flagged_regions_table(flags, *, title: str) -> Table:
         )
         table.caption_justify = "left"
     return table
-
-
-def _format_stem_strategy(strategy: str | None) -> str:
-    if strategy == "dx_mx_fx":
-        return "dx+mx+fx"
-    if strategy == "dx_me":
-        return "dx+me"
-    return "—"
 
 
 def _print_summary(

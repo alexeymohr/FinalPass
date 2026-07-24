@@ -26,6 +26,7 @@ from .all_assets import (
 )
 from .audio_io import AudioFile
 from .classify import load_config
+from .group_plan import preferred_auto_null_plan
 from .errors import (
     AAFExportError,
     AlignmentError,
@@ -1223,8 +1224,8 @@ def _run_group_null_test(
             errors=[],
         )
 
-    strategy, selected_roles, stems = _select_auto_null_stems(selected_assets)
-    if strategy is None:
+    plan = preferred_auto_null_plan(selected_assets)
+    if plan is None:
         return AutoNullTestResult(
             **{"pass": None},
             skipped=True,
@@ -1241,11 +1242,11 @@ def _run_group_null_test(
 
     try:
         _mark_used(used_by, printmaster, "null")
-        for stem in stems:
+        for stem in plan.stems:
             _mark_used(used_by, stem, "null")
         pm_audio = read_classified_audio(printmaster)
-        stem_audios = [read_classified_audio(asset) for asset in stems]
-        _validate_channel_label_hints([(printmaster, pm_audio), *zip(stems, stem_audios)])
+        stem_audios = [read_classified_audio(asset) for asset in plan.stems]
+        _validate_channel_label_hints([(printmaster, pm_audio), *zip(plan.stems, stem_audios)])
         analysis = analyze_null(
             pm_audio,
             stem_audios,
@@ -1260,8 +1261,8 @@ def _run_group_null_test(
             **{"pass": False},
             skipped=False,
             reason=_analysis_reason(exc),
-            stem_strategy=strategy,
-            selected_roles=selected_roles,
+            stem_strategy=plan.strategy,
+            selected_roles=plan.roles,
             window_ms=tunables.window_ms,
             hop_ms=tunables.hop_ms,
             threshold_dbfs=tunables.threshold_dbfs,
@@ -1276,8 +1277,8 @@ def _run_group_null_test(
             **{"pass": passed},
             skipped=False,
             reason=None,
-            stem_strategy=strategy,
-            selected_roles=selected_roles,
+            stem_strategy=plan.strategy,
+            selected_roles=plan.roles,
             window_ms=tunables.window_ms,
             hop_ms=tunables.hop_ms,
             threshold_dbfs=tunables.threshold_dbfs,
@@ -1381,16 +1382,6 @@ def _run_group_me_check(
     )
     result._sample_rate = me_audio.sample_rate
     return result
-
-
-def _select_auto_null_stems(
-    selected_assets: dict[FileRole, ClassifiedLogicalAsset],
-) -> tuple[str | None, list[str], list[ClassifiedLogicalAsset]]:
-    if all(selected_assets.get(role) is not None for role in ("dx", "mx", "fx")):
-        return "dx_mx_fx", ["dx", "mx", "fx"], [selected_assets["dx"], selected_assets["mx"], selected_assets["fx"]]
-    if all(selected_assets.get(role) is not None for role in ("dx", "me")):
-        return "dx_me", ["dx", "me"], [selected_assets["dx"], selected_assets["me"]]
-    return None, [], []
 
 
 def _validate_channel_label_hints(items: list[tuple[ClassifiedLogicalAsset, AudioFile]]) -> None:
