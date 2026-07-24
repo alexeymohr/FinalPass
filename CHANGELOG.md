@@ -18,6 +18,8 @@
 - The CLI prints a one-line non-drop timecode note at 29.97/59.94 fps.
 - Removed the `pydantic<2.13` supply-chain hold; lock now resolves
   pydantic 2.13.4 / pydantic-core 2.46.4 (both aged past the 7-day window).
+- Release checklist artifact names updated to the program-named artifacts the
+  smoke flow actually writes.
 
 ## v0.1.0
 

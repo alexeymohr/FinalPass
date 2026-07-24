@@ -16,20 +16,21 @@ uv run finalpass --version
 
 ## Artifact spot-check
 
-Confirm the smoke flow wrote these disposable outputs:
+Confirm the smoke flow wrote these disposable outputs (artifact stems are
+derived from the example program names):
 
-- `examples/out/me_failing/report.json`
-- `examples/out/me_failing/report.html`
-- `examples/out/me_failing/markers.aaf`
-- `examples/out/all/report.json`
-- `examples/out/all/report.html`
-- `examples/out/all/markers.aaf`
+- `examples/out/me_failing/show-s01e04-report.json`
+- `examples/out/me_failing/show-s01e04-report.html`
+- `examples/out/me_failing/show-s01e04-markers.aaf`
+- `examples/out/all/show-s01e03-s01e04-report.json`
+- `examples/out/all/show-s01e03-s01e04-report.html`
+- `examples/out/all/show-s01e03-s01e04-markers.aaf`
 
 ## Local Pro Tools marker smoke check
 
 Import:
 
-- `examples/out/all/markers.aaf`
+- `examples/out/all/show-s01e03-s01e04-markers.aaf`
 
 Confirm:
 
