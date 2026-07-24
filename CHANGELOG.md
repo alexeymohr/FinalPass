@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Split-mono discovery accepts Pro Tools bounce naming: spelled-out channel
+  words (`Left`, `Right`, `Center`/`Centre`, `Left Front`, `Right Front`,
+  `Left Surround`, `Right Surround`), commas as token separators, and leading
+  track-number prefixes no longer split otherwise-identical families/groups.
+
 ## v0.1.0
 
 FinalPass v0.1.0 is the first release candidate of the OSS delivery-QC CLI.

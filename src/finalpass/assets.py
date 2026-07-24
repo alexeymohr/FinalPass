@@ -30,7 +30,9 @@ SourceKind = Literal["interleaved", "split_mono"]
 _ALLOWED_EXTENSIONS = {".wav", ".bwf"}
 _SKIP_PREFIXES = ("._", ".")
 
-_TOKEN_SEPARATORS = r"[ _\-.]"
+# Comma is a separator because Pro Tools bounce names use it before the
+# channel word ("5.1 Mix, Left Front", "5.1 Mix,_LFE").
+_TOKEN_SEPARATORS = r"[ _\-.,]"
 _TOKEN_BOUNDARY = rf"(^|{_TOKEN_SEPARATORS})"
 _TOKEN_END = rf"(?=$|{_TOKEN_SEPARATORS})"
 
@@ -65,7 +67,13 @@ _PRESENTATION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("Stereo", re.compile(rf"(?i){_TOKEN_BOUNDARY}(STEREO){_TOKEN_END}")),
 ]
 
-_LEG_PATTERN = re.compile(rf"(?i){_TOKEN_BOUNDARY}(LFE|LSS|RSS|LS|RS|L|R|C)$")
+_LEG_PATTERN = re.compile(
+    rf"(?i){_TOKEN_BOUNDARY}"
+    rf"(LEFT{_TOKEN_SEPARATORS}FRONT|RIGHT{_TOKEN_SEPARATORS}FRONT"
+    rf"|LEFT{_TOKEN_SEPARATORS}SURROUND|RIGHT{_TOKEN_SEPARATORS}SURROUND"
+    rf"|CENTER|CENTRE|LEFT|RIGHT"
+    rf"|LFE|LSS|RSS|LS|RS|L|R|C)$"
+)
 _LEG_CANONICAL = {
     "L": "L",
     "R": "R",
@@ -75,6 +83,15 @@ _LEG_CANONICAL = {
     "RS": "Rs",
     "LSS": "Lss",
     "RSS": "Rss",
+    # Spelled-out channel words as written by common Pro Tools bounce naming.
+    "LEFT": "L",
+    "RIGHT": "R",
+    "CENTER": "C",
+    "CENTRE": "C",
+    "LEFT FRONT": "L",
+    "RIGHT FRONT": "R",
+    "LEFT SURROUND": "Ls",
+    "RIGHT SURROUND": "Rs",
 }
 _CANONICAL_LAYOUTS: dict[ChannelConfigActual, list[str]] = {
     "stereo": ["L", "R"],
@@ -800,7 +817,8 @@ def _parse_leg_label(stem: str) -> str | None:
     match = _LEG_PATTERN.search(stem)
     if match is None:
         return None
-    return _LEG_CANONICAL[match.group(2).upper()]
+    token = re.sub(rf"{_TOKEN_SEPARATORS}+", " ", match.group(2)).strip().upper()
+    return _LEG_CANONICAL[token]
 
 
 def _normalize_stem(stem: str) -> str:
@@ -816,7 +834,10 @@ def _normalize_stem(stem: str) -> str:
         cleaned = pattern.sub("_", cleaned)
     for pattern in _GROUP_PATTERNS:
         cleaned = pattern.sub("_", cleaned)
-    cleaned = re.sub(r"[ _\-.]+", "_", cleaned).strip("_")
+    cleaned = re.sub(r"[ _\-.,]+", "_", cleaned).strip("_")
+    # Pro Tools prefixes bounce files with a track number ("11 SHOW ..."); the
+    # prefix is per-file, so it must not split otherwise-identical family keys.
+    cleaned = re.sub(r"^\d+_", "", cleaned)
     return cleaned.lower()
 
 

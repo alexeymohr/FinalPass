@@ -11,7 +11,7 @@ from finalpass.assets import (
     discover_logical_assets_in_folder,
     resolve_logical_asset,
 )
-from tests.asset_helpers import write_interleaved, write_split_family
+from tests.asset_helpers import mono_signal, write_interleaved, write_split_family
 from tests.audio_cases import SR, write_audio
 
 
@@ -197,6 +197,88 @@ def test_mixed_subtypes_in_family_are_hard_error(tmp_path: Path) -> None:
 
     errors = _errors_by_type(result)
     assert "SubtypeMismatch" in errors
+
+
+_PT_51_BOUNCE_NAMES = {
+    "L": "11 SHOW 5.1 Mix, Left Front.wav",
+    "R": "12 SHOW 5.1 Mix, Right Front.wav",
+    "C": "13 SHOW 5.1 Mix, Center.wav",
+    "LFE": "14 SHOW 5.1 Mix,_LFE.wav",
+    "Ls": "15 SHOW 5.1 Mix, Left Surround.wav",
+    "Rs": "16 SHOW 5.1 Mix, Right Surround.wav",
+}
+
+
+def _write_pt_stereo_pair(root: Path) -> dict[str, Path]:
+    return {
+        "L": write_audio(root / "1 SHOW Stereo Mix Left.wav", mono_signal(0.1), sr=SR),
+        "R": write_audio(root / "2 SHOW Stereo Mix Right.wav", mono_signal(0.2), sr=SR),
+    }
+
+
+def _write_pt_51_family(root: Path) -> dict[str, Path]:
+    return {
+        leg: write_audio(root / name, mono_signal(0.1 * (index + 1)), sr=SR)
+        for index, (leg, name) in enumerate(_PT_51_BOUNCE_NAMES.items())
+    }
+
+
+def test_pt_spelled_out_stereo_bounce_pair_assembles(tmp_path: Path) -> None:
+    members = _write_pt_stereo_pair(tmp_path)
+
+    result = discover_logical_assets_in_folder(tmp_path)
+
+    assert result.errors == []
+    assert len(result.assets) == 1
+    asset = result.assets[0]
+    assert asset.source_kind == "split_mono"
+    assert asset.role_hint == "pm"
+    assert asset.channel_config_actual == "stereo"
+    assert asset.presentation_label == "Stereo"
+    assert asset.member_legs == ["L", "R"]
+    assert asset.source_paths == [members["L"], members["R"]]
+    assert asset.group_id == "SHOW"
+
+
+def test_pt_comma_and_spelled_out_51_bounce_family_assembles(tmp_path: Path) -> None:
+    members = _write_pt_51_family(tmp_path)
+
+    result = discover_logical_assets_in_folder(tmp_path)
+
+    assert result.errors == []
+    assert len(result.assets) == 1
+    asset = result.assets[0]
+    assert asset.source_kind == "split_mono"
+    assert asset.role_hint == "pm"
+    assert asset.channel_config_actual == "5.1"
+    assert asset.presentation_label == "5.1"
+    assert asset.member_legs == ["L", "R", "C", "LFE", "Ls", "Rs"]
+    assert asset.source_paths == [members[leg] for leg in ["L", "R", "C", "LFE", "Ls", "Rs"]]
+    assert asset.group_id == "SHOW"
+
+
+def test_pt_stereo_and_51_bounces_partition_by_presentation(tmp_path: Path) -> None:
+    _write_pt_stereo_pair(tmp_path)
+    _write_pt_51_family(tmp_path)
+
+    result = discover_logical_assets_in_folder(tmp_path)
+
+    assert result.errors == []
+    assert len(result.assets) == 2
+    assert sorted(asset.channel_config_actual for asset in result.assets) == ["5.1", "stereo"]
+    assert {asset.role_hint for asset in result.assets} == {"pm"}
+    assert {asset.group_id for asset in result.assets} == {"SHOW"}
+
+
+def test_pt_seed_path_resolution_from_spelled_out_member(tmp_path: Path) -> None:
+    members = _write_pt_51_family(tmp_path)
+
+    asset = resolve_logical_asset(members["Ls"])
+
+    assert asset.source_kind == "split_mono"
+    assert asset.channel_config_actual == "5.1"
+    assert asset.member_legs == ["L", "R", "C", "LFE", "Ls", "Rs"]
+    assert asset.canonical_path == members["L"]
 
 
 def test_resolve_seed_path_fails_cleanly_for_incomplete_family(tmp_path: Path) -> None:

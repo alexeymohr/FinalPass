@@ -228,6 +228,15 @@ Supported split layouts:
 - 5.1: `L`, `R`, `C`, `LFE`, `Ls`, `Rs`
 - 7.1: `L`, `R`, `C`, `LFE`, `Ls`, `Rs`, `Lss`, `Rss`
 
+Leg tokens are matched at the end of the filename stem. In addition to the
+abbreviations above, FinalPass accepts the spelled-out channel words that
+Pro Tools writes in bounce filenames: `Left`, `Right`, `Center`/`Centre`,
+`Left Front`, `Right Front`, `Left Surround`, and `Right Surround`. Commas
+count as token separators, and a leading track-number prefix (for example
+`"11 SHOW 5.1 Mix, Left Front.wav"`) is ignored when family membership and
+group identity are derived, so a raw Pro Tools bounce folder can assemble
+without renaming.
+
 For a 5.0 split source, FinalPass analyzes the source as 5.1 with a temporary
 silent LFE channel where needed. Reports still preserve the real five source
 legs so reviewers can see what was actually delivered.
