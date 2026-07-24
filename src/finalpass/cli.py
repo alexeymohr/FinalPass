@@ -60,6 +60,10 @@ from .wizard import run_wizard
 _err_console = Console(stderr=True)
 _out_console = Console()
 
+# Terminal readability cap only; the JSON and HTML reports always carry the
+# full flagged-region list.
+_FLAG_TABLE_MAX_ROWS = 20
+
 
 def _validate_fps_option(_ctx: click.Context, _param: click.Parameter, value: float) -> float:
     if not math.isfinite(value) or value <= 0:
@@ -656,7 +660,7 @@ def _flagged_regions_table(flags, *, title: str, value_header: str, value_format
     table.add_column("duration", justify="right")
     table.add_column(value_header, justify="right")
     table.add_column("detail")
-    for flag in flags:
+    for flag in flags[:_FLAG_TABLE_MAX_ROWS]:
         table.add_row(
             flag.start_tc,
             flag.end_tc,
@@ -664,6 +668,12 @@ def _flagged_regions_table(flags, *, title: str, value_header: str, value_format
             value_formatter(flag),
             flag.detail,
         )
+    if len(flags) > _FLAG_TABLE_MAX_ROWS:
+        table.caption = (
+            f"Showing first {_FLAG_TABLE_MAX_ROWS} of {len(flags)} flagged regions; "
+            "the full list is in the JSON and HTML reports."
+        )
+        table.caption_justify = "left"
     return table
 
 

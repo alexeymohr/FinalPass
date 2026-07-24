@@ -295,3 +295,31 @@ def test_loudness_terminal_output_shows_full_input_path_on_separate_line(
     assert target.name in result.output
     assert "path:" in result.output
     assert str(target) in result.output
+
+
+def test_flagged_regions_table_caps_rows_for_terminal() -> None:
+    from finalpass.cli import _FLAG_TABLE_MAX_ROWS, _flagged_regions_table
+    from finalpass.models import FlaggedRegion
+
+    flags = [
+        FlaggedRegion(
+            code="NULL",
+            metric="residual_rms_dbfs",
+            value=-30.0,
+            threshold=-40.0,
+            start_sample=index * 48000,
+            end_sample=index * 48000 + 4800,
+            start_tc="01:00:00:00",
+            end_tc="01:00:00:02",
+            duration_seconds=0.1,
+            detail="test",
+        )
+        for index in range(25)
+    ]
+
+    table = _flagged_regions_table(
+        flags, title="Flags", value_header="value", value_formatter=lambda flag: "x"
+    )
+
+    assert table.row_count == _FLAG_TABLE_MAX_ROWS
+    assert "25" in (table.caption or "")
