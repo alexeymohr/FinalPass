@@ -13,6 +13,8 @@
 - New bundled spec preset `atsc_a85_mono` (joins the ATSC A/85 family).
 - Terminal flagged-region tables cap at 20 rows with an explicit
   "showing first N of M" caption; JSON/HTML reports keep the full list.
+- Silenced the scipy coherence RuntimeWarning on windows with silent
+  segments; undefined coherence bins are now dropped instead of averaged.
 
 ## v0.1.0
 

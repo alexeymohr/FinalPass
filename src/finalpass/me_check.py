@@ -401,11 +401,17 @@ def _coherence_mean(
     if float(np.linalg.norm(dx_window)) == 0.0 or float(np.linalg.norm(me_window)) == 0.0:
         return 0.0
     nperseg = min(2048, len(dx_window))
-    freqs, values = coherence(dx_window, me_window, fs=sample_rate, nperseg=nperseg)
+    # A window with silent segments yields zero-power spectra; scipy's
+    # coherence divide then produces NaN bins and a RuntimeWarning. Suppress
+    # the warning and drop the undefined bins instead of averaging NaNs.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        freqs, values = coherence(dx_window, me_window, fs=sample_rate, nperseg=nperseg)
     mask = (freqs >= band_low_hz) & (freqs <= band_high_hz)
-    if not np.any(mask):
+    band = values[mask]
+    band = band[np.isfinite(band)]
+    if band.size == 0:
         return 0.0
-    return float(np.mean(values[mask]))
+    return float(np.mean(band))
 
 
 def _merge_flagged_windows(

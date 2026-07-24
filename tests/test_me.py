@@ -255,6 +255,29 @@ def test_me_dx_gate_behavior_gates_out_quiet_dx_windows(tmp_path: Path) -> None:
     assert payload["me_check"]["flags"] == []
 
 
+def test_coherence_mean_handles_zero_power_segments_without_warning() -> None:
+    import warnings
+
+    from finalpass.me_check import _coherence_mean
+
+    # A constant DX window detrends to exact zeros inside scipy's coherence,
+    # which used to emit a RuntimeWarning and average NaN bins.
+    dx_window = np.full(24000, 0.25, dtype=np.float64)
+    me_window = np.random.default_rng(SEED).standard_normal(24000)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        value = _coherence_mean(
+            dx_window,
+            me_window,
+            sample_rate=SR,
+            band_low_hz=200.0,
+            band_high_hz=4000.0,
+        )
+
+    assert value == 0.0
+
+
 def test_me_short_file_shorter_than_window_uses_single_window(tmp_path: Path) -> None:
     files = _write_me_case(tmp_path / "case", seconds=0.3, base_seed=SEED + 700)
     runner = CliRunner()
