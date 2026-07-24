@@ -104,6 +104,8 @@ def _read_marker_aaf(path: Path) -> dict[str, object]:
             "slot_name": slot.name,
             "edit_rate": str(slot.edit_rate),
             "timecode_start": timecode_slot.segment.start,
+            "timecode_fps": timecode_slot.segment.fps,
+            "timecode_drop": timecode_slot.segment.drop,
             "markers": markers,
         }
 
@@ -208,6 +210,7 @@ def test_standalone_null_failing_case_writes_aaf(tmp_path: Path) -> None:
     parsed = _read_marker_aaf(aaf_path)
     assert parsed["slot_name"] == "FinalPass Markers"
     assert parsed["edit_rate"] == "24000/1001"
+    assert parsed["timecode_drop"] is False
     assert parsed["slot_types"] == ["TimelineMobSlot", "TimelineMobSlot", "EventMobSlot"]
     markers = parsed["markers"]
     assert markers
@@ -221,6 +224,33 @@ def test_standalone_null_failing_case_writes_aaf(tmp_path: Path) -> None:
     assert all(marker["user_comments"]["Comment"] == marker["title"] for marker in markers)
     assert all(marker["user_comments"]["Label"] == "[1] FAIL: null mismatch" for marker in markers)
     assert all("[NULL]" in marker["user_comments"]["Detail"] for marker in markers)
+
+
+def test_standalone_null_drop_frame_aaf_sets_drop_and_semicolon_marker_time(tmp_path: Path) -> None:
+    files = _write_null_case(tmp_path / "case", base_seed=SEED + 110, defect_region=(5.0, 7.0))
+    runner = CliRunner()
+    out_dir = tmp_path / "out"
+    result = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--fps", "29.97",
+        "--drop-frame",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 1, result.output
+    aaf_path = out_dir / "show-s01e04-markers.aaf"
+    assert aaf_path.exists()
+    parsed = _read_marker_aaf(aaf_path)
+    assert parsed["edit_rate"] == "30000/1001"
+    assert parsed["timecode_fps"] == 30
+    assert parsed["timecode_drop"] is True
+    markers = parsed["markers"]
+    assert markers
+    assert all(";" in marker["time"] for marker in markers)
+    assert markers[0]["time"].startswith("00:00:0")
 
 
 def test_standalone_me_failing_case_writes_aaf(tmp_path: Path) -> None:

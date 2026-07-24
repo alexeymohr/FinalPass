@@ -48,6 +48,7 @@ def prepare_analysis_window(
     inputs: list[tuple[str, AudioFile]],
     *,
     fps: float,
+    drop_frame: bool = False,
     anchor_index: int = 0,
     tail_mos_threshold_dbfs: float = TAIL_MOS_THRESHOLD_DBFS,
     tail_peak_threshold_dbfs: float = TAIL_PEAK_THRESHOLD_DBFS,
@@ -73,6 +74,7 @@ def prepare_analysis_window(
         inputs,
         sample_rate=sample_rate,
         fps=fps,
+        drop_frame=drop_frame,
         tail_mos_threshold_dbfs=tail_mos_threshold_dbfs,
         tail_peak_threshold_dbfs=tail_peak_threshold_dbfs,
     )
@@ -89,12 +91,14 @@ def prepare_analysis_window(
         anchor.audio.sample_rate,
         fps,
         start_time_reference_samples=anchor.audio.time_reference_samples,
+        drop_frame=drop_frame,
     )
     end_tc = samples_to_tc(
         anchor.end_sample,
         anchor.audio.sample_rate,
         fps,
         start_time_reference_samples=anchor.audio.time_reference_samples,
+        drop_frame=drop_frame,
     )
     analysis_window = AnalysisWindow(
         mode=mode,
@@ -135,6 +139,7 @@ def _window_bounds(
     *,
     sample_rate: int,
     fps: float,
+    drop_frame: bool,
     tail_mos_threshold_dbfs: float,
     tail_peak_threshold_dbfs: float,
 ) -> tuple[list[int], list[int], str]:
@@ -143,7 +148,9 @@ def _window_bounds(
         concrete_refs = [int(ref) for ref in refs if ref is not None]
         common_start = max(concrete_refs)
         common_end = min(ref + audio.sample_count for ref, (_, audio) in zip(concrete_refs, inputs, strict=True))
-        boundary = _common_whole_hour_boundary(common_start, common_end, sample_rate=sample_rate, fps=fps)
+        boundary = _common_whole_hour_boundary(
+            common_start, common_end, sample_rate=sample_rate, fps=fps, drop_frame=drop_frame
+        )
         if boundary is not None:
             raw_ends = [ref + audio.sample_count for ref, (_, audio) in zip(concrete_refs, inputs, strict=True)]
             analysis_end = _analysis_end_after_unique_mos_tail(
@@ -157,7 +164,10 @@ def _window_bounds(
             ends = [analysis_end - ref for ref in concrete_refs]
             return starts, ends, "whole_hour_time_reference"
         if len(set(concrete_refs)) != 1:
-            detail = ", ".join(f"{audio.path.name}={_abs_tc(ref, sample_rate, fps)}" for ref, (_, audio) in zip(concrete_refs, inputs, strict=True))
+            detail = ", ".join(
+                f"{audio.path.name}={_abs_tc(ref, sample_rate, fps, drop_frame=drop_frame)}"
+                for ref, (_, audio) in zip(concrete_refs, inputs, strict=True)
+            )
             raise ProgramWindowError(
                 "No shared whole-hour program boundary was found across differently timed inputs: "
                 f"{detail}."
@@ -196,13 +206,16 @@ def _common_whole_hour_boundary(
     *,
     sample_rate: int,
     fps: float,
+    drop_frame: bool,
 ) -> int | None:
     if end_sample <= start_sample:
         return None
-    start_tc = _abs_tc(start_sample, sample_rate, fps)
+    start_tc = _abs_tc(start_sample, sample_rate, fps, drop_frame=drop_frame)
     start_hour = int(start_tc.split(":", 1)[0])
     for hour in range(max(0, start_hour - 1), start_hour + 3):
-        boundary = tc_to_sample_start(f"{hour:02d}:00:00:00", sample_rate, fps)
+        # In drop-frame mode the whole-hour label maps to the ST 12-1 frame
+        # count (107,892/hour at 29.97), i.e. the wall-clock hour.
+        boundary = tc_to_sample_start(f"{hour:02d}:00:00:00", sample_rate, fps, drop_frame=drop_frame)
         if start_sample <= boundary < end_sample:
             if boundary - start_sample > int(round(MAX_WHOLE_HOUR_HEAD_SECONDS * sample_rate)):
                 return None
@@ -210,8 +223,8 @@ def _common_whole_hour_boundary(
     return None
 
 
-def _abs_tc(sample_index: int, sample_rate: int, fps: float) -> str:
-    return samples_to_tc(0, sample_rate, fps, start_time_reference_samples=sample_index)
+def _abs_tc(sample_index: int, sample_rate: int, fps: float, *, drop_frame: bool = False) -> str:
+    return samples_to_tc(0, sample_rate, fps, start_time_reference_samples=sample_index, drop_frame=drop_frame)
 
 
 def _analysis_end_after_unique_mos_tail(

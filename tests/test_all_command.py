@@ -32,7 +32,7 @@ def test_all_two_episodes_both_pass(tmp_path: Path) -> None:
     ])
     assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 8
+    assert data["schema_version"] == 9
     assert data["command"] == "all"
     assert data["summary"]["groups_total"] == 2
     assert data["summary"]["groups_passed"] == 2
@@ -438,7 +438,7 @@ def test_all_split_51_group_discovers_as_one_editorial_group(tmp_path: Path) -> 
     ])
     assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 8
+    assert data["schema_version"] == 9
     assert data["summary"]["groups_total"] == 1
     group = data["groups"][0]
     assert group["group_id"] == "S01E03"

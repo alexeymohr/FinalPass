@@ -66,13 +66,16 @@ _out_console = Console()
 _FLAG_TABLE_MAX_ROWS = 20
 
 
-def _warn_if_drop_frame_rate(fps: float) -> None:
-    """One-line honesty note: FinalPass timecode strings are non-drop only."""
+def _warn_if_drop_frame_rate(fps: float, drop_frame: bool) -> None:
+    """One-line honesty note at DF-capable rates when the run is non-drop."""
+    if drop_frame:
+        return
     info = frame_rate_info(fps)
     if info.edit_rate.denominator == 1001 and info.nominal_fps in (30, 60):
         _err_console.print(
-            "[yellow]note:[/yellow] timecode strings are non-drop; a drop-frame "
-            "session counter runs ~3.6s per hour ahead of these values."
+            "[yellow]note:[/yellow] timecode strings are non-drop; if this is a "
+            "drop-frame show, rerun with --drop-frame (a drop-frame session "
+            "counter runs ~3.6s per hour ahead of non-drop labels)."
         )
 
 
@@ -95,8 +98,9 @@ def main() -> None:
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress the table; emit JSON to stdout.")
 @click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate (for downstream TC display).")
-def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, out_dir: Path, json_only: bool, fps: float) -> None:
-    _warn_if_drop_frame_rate(fps)
+@click.option("--drop-frame", "drop_frame", is_flag=True, help="Count timecode as SMPTE drop-frame (29.97/59.94 only; HH:MM:SS;FF).")
+def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, out_dir: Path, json_only: bool, fps: float, drop_frame: bool) -> None:
+    _warn_if_drop_frame_rate(fps, drop_frame)
     try:
         effective_dx = dx_file
         spec, _, _ = load_spec(spec_name)
@@ -106,7 +110,7 @@ def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, 
             )
             effective_dx = None
         report, payload, written = _execute_direct_job(
-            runner=lambda: execute_loudness(files=files, spec_name=spec_name, dx_file=effective_dx, fps=fps),
+            runner=lambda: execute_loudness(files=files, spec_name=spec_name, dx_file=effective_dx, fps=fps, drop_frame=drop_frame),
             message="Running loudness...",
             out_dir=out_dir,
             json_only=json_only,
@@ -171,17 +175,19 @@ def wizard_cmd(folder: Path | None, out_dir: Path, fps: float) -> None:
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
 @click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate for flagged-region timecode fields.")
+@click.option("--drop-frame", "drop_frame", is_flag=True, help="Count timecode as SMPTE drop-frame (29.97/59.94 only; HH:MM:SS;FF).")
 @click.option("--window-ms", type=float, default=DEFAULT_NULL_WINDOW_MS, show_default=True, help="Residual RMS window size in milliseconds.")
 @click.option("--hop-ms", type=float, default=DEFAULT_NULL_HOP_MS, show_default=True, help="Residual RMS hop size in milliseconds.")
 @click.option("--threshold-dbfs", type=float, default=DEFAULT_NULL_THRESHOLD_DBFS, show_default=True, help="Flag windows whose residual RMS exceeds this dBFS threshold.")
-def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, fps: float, window_ms: float, hop_ms: float, threshold_dbfs: float) -> None:
-    _warn_if_drop_frame_rate(fps)
+def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, fps: float, drop_frame: bool, window_ms: float, hop_ms: float, threshold_dbfs: float) -> None:
+    _warn_if_drop_frame_rate(fps, drop_frame)
     try:
         report, payload, written = _execute_direct_job(
             runner=lambda: execute_null(
                 pm=pm,
                 stems=stems,
                 fps=fps,
+                drop_frame=drop_frame,
                 window_ms=window_ms,
                 hop_ms=hop_ms,
                 threshold_dbfs=threshold_dbfs,
@@ -203,6 +209,7 @@ def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, 
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
 @click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate for flagged-region timecode fields.")
+@click.option("--drop-frame", "drop_frame", is_flag=True, help="Count timecode as SMPTE drop-frame (29.97/59.94 only; HH:MM:SS;FF).")
 @click.option("--window-ms", type=float, default=DEFAULT_ME_WINDOW_MS, show_default=True, help="Window size in milliseconds.")
 @click.option("--hop-ms", type=float, default=DEFAULT_ME_HOP_MS, show_default=True, help="Hop size in milliseconds.")
 @click.option("--band-low-hz", type=float, default=DEFAULT_ME_BAND_LOW_HZ, show_default=True, help="Speech-band low cutoff in Hz.")
@@ -217,6 +224,7 @@ def me_cmd(
     out_dir: Path,
     json_only: bool,
     fps: float,
+    drop_frame: bool,
     window_ms: float,
     hop_ms: float,
     band_low_hz: float,
@@ -226,13 +234,14 @@ def me_cmd(
     dx_gate_dbfs: float,
     me_floor_dbfs: float,
 ) -> None:
-    _warn_if_drop_frame_rate(fps)
+    _warn_if_drop_frame_rate(fps, drop_frame)
     try:
         report, payload, written = _execute_direct_job(
             runner=lambda: execute_me(
                 me_file=me_file,
                 dx_file=dx_file,
                 fps=fps,
+                drop_frame=drop_frame,
                 window_ms=window_ms,
                 hop_ms=hop_ms,
                 band_low_hz=band_low_hz,
@@ -259,6 +268,7 @@ def me_cmd(
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
 @click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate (for downstream TC display).")
+@click.option("--drop-frame", "drop_frame", is_flag=True, help="Count timecode as SMPTE drop-frame (29.97/59.94 only; HH:MM:SS;FF).")
 @click.option("--patterns", "patterns_path", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None, help="Override bundled classifier patterns with a user YAML.")
 @click.option("--include-unclassified", is_flag=True, help="Measure unclassified files too (integrated/TP/LRA; no dialog check).")
 @click.option("--null-window-ms", type=float, default=DEFAULT_NULL_WINDOW_MS, show_default=True, help="Auto-null residual RMS window size in milliseconds.")
@@ -278,6 +288,7 @@ def all_cmd(
     out_dir: Path,
     json_only: bool,
     fps: float,
+    drop_frame: bool,
     patterns_path: Path | None,
     include_unclassified: bool,
     null_window_ms: float,
@@ -292,7 +303,7 @@ def all_cmd(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> None:
-    _warn_if_drop_frame_rate(fps)
+    _warn_if_drop_frame_rate(fps, drop_frame)
     try:
         report, payload, written = _execute_direct_job(
             runner=lambda: execute_all(
@@ -301,6 +312,7 @@ def all_cmd(
                 patterns_path=patterns_path,
                 include_unclassified=include_unclassified,
                 fps=fps,
+                drop_frame=drop_frame,
                 null_window_ms=null_window_ms,
                 null_hop_ms=null_hop_ms,
                 null_threshold_dbfs=null_threshold_dbfs,

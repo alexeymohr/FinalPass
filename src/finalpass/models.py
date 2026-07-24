@@ -115,7 +115,7 @@ class Summary(BaseModel):
 
 
 class Report(BaseModel):
-    """SM-2 `loudness` command report — `schema_version == 3`."""
+    """`loudness` command report — `schema_version == 4` (8T adds `drop_frame`)."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -125,6 +125,7 @@ class Report(BaseModel):
     run_started_at: str
     spec: SpecRef
     fps: float
+    drop_frame: bool
     files: list[StandaloneFileReport]
     summary: Summary
 
@@ -331,7 +332,7 @@ class AllSummary(BaseModel):
 
 
 class AllReport(BaseModel):
-    """SM-3 `all` command report — `schema_version == 8`."""
+    """`all` command report — `schema_version == 9` (8T adds `drop_frame`)."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -341,6 +342,7 @@ class AllReport(BaseModel):
     run_started_at: str
     spec: SpecRef
     fps: float
+    drop_frame: bool
     command: Literal["all"]
     folder: str
     groups: list[Group]
@@ -351,7 +353,7 @@ class AllReport(BaseModel):
 
 
 class NullReport(BaseModel):
-    """SM-2 standalone `null` command report — `schema_version == 3`."""
+    """Standalone `null` command report — `schema_version == 4` (8T adds `drop_frame`)."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -361,6 +363,7 @@ class NullReport(BaseModel):
     run_id: str
     run_started_at: str
     fps: float
+    drop_frame: bool
     printmaster: AnalysisInputFile
     stems: list[AnalysisInputFile]
     null_test: NullTestResult
@@ -368,7 +371,7 @@ class NullReport(BaseModel):
 
 
 class MEReport(BaseModel):
-    """SM-2 standalone `me` command report — `schema_version == 3`."""
+    """Standalone `me` command report — `schema_version == 4` (8T adds `drop_frame`)."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -378,6 +381,7 @@ class MEReport(BaseModel):
     run_id: str
     run_started_at: str
     fps: float
+    drop_frame: bool
     me_file: AnalysisInputFile
     dx_file: AnalysisInputFile
     me_check: MECheckResult

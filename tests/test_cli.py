@@ -45,7 +45,7 @@ def test_loudness_pass_exits_zero(pink_stereo_10s: Path, tmp_path: Path) -> None
     assert html_path.exists()
     assert not aaf_path.exists()
     data = json.loads(report_path.read_text())
-    assert data["schema_version"] == 3
+    assert data["schema_version"] == 4
     assert data["spec"]["name"] == "ebu_r128"
     assert data["files"][0]["role"] == "primary"
     assert "report.json" in result.output
@@ -91,7 +91,7 @@ def test_json_only_is_parseable(pink_stereo_10s: Path, tmp_path: Path) -> None:
     ])
     assert result.exit_code in (0, 1)
     data = json.loads(result.output)
-    assert data["schema_version"] == 3
+    assert data["schema_version"] == 4
     assert not (tmp_path / "out" / "report.json").exists()
     assert not (tmp_path / "out" / "report.html").exists()
     assert not (tmp_path / "out" / "markers.aaf").exists()
@@ -118,7 +118,7 @@ def test_loudness_v3_includes_standalone_provenance_fields(pink_stereo_10s: Path
     ])
     assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 3
+    assert data["schema_version"] == 4
     file_report = data["files"][0]
     assert file_report["source_kind"] == "interleaved"
     assert file_report["source_paths"] == [str(pink_stereo_10s.resolve())]
@@ -175,18 +175,20 @@ def test_version_flag_matches_package_metadata() -> None:
 def test_loudness_command_routes_through_shared_runner(monkeypatch, pink_stereo_10s: Path) -> None:
     calls: dict[str, object] = {}
 
-    def fake_execute_loudness(*, files, spec_name, dx_file, fps):
+    def fake_execute_loudness(*, files, spec_name, dx_file, fps, drop_frame):
         calls["files"] = files
         calls["spec_name"] = spec_name
         calls["dx_file"] = dx_file
         calls["fps"] = fps
+        calls["drop_frame"] = drop_frame
         return Report(
             finalpass_version=__version__,
-            schema_version=3,
+            schema_version=4,
             run_id="test-run",
             run_started_at="2026-04-22T00:00:00Z",
             spec=SpecRef(name="ebu_r128", display_name="EBU R128", source="bundled"),
             fps=fps,
+            drop_frame=drop_frame,
             files=[],
             summary=Summary(total_checks=0, passed=0, failed=0, skipped=0, overall_pass=True),
         )
@@ -205,17 +207,19 @@ def test_loudness_command_routes_through_shared_runner(monkeypatch, pink_stereo_
     assert calls["spec_name"] == "ebu_r128"
     assert calls["dx_file"] is None
     assert calls["fps"] == 23.976
+    assert calls["drop_frame"] is False
 
 
 def test_loudness_command_routes_artifact_writes_through_shared_seam(monkeypatch, pink_stereo_10s: Path, tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
     report = Report(
         finalpass_version=__version__,
-        schema_version=3,
+        schema_version=4,
         run_id="test-run",
         run_started_at="2026-04-22T00:00:00Z",
         spec=SpecRef(name="ebu_r128", display_name="EBU R128", source="bundled"),
         fps=23.976,
+        drop_frame=False,
         files=[],
         summary=Summary(total_checks=0, passed=0, failed=0, skipped=0, overall_pass=True),
     )
@@ -245,7 +249,7 @@ def test_loudness_command_routes_artifact_writes_through_shared_seam(monkeypatch
     assert result.exit_code == 0, result.output
     assert calls["report"] == report
     assert calls["out_dir"] == out_dir
-    assert '"schema_version": 3' in calls["payload"]
+    assert '"schema_version": 4' in calls["payload"]
 
 
 def test_loudness_repeated_runs_reserve_new_report_filenames(pink_stereo_10s: Path, tmp_path: Path) -> None:
@@ -354,3 +358,57 @@ def test_film_fps_prints_no_non_drop_note(pink_stereo_10s: Path, tmp_path: Path)
     ])
     assert result.exit_code in (0, 1)
     assert "non-drop" not in _combined_output(result)
+
+
+def test_fractional_broadcast_fps_note_recommends_drop_frame_flag(pink_stereo_10s: Path, tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness", str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+        "--fps", "29.97",
+    ])
+    assert result.exit_code in (0, 1)
+    assert "--drop-frame" in _combined_output(result)
+
+
+def test_drop_frame_run_prints_no_non_drop_note(pink_stereo_10s: Path, tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness", str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+        "--fps", "29.97",
+        "--drop-frame",
+    ])
+    assert result.exit_code in (0, 1)
+    assert "non-drop" not in _combined_output(result)
+
+
+def test_drop_frame_at_non_broadcast_fps_exits_two(pink_stereo_10s: Path, tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness", str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+        "--fps", "24",
+        "--drop-frame",
+    ])
+    assert result.exit_code == 2
+    assert "drop-frame" in _combined_output(result)
+
+
+def test_drop_frame_run_persists_envelope_field(pink_stereo_10s: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness", str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--fps", "29.97",
+        "--drop-frame",
+        "--json-only",
+    ])
+    assert result.exit_code in (0, 1), result.output
+    payload = json.loads(result.output)
+    assert payload["fps"] == 29.97
+    assert payload["drop_frame"] is True
+    assert payload["schema_version"] == 4

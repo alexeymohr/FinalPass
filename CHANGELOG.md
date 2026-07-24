@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Phase 8T — timecode completion
+
+- SMPTE ST 12-1 drop-frame timecode support for 29.97 and 59.94 via a new
+  `--drop-frame` flag on `loudness`, `null`, `me`, and `all`. Drop-frame
+  strings use the semicolon convention (`HH:MM:SS;FF`) everywhere a timecode
+  appears: terminal tables, JSON, HTML, and AAF marker fields. Default
+  remains non-drop; `--drop-frame` with any other rate is a clean validation
+  error.
+- The whole-hour program-window boundary is found in the selected timecode
+  mode: at 29.97 drop-frame, `01:00:00;00` sits at the wall-clock hour
+  (107,892 frames), removing the ~3.6 s/hour window offset the non-drop-only
+  implementation imposed on drop-frame shows.
+- AAF export sets the timecode track's drop-frame flag from the selected
+  mode. Marker placement is unchanged (it always used exact rational edit
+  rates).
+- Frame-rate table gains 119.88 (120000/1001) and 120, non-drop only per
+  ST 12-1.
+- Schema bumps: `loudness`/`null`/`me` 3 → 4, `all` 8 → 9. Each envelope
+  adds `drop_frame: bool` beside `fps`. Non-drop report strings are
+  unchanged.
+- The 29.97/59.94 stderr note now recommends `--drop-frame` for drop-frame
+  shows instead of only describing the drift.
+
+### Earlier unreleased changes
+
 - Split-mono discovery accepts Pro Tools bounce naming: spelled-out channel
   words (`Left`, `Right`, `Center`/`Centre`, `Left Front`, `Right Front`,
   `Left Surround`, `Right Surround`), commas as token separators, and leading

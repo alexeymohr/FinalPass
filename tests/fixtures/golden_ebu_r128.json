@@ -1,12 +1,13 @@
 {
   "finalpass_version": "0.1.0",
-  "schema_version": 3,
+  "schema_version": 4,
   "spec": {
     "name": "ebu_r128",
     "display_name": "EBU R128 \u2014 stereo (pre-produced)",
     "source": "bundled"
   },
   "fps": 23.976,
+  "drop_frame": false,
   "files": [
     {
       "path": "pink_stereo_10s.wav",

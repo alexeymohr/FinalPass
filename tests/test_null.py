@@ -43,7 +43,7 @@ def test_null_exact_sum_passes(tmp_path: Path) -> None:
     ])
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 3
+    assert data["schema_version"] == 4
     assert data["command"] == "null"
     assert data["printmaster"]["source_kind"] == "interleaved"
     assert data["printmaster"]["source_paths"] == [str(files["pm"].resolve())]
@@ -183,6 +183,75 @@ def test_null_still_flags_defects_after_one_hour_when_embedded_start_is_known(tm
     assert payload["null_test"]["summary"]["windows_total"] == 40
     assert payload["null_test"]["flags"]
     assert payload["null_test"]["flags"][0]["start_tc"] >= "01:00:00:00"
+
+
+def test_null_drop_frame_window_starts_at_wall_clock_hour(tmp_path: Path) -> None:
+    # Files start 10s before the wall-clock hour. At 29.97 the drop-frame
+    # 01:00:00;00 label sits at the wall-clock hour (~3600.0s absolute) while
+    # the non-drop 01:00:00:00 label sits ~3603.6s absolute. A defect placed
+    # between the two boundaries is inside the drop-frame program window but
+    # ahead of the non-drop one.
+    time_reference_samples = int(round((3600.0 - 10.0) * SR))
+    files = _write_exact_sum_case(
+        tmp_path / "case",
+        seconds=20.0,
+        base_seed=SEED + 950,
+        time_reference_samples=time_reference_samples,
+    )
+    data = exact_sum_components(seconds=20.0, base_seed=SEED + 950)
+    start = int(round(11.0 * SR))  # ~1s after the wall-clock hour
+    end = int(round(12.0 * SR))
+    data["pm"][start:end] = data["pm"][start:end] - data["fx"][start:end]
+    write_audio(files["pm"], data["pm"], time_reference_samples=time_reference_samples)
+    args = [str(files["pm"]), str(files["dx"]), str(files["mx"]), str(files["fx"])]
+
+    runner = CliRunner()
+    df_result = runner.invoke(main, ["null", *args, "--fps", "29.97", "--drop-frame", "--json-only"])
+    assert df_result.exit_code == 1, df_result.output
+    df_payload = json.loads(df_result.output)
+    assert df_payload["drop_frame"] is True
+    window = df_payload["null_test"]["analysis_window"]
+    assert window["mode"] == "whole_hour_time_reference"
+    assert window["start_tc"] == "01:00:00;00"
+    # DF hour boundary sample: ceil(107892 frames * 1001/30000 s * 48000).
+    assert window["start_sample"] == tc_to_sample_start("01:00:00;00", SR, 29.97, drop_frame=True) - time_reference_samples
+    assert abs(window["start_sample"] / SR - 10.0) < 0.01
+    first = df_payload["null_test"]["flags"][0]
+    assert ";" in first["start_tc"] and ";" in first["end_tc"]
+    assert first["start_tc"].startswith("01:00:0")
+
+    nd_result = runner.invoke(main, ["null", *args, "--fps", "29.97", "--json-only"])
+    assert nd_result.exit_code == 0, nd_result.output
+    # At 29.97 non-drop the CLI prints the drop-frame recommendation note;
+    # CliRunner may mix it into stdout, so parse from the JSON body.
+    nd_payload = json.loads(nd_result.output[nd_result.output.index("{"):])
+    assert nd_payload["drop_frame"] is False
+    nd_window = nd_payload["null_test"]["analysis_window"]
+    assert nd_window["start_tc"] == "01:00:00:00"
+    assert abs(nd_window["start_sample"] / SR - 13.6) < 0.01
+    assert nd_payload["null_test"]["flags"] == []
+
+
+def test_null_drop_frame_at_non_broadcast_fps_exits_two(tmp_path: Path) -> None:
+    files = _write_exact_sum_case(tmp_path / "case", base_seed=SEED + 960)
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "null",
+        str(files["pm"]),
+        str(files["dx"]),
+        str(files["mx"]),
+        str(files["fx"]),
+        "--fps", "25",
+        "--drop-frame",
+        "--json-only",
+    ])
+    assert result.exit_code == 2, result.output
+    try:
+        combined = result.output + result.stderr
+    except ValueError:
+        combined = result.output
+    assert "drop-frame" in combined
 
 
 def test_null_sample_rate_mismatch_exits_two(tmp_path: Path) -> None:

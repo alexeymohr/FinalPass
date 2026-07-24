@@ -141,7 +141,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
     ]
 
 
-def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: float) -> None:
+def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: float, drop_frame: bool = False) -> None:
     """Write a Pro Tools-friendly AAF with a marker lane on a real composition."""
     if not candidates:
         return
@@ -150,7 +150,7 @@ def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: flo
             "AAF export requires the pyaaf2 package (import path: aaf2)."
         )
 
-    rate_info = frame_rate_info(fps)
+    rate_info = frame_rate_info(fps, drop_frame=drop_frame)
     edit_rate = rate_info.edit_rate
     timeline_start = _timeline_start_edit_units(candidates)
     timeline_length = _timeline_length_edit_units(candidates, timeline_start=timeline_start)

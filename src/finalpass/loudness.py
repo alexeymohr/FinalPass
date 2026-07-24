@@ -139,6 +139,7 @@ def true_peak_over_flags(
     *,
     threshold_dbtp: float,
     fps: float,
+    drop_frame: bool = False,
 ) -> list[FlaggedRegion]:
     """Return merged timed regions where 4× true peak exceeds ``threshold_dbtp``."""
     if audio.data.size == 0:
@@ -170,12 +171,14 @@ def true_peak_over_flags(
                     audio.sample_rate,
                     fps,
                     start_time_reference_samples=audio.time_reference_samples,
+                    drop_frame=drop_frame,
                 ),
                 end_tc=samples_to_tc(
                     end_sample,
                     audio.sample_rate,
                     fps,
                     start_time_reference_samples=audio.time_reference_samples,
+                    drop_frame=drop_frame,
                 ),
                 duration_seconds=(end_sample - start_sample) / float(audio.sample_rate),
                 detail=f"over by {peak_dbtp - threshold_dbtp:.1f} dB",

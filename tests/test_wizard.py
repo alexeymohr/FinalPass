@@ -70,7 +70,7 @@ def test_wizard_all_flow_succeeds_on_split_folder(tmp_path: Path) -> None:
     assert report_path.exists()
     assert html_path.exists()
     payload = json.loads(report_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 8
+    assert payload["schema_version"] == 9
     assert payload["command"] == "all"
     assert "Folder summary:" in result.output
     assert "Job: all" in result.output
@@ -138,7 +138,7 @@ def test_wizard_loudness_flow_succeeds_on_split_asset(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     payload = _read_payload(out_dir)
-    assert payload["schema_version"] == 3
+    assert payload["schema_version"] == 4
     assert payload["files"][0]["source_kind"] == "split_mono"
     assert payload["files"][0]["member_legs"] == ["L", "R"]
     assert "split mono (2 mono files)" in result.output or "split mono · stereo · LtRt · 2 mono files" in result.output
@@ -298,7 +298,7 @@ def test_wizard_discovery_errors_can_be_viewed_and_continue(tmp_path: Path) -> N
     assert result.exit_code == 0, result.output
     assert "Discovery errors:" in result.output
     payload = _read_payload(out_dir)
-    assert payload["schema_version"] == 8
+    assert payload["schema_version"] == 9
     assert payload["discovery_errors"]
 
 
@@ -425,7 +425,7 @@ def test_wizard_resume_after_restart_uses_populated_prep_buckets(tmp_path: Path)
     assert second.exit_code == 0, second.output
     assert "I found an existing FinalPass prep layout." in second.output
     payload = _read_payload(out_dir)
-    assert payload["schema_version"] == 3
+    assert payload["schema_version"] == 4
     assert payload["files"][0]["source_kind"] == "split_mono"
 
 

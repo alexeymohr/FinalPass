@@ -38,6 +38,8 @@ FinalPass currently supports:
 - PCM WAV/BWF at common bit depths and sample rates.
 - BWF `bext` time references for timecode-aware flag strings and marker
   placement.
+- All common delivery frame rates (23.976 through 120), with SMPTE ST 12-1
+  drop-frame counting at 29.97/59.94 via `--drop-frame`.
 - Interleaved mono, stereo, 5.1, and 7.1 sources in SMPTE channel order.
 - Canonical split-mono stereo, 5.0, 5.1, and 7.1 sources.
 - Special handling for common 5.0 split stems, especially dialog stems: the real
@@ -137,16 +139,16 @@ uv run finalpass --version
 uv run finalpass specs list
 uv run finalpass specs show <name>
 uv run finalpass wizard [folder] [--out <dir>] [--fps <rate>]
-uv run finalpass loudness <file>... --spec <name-or-yaml> [--dx <file>] [--out <dir>] [--json-only] [--fps <rate>]
-uv run finalpass null <pm> <stems>... [--out <dir>] [--json-only] [--fps <rate>]
+uv run finalpass loudness <file>... --spec <name-or-yaml> [--dx <file>] [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
+uv run finalpass null <pm> <stems>... [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
                                       [--window-ms <ms>] [--hop-ms <ms>] [--threshold-dbfs <dbfs>]
-uv run finalpass me <me_file> --dx <dx_file> [--out <dir>] [--json-only] [--fps <rate>]
+uv run finalpass me <me_file> --dx <dx_file> [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
                                              [--window-ms <ms>] [--hop-ms <ms>]
                                              [--band-low-hz <hz>] [--band-high-hz <hz>]
                                              [--corr-threshold <value>]
                                              [--coherence-threshold <value>]
                                              [--dx-gate-dbfs <dbfs>] [--me-floor-dbfs <dbfs>]
-uv run finalpass all <folder> --spec <name-or-yaml> [--out <dir>] [--json-only] [--fps <rate>]
+uv run finalpass all <folder> --spec <name-or-yaml> [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
                                                     [--patterns <config.yaml>] [--include-unclassified]
                                                     [--null-window-ms <ms>] [--null-hop-ms <ms>]
                                                     [--null-threshold-dbfs <dbfs>]
@@ -166,9 +168,19 @@ Exit codes:
 - `2` - tool, validation, input, or runtime error.
 
 `--fps` is the frame rate used for timecode strings and AAF marker placement.
-FinalPass does not infer FPS from WAV/BWF metadata. Timecode strings are
-always non-drop; at 29.97 or 59.94 fps the CLI prints a note that a drop-frame
-session counter runs about 3.6 seconds per hour ahead of the reported values.
+FinalPass does not infer FPS or drop-frame mode from WAV/BWF metadata.
+
+Supported frame rates: 23.976, 24, 25, 29.97, 30, 47.952, 48, 50, 59.94, 60,
+119.88, and 120, all counted non-drop by default. `--drop-frame` switches
+29.97 or 59.94 to SMPTE ST 12-1 drop-frame counting; drop-frame timecode
+renders with the semicolon convention (`HH:MM:SS;FF`) everywhere a timecode
+string appears — terminal tables, JSON, HTML, and AAF marker fields — and the
+report envelope records `drop_frame: true`. Combining `--drop-frame` with any
+other rate is a validation error (SMPTE ST 12-1 defines drop-frame counting
+only for the 30000/1001 and 60000/1001 families). At 29.97 or 59.94 without
+the flag, the CLI prints a note recommending `--drop-frame` for drop-frame
+shows, since a drop-frame session counter runs about 3.6 seconds per hour
+ahead of non-drop labels.
 
 ## Main Workflows
 
@@ -343,7 +355,8 @@ Exportable timed flags:
 The exported AAF contains:
 
 - A top-level composition named `FinalPass Markers`.
-- A timecode timeline at the edit rate derived from `--fps`.
+- A timecode timeline at the edit rate derived from `--fps`, with the
+  drop-frame flag set when the run used `--drop-frame`.
 - A marker guide audio slot with filler, so common DAW/NLE imports have a real
   timeline container.
 - A marker event slot containing `CommentMarker` events.
@@ -355,8 +368,10 @@ The exported AAF contains:
 Marker placement is based on the same sample positions and timecode strings in
 the JSON report. If the source carries a BWF time reference, FinalPass anchors
 the flag timecode and AAF edit-unit position to that reference. If there is no
-BWF time reference, placement starts from file sample zero. The frame rate still
-comes from `--fps`.
+BWF time reference, placement starts from file sample zero. The frame rate and
+drop-frame mode still come from `--fps` and `--drop-frame`; placement itself
+uses exact rational edit rates and is identical in both counting modes — only
+the timecode labels differ.
 
 For loudness true-peak regions, markers are throttled to at most one marker per
 second per source so a clipped passage does not flood the marker lane.
@@ -411,7 +426,10 @@ analysis:
 
 - If all comparison inputs have BWF time references and share a whole-hour
   program boundary, analysis starts at that boundary, such as `01:00:00:00` or
-  `10:00:00:00`.
+  `10:00:00:00`. The boundary is found in the selected timecode mode: with
+  `--drop-frame`, `01:00:00;00` sits at the ST 12-1 drop-frame frame count
+  (107,892 frames per hour at 29.97) — the wall-clock hour — instead of the
+  non-drop hour roughly 3.6 seconds later.
 - If files share the same start reference but no whole-hour boundary is present,
   analysis starts at file start and records that mode.
 - If time references are unavailable, analysis starts at file sample zero.
@@ -495,14 +513,19 @@ on-disk contract explicit.
 
 Current schema versions:
 
-- `loudness`: `schema_version: 3`
-- `null`: `schema_version: 3`
-- `me`: `schema_version: 3`
-- `all`: `schema_version: 8`
+- `loudness`: `schema_version: 4`
+- `null`: `schema_version: 4`
+- `me`: `schema_version: 4`
+- `all`: `schema_version: 9`
+
+The version bumps from 3/3/3/8 add one envelope field: `drop_frame: bool`,
+recorded beside `fps`. Timecode strings persist in the selected counting mode
+(`HH:MM:SS:FF` non-drop, `HH:MM:SS;FF` drop-frame).
 
 Important persisted fields include:
 
-- `finalpass_version`, `schema_version`, `run_id`, `run_started_at`, and `fps`.
+- `finalpass_version`, `schema_version`, `run_id`, `run_started_at`, `fps`,
+  and `drop_frame`.
 - `spec` references for loudness and folder analysis.
 - Source provenance: `source_kind`, `source_paths`, `member_legs`, and
   `presentation_label`.
