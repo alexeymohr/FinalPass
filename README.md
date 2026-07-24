@@ -470,6 +470,9 @@ Bundled presets:
 
 - `atsc_a85` - stereo, -24 LKFS +/-2, true peak <= -2 dBTP, LRA <= 18.
 - `atsc_a85_51` - 5.1, -24 LKFS +/-2, true peak <= -2 dBTP, LRA <= 18.
+- `atsc_a85_mono` - mono, -24 LKFS +/-2, true peak <= -2 dBTP, LRA <= 18.
+  Also convenient for spot-checking a mono dialog or VO stem against the
+  -24 LKFS anchor.
 - `ebu_r128` - stereo, -23 LUFS +/-0.5, true peak <= -1 dBTP, LRA <= 18.
 - `netflix_stereo` - stereo, -27 LKFS +/-2, true peak <= -2 dBTP,
   dialog-anchored, LRA <= 18.

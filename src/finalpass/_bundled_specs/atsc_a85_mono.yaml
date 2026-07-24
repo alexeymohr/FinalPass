@@ -1,0 +1,24 @@
+name: atsc_a85_mono
+display_name: "ATSC A/85 — mono (content exchange)"
+integrated_lufs:
+  target: -24.0
+  tolerance: 2.0
+true_peak_max_dbtp: -2.0
+lra_max: 18.0
+channel_config: "mono"
+notes: |
+  ATSC A/85 current official version — A/85:2013 with Corrigendum No. 1,
+  approved 11 February 2021.
+  Source: https://www.atsc.org/recommended-practice/a85-techniques-for-establishing-and-maintaining-audio-loudness-for-digital-television/
+  For content delivery or exchange without metadata (and absent prior
+  arrangement), target loudness should be -24 LKFS with approximately ±2 dB
+  measurement variation considered acceptable. True peak should be kept below
+  -2 dBTP.
+  This mono preset is also the convenient way to spot-check a mono dialog or
+  VO stem against the -24 LKFS anchor. FinalPass measures the stem's
+  integrated loudness; it does not implement proprietary dialog gating.
+  A/85 does not prescribe an LRA cap; the lra_max of 18 in this preset is a
+  FinalPass convention for flagging very wide-dynamic mixes, not an official
+  A/85 requirement.
+  Values are current best-public-knowledge targets; not an official platform
+  certification. Verify against your current delivery paperwork.

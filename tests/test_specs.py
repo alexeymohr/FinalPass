@@ -6,10 +6,18 @@ import pytest
 import yaml
 
 from finalpass.errors import SpecError
-from finalpass.specs import Spec, list_bundled, list_bundled_names, load_spec
+from finalpass.specs import Spec, list_bundled, list_bundled_families, list_bundled_names, load_spec
 
 
-EXPECTED_BUNDLED = {"atsc_a85", "atsc_a85_51", "ebu_r128", "netflix_stereo", "netflix_51", "streaming_-14"}
+EXPECTED_BUNDLED = {
+    "atsc_a85",
+    "atsc_a85_51",
+    "atsc_a85_mono",
+    "ebu_r128",
+    "netflix_stereo",
+    "netflix_51",
+    "streaming_-14",
+}
 
 
 def test_list_bundled_names_contains_expected() -> None:
@@ -63,6 +71,23 @@ def test_atsc_a85_51_values() -> None:
     assert spec.lra_max == 18.0
     assert spec.channel_config == "5.1"
     assert spec.dialog_lufs is None
+
+
+def test_atsc_a85_mono_values() -> None:
+    spec, source, _ = load_spec("atsc_a85_mono")
+    assert source == "bundled"
+    assert spec.integrated_lufs.target == -24.0
+    assert spec.integrated_lufs.tolerance == 2.0
+    assert spec.true_peak_max_dbtp == -2.0
+    assert spec.lra_max == 18.0
+    assert spec.channel_config == "mono"
+    assert spec.dialog_lufs is None
+
+
+def test_atsc_family_spans_mono_stereo_and_51() -> None:
+    family = next(f for f in list_bundled_families() if f.key == "atsc_a85")
+    assert family.display_name == "ATSC A/85"
+    assert family.supported_channel_configs == ("mono", "stereo", "5.1")
 
 
 def test_explicit_path_wins(tmp_path: Path) -> None:

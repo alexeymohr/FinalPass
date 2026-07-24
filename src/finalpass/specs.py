@@ -31,6 +31,7 @@ CHANNEL_COUNTS: dict[str, int] = {
 _BUNDLED_SPEC_FAMILY_KEYS: dict[str, str] = {
     "atsc_a85": "atsc_a85",
     "atsc_a85_51": "atsc_a85",
+    "atsc_a85_mono": "atsc_a85",
     "ebu_r128": "ebu_r128",
     "netflix_stereo": "netflix",
     "netflix_51": "netflix",

@@ -10,6 +10,7 @@
   (for example a mono DX against a stereo M&E); both signals were already
   reduced to the same mono analysis downmix. The null check still requires
   matching channel counts.
+- New bundled spec preset `atsc_a85_mono` (joins the ATSC A/85 family).
 
 ## v0.1.0
 
