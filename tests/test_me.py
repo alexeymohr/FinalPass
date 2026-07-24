@@ -128,17 +128,43 @@ def test_me_sample_rate_mismatch_exits_two(tmp_path: Path) -> None:
     assert "sample rate" in result.output.lower()
 
 
-def test_me_channel_count_mismatch_exits_two(tmp_path: Path) -> None:
+def test_me_mono_dx_against_stereo_me_analyzes_and_passes(tmp_path: Path) -> None:
     root = tmp_path / "case"
-    stereo = me_check_components(base_seed=SEED + 300, n_channels=2)
-    mono = me_check_components(base_seed=SEED + 301, n_channels=1)
-    me = write_audio(root / "ME.wav", stereo["me"])
-    dx = write_audio(root / "DX.wav", mono["dx"])
+    data = me_check_components(base_seed=SEED + 300, n_channels=2)
+    me = write_audio(root / "ME.wav", data["me"])
+    dx = write_audio(root / "DX.wav", data["dx"][:, [0]])
 
     runner = CliRunner()
-    result = runner.invoke(main, ["me", str(me), "--dx", str(dx)])
-    assert result.exit_code == 2
-    assert "channel count" in result.output.lower()
+    result = runner.invoke(main, ["me", str(me), "--dx", str(dx), "--json-only"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["me_file"]["channel_count"] == 2
+    assert payload["dx_file"]["channel_count"] == 1
+    assert payload["me_check"]["pass"] is True
+    assert payload["me_check"]["flags"] == []
+
+
+def test_me_mono_dx_bleed_into_stereo_me_flags(tmp_path: Path) -> None:
+    root = tmp_path / "case"
+    data = me_check_components(
+        base_seed=SEED + 310,
+        n_channels=2,
+        bleed_region=(5.0, 7.0),
+        bleed_gain=0.08,
+    )
+    me = write_audio(root / "ME.wav", data["me"])
+    dx = write_audio(root / "DX.wav", data["dx"][:, [0]])
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["me", str(me), "--dx", str(dx), "--json-only"])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["me_check"]["pass"] is False
+    assert payload["me_check"]["flags"]
+    first = payload["me_check"]["flags"][0]
+    assert first["code"] == "ME"
+    assert first["start_sample"] <= int(round(5.0 * SR))
+    assert first["end_sample"] >= int(round(7.0 * SR))
 
 
 def test_me_sample_count_mismatch_with_signal_tail_exits_two(tmp_path: Path) -> None:

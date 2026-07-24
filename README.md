@@ -392,6 +392,12 @@ analysis while excluding LFE, gates windows by DX level, band-limits to a
 speech-oriented range, and flags windows that exceed the configured correlation
 and coherence thresholds.
 
+The two inputs may carry different channel layouts — a mono DX against a
+stereo or 5.1 M&E is a normal delivery shape. Both signals are reduced to the
+same mono analysis downmix before comparison, so only per-file layout support
+is validated. The null check still requires matching channel counts because it
+subtracts in the sample domain.
+
 This is an honest heuristic for likely dialogue bleed. It is not speech
 recognition, transcription, diarization, or Dolby Dialogue Intelligence.
 

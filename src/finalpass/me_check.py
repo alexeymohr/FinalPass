@@ -17,7 +17,6 @@ from .analysis_window import prepare_analysis_window
 from .audio_io import AudioFile, channel_config_from_count
 from .errors import (
     AlignmentError,
-    ChannelMismatchError,
     FinalPassError,
     SampleRateMismatchError,
     UnsupportedChannelConfigError,
@@ -166,11 +165,10 @@ def _validate_inputs(me_file: AudioFile, dx_file: AudioFile) -> None:
         detail = ", ".join(f"{audio.path.name}={audio.sample_rate}Hz" for audio in inputs)
         raise SampleRateMismatchError(f"M&E inputs must share one sample rate: {detail}")
 
-    channel_counts = {audio.channel_count for audio in inputs}
-    if len(channel_counts) > 1:
-        detail = ", ".join(f"{audio.path.name}={audio.channel_count}ch" for audio in inputs)
-        raise ChannelMismatchError(f"M&E inputs must share one channel count: {detail}")
-
+    # The M&E and DX inputs may carry different channel layouts (a mono DX
+    # against a stereo M&E is a normal delivery shape). Both signals are
+    # reduced to the same mono analysis downmix before any comparison, so only
+    # per-file layout support is validated here.
     for audio in inputs:
         if channel_config_from_count(audio.channel_count) is None:
             raise UnsupportedChannelConfigError(

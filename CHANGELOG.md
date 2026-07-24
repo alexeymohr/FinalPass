@@ -6,6 +6,10 @@
   words (`Left`, `Right`, `Center`/`Centre`, `Left Front`, `Right Front`,
   `Left Surround`, `Right Surround`), commas as token separators, and leading
   track-number prefixes no longer split otherwise-identical families/groups.
+- The M&E dialogue-bleed check accepts inputs with different channel layouts
+  (for example a mono DX against a stereo M&E); both signals were already
+  reduced to the same mono analysis downmix. The null check still requires
+  matching channel counts.
 
 ## v0.1.0
 
