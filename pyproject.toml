@@ -17,9 +17,9 @@ dependencies = [
     # Exact Phase 6 pin: pyaaf2 1.7.1 is the latest aged release verified
     # against the 7-day supply-chain hold.
     "pyaaf2==1.7.1",
-    # pydantic <2.13 pin: 2.13.x was released in the last 7 days (supply-chain
-    # hold). Remove the upper bound after 2026-04-20 when 2.13.x ages in.
-    "pydantic>=2.6,<2.13",
+    # Upper bound removed 2026-07-23: 2.13.4 (released 2026-05-06) aged well
+    # past the 7-day supply-chain hold.
+    "pydantic>=2.6",
     "pyloudnorm>=0.1.1",
     "pyyaml>=6.0",
     "rich>=13.7",

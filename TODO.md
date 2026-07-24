@@ -192,10 +192,10 @@ Features outside the current phase's spec go here, not into the code.
   failure after a pyloudnorm upgrade.
 
 ## Dependency pin review
-- **`pydantic<2.13`** (currently resolving to 2.12.5): pinned on 2026-04-20
-  because 2.13.x was released within the 7-day supply-chain hold window.
-  Review after **2026-04-27** — drop the upper bound if 2.13.x has aged in
-  cleanly and nothing newer is fresh.
+- **`pydantic<2.13` review completed on 2026-07-23.**
+  - The upper bound was removed and the lock now resolves pydantic 2.13.4 /
+    pydantic-core 2.46.4 (both released 2026-05-06, well past the 7-day
+    supply-chain window). Full suite green on the upgraded resolution.
 - **`packaging` hold review completed on 2026-04-22.**
   - The temporary `packaging<26.1` upper bound was removed after 26.1 aged
     past the 7-day supply-chain window and the release-normalization suite
