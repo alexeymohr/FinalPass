@@ -9,7 +9,7 @@ import numpy as np
 from finalpass.audio_io import read_wav
 from finalpass.cli import main
 from finalpass.null_test import describe_audio as describe_null_audio
-from finalpass.timecode import tc_to_sample_start
+from finalpass.timecode import tc_to_sample_start, timecode_mode
 from tests.audio_cases import SEED, SR, exact_sum_components, shift_with_zeros, write_audio
 
 
@@ -97,7 +97,7 @@ def test_null_injected_gross_error_fails_with_flagged_region(tmp_path: Path) -> 
 
 
 def test_null_flags_use_embedded_start_timecode(tmp_path: Path) -> None:
-    time_reference_samples = tc_to_sample_start("01:00:00:00", SR, 23.976)
+    time_reference_samples = tc_to_sample_start("01:00:00:00", SR, timecode_mode(23.976))
     files = _write_exact_sum_case(
         tmp_path / "case",
         base_seed=SEED + 150,
@@ -126,7 +126,7 @@ def test_null_flags_use_embedded_start_timecode(tmp_path: Path) -> None:
 
 
 def test_null_ignores_defects_before_one_hour_when_embedded_start_is_known(tmp_path: Path) -> None:
-    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, 23.976)
+    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, timecode_mode(23.976))
     files = _write_exact_sum_case(
         tmp_path / "case",
         base_seed=SEED + 160,
@@ -156,7 +156,7 @@ def test_null_ignores_defects_before_one_hour_when_embedded_start_is_known(tmp_p
 
 
 def test_null_still_flags_defects_after_one_hour_when_embedded_start_is_known(tmp_path: Path) -> None:
-    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, 23.976)
+    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, timecode_mode(23.976))
     files = _write_exact_sum_case(
         tmp_path / "case",
         base_seed=SEED + 170,
@@ -214,7 +214,7 @@ def test_null_drop_frame_window_starts_at_wall_clock_hour(tmp_path: Path) -> Non
     assert window["mode"] == "whole_hour_time_reference"
     assert window["start_tc"] == "01:00:00;00"
     # DF hour boundary sample: ceil(107892 frames * 1001/30000 s * 48000).
-    assert window["start_sample"] == tc_to_sample_start("01:00:00;00", SR, 29.97, drop_frame=True) - time_reference_samples
+    assert window["start_sample"] == tc_to_sample_start("01:00:00;00", SR, timecode_mode(29.97, drop_frame=True)) - time_reference_samples
     assert abs(window["start_sample"] / SR - 10.0) < 0.01
     first = df_payload["null_test"]["flags"][0]
     assert ";" in first["start_tc"] and ";" in first["end_tc"]

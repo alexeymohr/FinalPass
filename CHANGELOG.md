@@ -37,6 +37,11 @@
   family) now share one selection/measurement/check/finalize core instead
   of ~160 duplicated lines; the family path keeps its multi-layout
   measurement loop and report ordering. Output is unchanged.
+- Frame rate and drop-frame counting now travel as one validated
+  `TimecodeMode` (built once per run by `jobs`), instead of as a loose
+  `fps`/`drop_frame` pair on every analysis, window, and export interface.
+  An impossible combination such as 24 fps drop-frame can no longer reach
+  the analysis layer. The CLI, wizard, and report envelopes are unchanged.
 - Flagged-region display (decimal places, unit, terminal column header) and
   loudness target/limit formatting now live once in `presentation.py`; the
   terminal renderer and the HTML templates consume it instead of each

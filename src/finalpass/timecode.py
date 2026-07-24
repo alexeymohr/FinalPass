@@ -11,6 +11,11 @@ except minutes divisible by ten. Drop-frame strings use the semicolon
 convention (``HH:MM:SS;FF``); non-drop strings keep colons throughout. The
 counting mode changes only how frame counts map to labels — sample↔edit-unit
 math always uses the exact rational edit rate and is identical in both modes.
+
+Frame rate and counting mode travel together as one validated
+:class:`TimecodeMode`, built once by :func:`timecode_mode` at the run's edge.
+Everything downstream takes that value, so an impossible combination such as
+24 fps drop-frame cannot reach the analysis or export layers at all.
 """
 
 from __future__ import annotations
@@ -20,7 +25,10 @@ from fractions import Fraction
 
 
 @dataclass(frozen=True)
-class FrameRateInfo:
+class TimecodeMode:
+    """A validated frame rate plus its drop-frame counting choice."""
+
+    fps: float
     edit_rate: Fraction
     nominal_fps: int
     drop_frame: bool = False
@@ -46,40 +54,45 @@ _FPS_TOLERANCE = 0.001
 _DROP_FRAMES_PER_MINUTE = {30: 2, 60: 4}
 
 
-def frame_rate_info(fps: float, *, drop_frame: bool = False) -> FrameRateInfo:
-    """Return the exact edit rate and nominal timecode rate for ``fps``."""
+def timecode_mode(fps: float, *, drop_frame: bool = False) -> TimecodeMode:
+    """Validate ``fps`` / ``drop_frame`` into the value everything else takes."""
     if fps <= 0:
         raise ValueError("fps must be positive")
 
-    info: FrameRateInfo | None = None
+    mode: TimecodeMode | None = None
     for candidate, edit_rate, nominal_fps in _COMMON_FRAME_RATES:
         if abs(fps - candidate) <= _FPS_TOLERANCE:
-            info = FrameRateInfo(edit_rate=edit_rate, nominal_fps=nominal_fps)
+            mode = TimecodeMode(fps=fps, edit_rate=edit_rate, nominal_fps=nominal_fps)
             break
 
-    if info is None:
+    if mode is None:
         rounded = round(fps)
         if abs(fps - rounded) <= _FPS_TOLERANCE:
-            info = FrameRateInfo(edit_rate=Fraction(int(rounded), 1), nominal_fps=int(rounded))
+            mode = TimecodeMode(fps=fps, edit_rate=Fraction(int(rounded), 1), nominal_fps=int(rounded))
         else:
             exact_rate = Fraction(str(fps)).limit_denominator(1_000_000)
             nominal_fps = max(1, int(round(float(exact_rate))))
-            info = FrameRateInfo(edit_rate=exact_rate, nominal_fps=nominal_fps)
+            mode = TimecodeMode(fps=fps, edit_rate=exact_rate, nominal_fps=nominal_fps)
 
     if not drop_frame:
-        return info
-    if info.edit_rate.denominator != 1001 or info.nominal_fps not in _DROP_FRAMES_PER_MINUTE:
+        return mode
+    if mode.edit_rate.denominator != 1001 or mode.nominal_fps not in _DROP_FRAMES_PER_MINUTE:
         raise ValueError(
             f"drop-frame timecode is not defined for {fps} fps; "
             "SMPTE ST 12-1 defines drop-frame only for 29.97 and 59.94."
         )
-    return FrameRateInfo(edit_rate=info.edit_rate, nominal_fps=info.nominal_fps, drop_frame=True)
+    return TimecodeMode(
+        fps=fps,
+        edit_rate=mode.edit_rate,
+        nominal_fps=mode.nominal_fps,
+        drop_frame=True,
+    )
 
 
 def sample_to_edit_units(
     sample_index: int,
     sample_rate: int,
-    fps: float,
+    mode: TimecodeMode,
     *,
     start_time_reference_samples: int | None = None,
 ) -> int:
@@ -87,24 +100,22 @@ def sample_to_edit_units(
     if sample_rate <= 0:
         raise ValueError("sample_rate must be positive")
     absolute_sample_index = sample_index + (start_time_reference_samples or 0)
-    info = frame_rate_info(fps)
     value = Fraction(
-        absolute_sample_index * info.edit_rate.numerator,
-        sample_rate * info.edit_rate.denominator,
+        absolute_sample_index * mode.edit_rate.numerator,
+        sample_rate * mode.edit_rate.denominator,
     )
     return _round_fraction(value)
 
 
-def tc_to_frames(timecode: str, fps: float, *, drop_frame: bool = False) -> int:
+def tc_to_frames(timecode: str, mode: TimecodeMode) -> int:
     """Convert an ``HH:MM:SS:FF`` / ``HH:MM:SS;FF`` timecode string to edit units."""
-    info = frame_rate_info(fps, drop_frame=drop_frame)
     hh, mm, ss, ff = _parse_timecode(timecode)
-    if ff >= info.nominal_fps:
-        raise ValueError(f"timecode frame field {ff} is invalid for fps={fps}")
-    base = ((hh * 60 + mm) * 60 + ss) * info.nominal_fps + ff
-    if not drop_frame:
+    if ff >= mode.nominal_fps:
+        raise ValueError(f"timecode frame field {ff} is invalid for fps={mode.fps}")
+    base = ((hh * 60 + mm) * 60 + ss) * mode.nominal_fps + ff
+    if not mode.drop_frame:
         return base
-    dropped_per_minute = _DROP_FRAMES_PER_MINUTE[info.nominal_fps]
+    dropped_per_minute = _DROP_FRAMES_PER_MINUTE[mode.nominal_fps]
     if ss == 0 and mm % 10 != 0 and ff < dropped_per_minute:
         raise ValueError(
             f"timecode {timecode!r} does not exist in drop-frame counting; "
@@ -114,15 +125,14 @@ def tc_to_frames(timecode: str, fps: float, *, drop_frame: bool = False) -> int:
     return base - dropped_per_minute * (total_minutes - total_minutes // 10)
 
 
-def tc_to_sample_start(timecode: str, sample_rate: int, fps: float, *, drop_frame: bool = False) -> int:
+def tc_to_sample_start(timecode: str, sample_rate: int, mode: TimecodeMode) -> int:
     """Return the first sample at or after the given timecode."""
     if sample_rate <= 0:
         raise ValueError("sample_rate must be positive")
-    total_frames = tc_to_frames(timecode, fps, drop_frame=drop_frame)
-    info = frame_rate_info(fps)
+    total_frames = tc_to_frames(timecode, mode)
     value = Fraction(
-        total_frames * sample_rate * info.edit_rate.denominator,
-        info.edit_rate.numerator,
+        total_frames * sample_rate * mode.edit_rate.denominator,
+        mode.edit_rate.numerator,
     )
     return _ceil_fraction(value)
 
@@ -130,28 +140,26 @@ def tc_to_sample_start(timecode: str, sample_rate: int, fps: float, *, drop_fram
 def samples_to_tc(
     sample_index: int,
     sample_rate: int,
-    fps: float,
+    mode: TimecodeMode,
     *,
     start_time_reference_samples: int | None = None,
-    drop_frame: bool = False,
 ) -> str:
     """Convert a sample index to an ``HH:MM:SS:FF`` / ``HH:MM:SS;FF`` timecode string."""
     total_frames = sample_to_edit_units(
         sample_index,
         sample_rate,
-        fps,
+        mode,
         start_time_reference_samples=start_time_reference_samples,
     )
-    return frames_to_tc(total_frames, fps, drop_frame=drop_frame)
+    return frames_to_tc(total_frames, mode)
 
 
-def frames_to_tc(total_frames: int, fps: float, *, drop_frame: bool = False) -> str:
+def frames_to_tc(total_frames: int, mode: TimecodeMode) -> str:
     """Format edit units as an ``HH:MM:SS:FF`` / ``HH:MM:SS;FF`` timecode string."""
-    info = frame_rate_info(fps, drop_frame=drop_frame)
-    frames_per_second = info.nominal_fps
+    frames_per_second = mode.nominal_fps
 
-    if drop_frame:
-        dropped_per_minute = _DROP_FRAMES_PER_MINUTE[info.nominal_fps]
+    if mode.drop_frame:
+        dropped_per_minute = _DROP_FRAMES_PER_MINUTE[mode.nominal_fps]
         frames_per_nondrop_minute = frames_per_second * 60
         frames_per_drop_minute = frames_per_nondrop_minute - dropped_per_minute
         frames_per_ten_minutes = frames_per_nondrop_minute + 9 * frames_per_drop_minute

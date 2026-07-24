@@ -35,7 +35,7 @@ from .audio_io import AudioFile
 from .errors import LoudnessError
 from .models import CheckResult, FlaggedRegion, Measurements
 from .specs import Spec
-from .timecode import samples_to_tc
+from .timecode import TimecodeMode, samples_to_tc
 
 ABS_GATE_LUFS = -70.0
 TP_OVERSAMPLE_RATIO = 4
@@ -138,8 +138,7 @@ def true_peak_over_flags(
     audio: AudioFile,
     *,
     threshold_dbtp: float,
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
 ) -> list[FlaggedRegion]:
     """Return merged timed regions where 4× true peak exceeds ``threshold_dbtp``."""
     if audio.data.size == 0:
@@ -169,16 +168,14 @@ def true_peak_over_flags(
                 start_tc=samples_to_tc(
                     start_sample,
                     audio.sample_rate,
-                    fps,
+                    mode,
                     start_time_reference_samples=audio.time_reference_samples,
-                    drop_frame=drop_frame,
                 ),
                 end_tc=samples_to_tc(
                     end_sample,
                     audio.sample_rate,
-                    fps,
+                    mode,
                     start_time_reference_samples=audio.time_reference_samples,
-                    drop_frame=drop_frame,
                 ),
                 duration_seconds=(end_sample - start_sample) / float(audio.sample_rate),
                 detail=f"over by {peak_dbtp - threshold_dbtp:.1f} dB",

@@ -14,7 +14,7 @@ from typing import TypeAlias
 from .errors import AAFExportError
 from .models import AllReport, FlaggedRegion, Group, MEReport, NullReport, Report
 from .presentation import logical_asset_display_name
-from .timecode import frame_rate_info, sample_to_edit_units
+from .timecode import TimecodeMode, sample_to_edit_units, timecode_mode
 
 try:  # pragma: no cover - exercised by integration tests
     import aaf2
@@ -52,6 +52,9 @@ class MarkerCandidate:
 def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]:
     """Return the timed marker candidates that Phase 6 is allowed to export."""
     candidates: list[MarkerCandidate] = []
+    # The envelope persists the run's timecode mode; rebuild it once here so
+    # placement and marker labels use exactly what the run was measured with.
+    mode = timecode_mode(report.fps, drop_frame=report.drop_frame)
 
     if isinstance(report, Report):
         for file_report in report.files:
@@ -59,7 +62,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                 _candidates_from_flags(
                     flags=file_report.flags,
                     sample_rate=file_report.sample_rate,
-                    fps=report.fps,
+                    mode=mode,
                     time_reference_samples=_time_reference_samples(file_report),
                     asset_label=logical_asset_display_name(file_report),
                 )
@@ -69,7 +72,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                 _candidates_from_flags(
                     flags=report.null_test.flags,
                     sample_rate=report.printmaster.sample_rate,
-                    fps=report.fps,
+                    mode=mode,
                     time_reference_samples=_time_reference_samples(report.printmaster),
                 )
             )
@@ -79,7 +82,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                 _candidates_from_flags(
                     flags=report.me_check.flags,
                     sample_rate=report.me_file.sample_rate,
-                    fps=report.fps,
+                    mode=mode,
                     time_reference_samples=_time_reference_samples(report.me_file),
                 )
             )
@@ -93,7 +96,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                     _candidates_from_flags(
                         flags=file_report.flags,
                         sample_rate=file_report.sample_rate,
-                        fps=report.fps,
+                        mode=mode,
                         time_reference_samples=_time_reference_samples(file_report),
                         group_id=group.group_id,
                         asset_label=logical_asset_display_name(file_report),
@@ -104,7 +107,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                     _candidates_from_flags(
                         flags=group.null_test.flags,
                         sample_rate=sample_rate,
-                        fps=report.fps,
+                        mode=mode,
                         time_reference_samples=_time_reference_samples(group.null_test),
                         group_id=group.group_id,
                     )
@@ -115,7 +118,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                     _candidates_from_flags(
                         flags=group.me_check.flags,
                         sample_rate=me_sample_rate,
-                        fps=report.fps,
+                        mode=mode,
                         time_reference_samples=_time_reference_samples(group.me_check),
                         group_id=group.group_id,
                     )
@@ -141,7 +144,7 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
     ]
 
 
-def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: float, drop_frame: bool = False) -> None:
+def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, mode: TimecodeMode) -> None:
     """Write a Pro Tools-friendly AAF with a marker lane on a real composition."""
     if not candidates:
         return
@@ -150,8 +153,7 @@ def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: flo
             "AAF export requires the pyaaf2 package (import path: aaf2)."
         )
 
-    rate_info = frame_rate_info(fps, drop_frame=drop_frame)
-    edit_rate = rate_info.edit_rate
+    edit_rate = mode.edit_rate
     timeline_start = _timeline_start_edit_units(candidates)
     timeline_length = _timeline_length_edit_units(candidates, timeline_start=timeline_start)
     try:
@@ -170,8 +172,8 @@ def write_markers_aaf(path: Path, candidates: list[MarkerCandidate], *, fps: flo
             timecode_slot.origin = 0
             timecode_segment = handle.create.Timecode(length=timeline_length)
             timecode_segment.start = timeline_start
-            timecode_segment.fps = rate_info.nominal_fps
-            timecode_segment.drop = rate_info.drop_frame
+            timecode_segment.fps = mode.nominal_fps
+            timecode_segment.drop = mode.drop_frame
             timecode_slot.segment = timecode_segment
 
             audio_slot = composition.create_timeline_slot(
@@ -219,7 +221,7 @@ def _candidates_from_flags(
     *,
     flags: list[FlaggedRegion],
     sample_rate: int,
-    fps: float,
+    mode: TimecodeMode,
     time_reference_samples: int | None = None,
     group_id: str | None = None,
     asset_label: str | None = None,
@@ -228,20 +230,20 @@ def _candidates_from_flags(
     source_start_edit_unit = sample_to_edit_units(
         0,
         sample_rate,
-        fps,
+        mode,
         start_time_reference_samples=time_reference_samples,
     )
     for flag in flags:
         start_edit_unit = sample_to_edit_units(
             flag.start_sample,
             sample_rate,
-            fps,
+            mode,
             start_time_reference_samples=time_reference_samples,
         )
         end_edit_unit = sample_to_edit_units(
             flag.end_sample,
             sample_rate,
-            fps,
+            mode,
             start_time_reference_samples=time_reference_samples,
         )
         out.append(

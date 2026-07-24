@@ -9,7 +9,7 @@ import numpy as np
 from finalpass.audio_io import read_wav
 from finalpass.cli import main
 from finalpass.me_check import describe_audio as describe_me_audio
-from finalpass.timecode import tc_to_sample_start
+from finalpass.timecode import tc_to_sample_start, timecode_mode
 from tests.audio_cases import SEED, SR, me_check_components, shift_with_zeros, write_audio
 
 
@@ -200,7 +200,7 @@ def test_me_sample_count_mismatch_with_mos_tail_is_cropped(tmp_path: Path) -> No
 
 def test_me_ignores_head_before_shared_whole_hour(tmp_path: Path) -> None:
     root = tmp_path / "case"
-    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, 23.976)
+    time_reference_samples = tc_to_sample_start("00:59:55:00", SR, timecode_mode(23.976))
     data = me_check_components(
         seconds=10.0,
         base_seed=SEED + 420,

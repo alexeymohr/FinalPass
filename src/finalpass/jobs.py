@@ -72,7 +72,7 @@ from .report import render_report_html
 from .run_settings import AllSettings
 from .specs import BundledSpecFamily, CHANNEL_COUNTS, Spec, load_spec
 from .standalone_ingest import describe_analysis_input, resolve_standalone_asset
-from .timecode import frame_rate_info
+from .timecode import TimecodeMode, timecode_mode
 
 
 @dataclass(frozen=True)
@@ -83,7 +83,7 @@ class WrittenArtifacts:
 
 
 def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | None, fps: float, drop_frame: bool = False) -> Report:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     spec, source, _ = load_spec(spec_name)
 
     primary_inputs = [resolve_standalone_asset(f) for f in files]
@@ -103,7 +103,7 @@ def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | Non
         audio = resolved.audio
         m = measure(audio)
         cs = check(m, spec, role="primary")
-        flags = _timed_loudness_flags(audio=audio, checks=cs, fps=fps, drop_frame=drop_frame)
+        flags = _timed_loudness_flags(audio=audio, checks=cs, mode=mode)
         file_reports.append(_attach_time_reference(
             StandaloneFileReport(
                 path=str(resolved.logical_asset.canonical_path),
@@ -130,7 +130,7 @@ def run_loudness(*, files: tuple[Path, ...], spec_name: str, dx_file: Path | Non
         dx_audio = dx_input.audio
         m = measure(dx_audio)
         cs = check(m, spec, role="dx")
-        flags = _timed_loudness_flags(audio=dx_audio, checks=cs, fps=fps, drop_frame=drop_frame)
+        flags = _timed_loudness_flags(audio=dx_audio, checks=cs, mode=mode)
         file_reports.append(_attach_time_reference(
             StandaloneFileReport(
                 path=str(dx_input.logical_asset.canonical_path),
@@ -187,7 +187,7 @@ def run_null(
     drop_frame: bool = False,
     tunables: NullTunables = NullTunables(),
 ) -> NullReport:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     pm_input = resolve_standalone_asset(pm)
     stem_inputs = [resolve_standalone_asset(stem) for stem in stems]
     pm_audio = pm_input.audio
@@ -195,8 +195,7 @@ def run_null(
     analysis = analyze_null(
         pm_audio,
         stem_audios,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         time_reference_samples=pm_audio.time_reference_samples,
         window_ms=tunables.window_ms,
         hop_ms=tunables.hop_ms,
@@ -248,7 +247,7 @@ def run_me(
     drop_frame: bool = False,
     tunables: METunables = METunables(),
 ) -> MEReport:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     me_input = resolve_standalone_asset(me_file)
     dx_input = resolve_standalone_asset(dx_file)
     me_audio = me_input.audio
@@ -256,8 +255,7 @@ def run_me(
     analysis = analyze_me(
         me_audio,
         dx_audio,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         time_reference_samples=me_audio.time_reference_samples,
         window_ms=tunables.window_ms,
         hop_ms=tunables.hop_ms,
@@ -321,7 +319,7 @@ def run_all(
     drop_frame: bool = False,
     settings: AllSettings = AllSettings(),
 ) -> AllReport:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     spec, source, _ = load_spec(spec_name)
     cfg = load_config(patterns_path)
     scan: AssetFolderScan = discover_folder_assets(folder, cfg)
@@ -347,7 +345,7 @@ def run_all_filtered(
     drop_frame: bool = False,
     settings: AllSettings = AllSettings(),
 ) -> AllReport:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     spec, source, _ = load_spec(spec_name)
     cfg = load_config(patterns_path)
     scan = discover_assets_from_paths(paths, cfg, path_hints=path_hints)
@@ -371,7 +369,7 @@ def run_all_with_spec_family(
     drop_frame: bool = False,
     settings: AllSettings = AllSettings(),
 ) -> AllReport:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     cfg = load_config(patterns_path)
     scan: AssetFolderScan = discover_folder_assets(folder, cfg)
     return run_all_family_from_scan(
@@ -395,7 +393,7 @@ def run_all_filtered_with_spec_family(
     drop_frame: bool = False,
     settings: AllSettings = AllSettings(),
 ) -> AllReport:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     cfg = load_config(patterns_path)
     scan = discover_assets_from_paths(paths, cfg, path_hints=path_hints)
     return run_all_family_from_scan(
@@ -418,7 +416,7 @@ def run_all_from_scan(
     drop_frame: bool = False,
     settings: AllSettings = AllSettings(),
 ) -> AllReport:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     if not scan.groups and not scan.discovery_errors and not scan.unclassified:
         raise NoAudioFilesError(
             f"No WAV/BWF files found in {folder}. "
@@ -433,8 +431,7 @@ def run_all_from_scan(
             group_id=group_id,
             classified_assets=classified_assets,
             spec=spec,
-            fps=fps,
-            drop_frame=drop_frame,
+            mode=mode,
             settings=settings,
         )
         groups_out.append(group)
@@ -497,7 +494,7 @@ def run_all_family_from_scan(
     drop_frame: bool = False,
     settings: AllSettings = AllSettings(),
 ) -> AllReport:
-    _validate_fps(fps, drop_frame=drop_frame)
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
     if not scan.groups and not scan.discovery_errors and not scan.unclassified:
         raise NoAudioFilesError(
             f"No WAV/BWF files found in {folder}. "
@@ -512,8 +509,7 @@ def run_all_family_from_scan(
             group_id=group_id,
             classified_assets=classified_assets,
             family=family,
-            fps=fps,
-            drop_frame=drop_frame,
+            mode=mode,
             settings=settings,
         )
         groups_out.append(group)
@@ -602,7 +598,11 @@ def write_report_artifacts(
     Path(temp_name).unlink(missing_ok=True)
     temp_path = Path(temp_name)
     try:
-        aaf_export.write_markers_aaf(temp_path, candidates, fps=report.fps, drop_frame=report.drop_frame)
+        aaf_export.write_markers_aaf(
+            temp_path,
+            candidates,
+            mode=_resolve_timecode_mode(report.fps, drop_frame=report.drop_frame),
+        )
         temp_path.replace(aaf_path)
     except FinalPassError:
         temp_path.unlink(missing_ok=True)
@@ -656,14 +656,18 @@ def _validate_homogeneous_sample_rate(files) -> None:
         )
 
 
-def _validate_fps(fps: float, *, drop_frame: bool = False) -> None:
+def _resolve_timecode_mode(fps: float, *, drop_frame: bool = False) -> TimecodeMode:
+    """Validate the run's frame rate and counting mode into one value.
+
+    Everything below this seam takes the resolved mode, so an impossible
+    combination such as 24 fps drop-frame cannot reach the analysis layer.
+    """
     if not math.isfinite(fps) or fps <= 0:
         raise FinalPassError(f"fps must be a finite number greater than zero; got {fps!r}.")
-    if drop_frame:
-        try:
-            frame_rate_info(fps, drop_frame=True)
-        except ValueError as exc:
-            raise FinalPassError(str(exc)) from exc
+    try:
+        return timecode_mode(fps, drop_frame=drop_frame)
+    except ValueError as exc:
+        raise FinalPassError(str(exc)) from exc
 
 
 def _process_group(
@@ -671,8 +675,7 @@ def _process_group(
     group_id: str,
     classified_assets: list[ClassifiedLogicalAsset],
     spec: Spec,
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
     settings: AllSettings = AllSettings(),
 ) -> Group:
     errors: list[GroupError] = []
@@ -692,15 +695,13 @@ def _process_group(
     file_reports = _measure_selected_files(
         measure_targets=selection.measure_targets,
         errors=errors,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
     )
     null_test, me_check = _run_group_checks(
         printmaster=selection.pm_asset,
         selected_assets=selection.selected_target_assets,
         used_by=used_by,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         settings=settings,
     )
     return _finalize_group(
@@ -720,8 +721,7 @@ def _process_group_with_spec_family(
     group_id: str,
     classified_assets: list[ClassifiedLogicalAsset],
     family: BundledSpecFamily,
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
     settings: AllSettings = AllSettings(),
 ) -> Group:
     errors: list[GroupError] = []
@@ -750,8 +750,7 @@ def _process_group_with_spec_family(
             printmaster=None,
             selected_assets={},
             used_by=used_by,
-            fps=fps,
-            drop_frame=drop_frame,
+            mode=mode,
             settings=settings,
         )
         return _finalize_group(
@@ -790,15 +789,13 @@ def _process_group_with_spec_family(
     file_reports = _measure_selected_files(
         measure_targets=measure_targets,
         errors=errors,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
     )
     null_test, me_check = _run_group_checks(
         printmaster=selection.pm_asset,
         selected_assets=selection.selected_target_assets,
         used_by=used_by,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         settings=settings,
     )
     # Family reports span layouts, so they sort for presentation; plain-spec
@@ -1033,8 +1030,7 @@ def _measure_selected_files(
     *,
     measure_targets: list[tuple[ClassifiedLogicalAsset, FileRole, Spec]],
     errors: list[GroupError],
-    fps: float,
-    drop_frame: bool,
+    mode: TimecodeMode,
 ) -> list[FileReport]:
     file_reports: list[FileReport] = []
     seen_measurements: set[tuple[str, FileRole]] = set()
@@ -1045,7 +1041,7 @@ def _measure_selected_files(
         seen_measurements.add(measurement_key)
         try:
             audio = read_classified_audio(asset)
-            fr = _measure_asset_file(asset, audio, spec, role, fps=fps, drop_frame=drop_frame)
+            fr = _measure_asset_file(asset, audio, spec, role, mode=mode)
         except ChannelMismatchError as exc:
             errors.append(GroupError(type="ChannelMismatchError", message=str(exc)))
             continue
@@ -1061,23 +1057,20 @@ def _run_group_checks(
     printmaster: ClassifiedLogicalAsset | None,
     selected_assets: dict[FileRole, ClassifiedLogicalAsset],
     used_by: dict[str, list[str]],
-    fps: float,
-    drop_frame: bool,
+    mode: TimecodeMode,
     settings: AllSettings,
 ) -> tuple[AutoNullTestResult, MECheckResult]:
     null_test = _run_group_null_test(
         printmaster=printmaster,
         selected_assets=selected_assets,
         used_by=used_by,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         tunables=settings.null,
     )
     me_check = _run_group_me_check(
         selected_assets=selected_assets,
         used_by=used_by,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         tunables=settings.me,
     )
     return null_test, me_check
@@ -1158,8 +1151,7 @@ def _measure_asset_file(
     spec: Spec,
     role: FileRole,
     *,
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
 ) -> FileReport:
     if role == "pm":
         _validate_channels([audio], spec)
@@ -1171,7 +1163,7 @@ def _measure_asset_file(
 
     m = measure(audio)
     cs = check(m, spec, role=check_role)
-    flags = _timed_loudness_flags(audio=audio, checks=cs, fps=fps, drop_frame=drop_frame)
+    flags = _timed_loudness_flags(audio=audio, checks=cs, mode=mode)
 
     return _attach_time_reference(
         FileReport(
@@ -1200,13 +1192,12 @@ def _timed_loudness_flags(
     *,
     audio: AudioFile,
     checks,
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
 ):
     tp_check = next((check for check in checks if check.metric == "true_peak_dbtp"), None)
     if tp_check is None or tp_check.pass_ is not False or tp_check.limit is None:
         return []
-    return true_peak_over_flags(audio, threshold_dbtp=tp_check.limit, fps=fps, drop_frame=drop_frame)
+    return true_peak_over_flags(audio, threshold_dbtp=tp_check.limit, mode=mode)
 
 
 def _run_group_null_test(
@@ -1214,8 +1205,7 @@ def _run_group_null_test(
     printmaster: ClassifiedLogicalAsset | None,
     selected_assets: dict[FileRole, ClassifiedLogicalAsset],
     used_by: dict[str, list[str]],
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
     tunables: NullTunables,
 ) -> AutoNullTestResult:
     if printmaster is None:
@@ -1259,8 +1249,7 @@ def _run_group_null_test(
         analysis = analyze_null(
             pm_audio,
             stem_audios,
-            fps=fps,
-            drop_frame=drop_frame,
+            mode=mode,
             time_reference_samples=pm_audio.time_reference_samples,
             window_ms=tunables.window_ms,
             hop_ms=tunables.hop_ms,
@@ -1305,8 +1294,7 @@ def _run_group_me_check(
     *,
     selected_assets: dict[FileRole, ClassifiedLogicalAsset],
     used_by: dict[str, list[str]],
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
     tunables: METunables,
 ) -> MECheckResult:
     dx_asset = selected_assets.get("dx")
@@ -1339,8 +1327,7 @@ def _run_group_me_check(
         analysis = analyze_me(
             me_audio,
             dx_audio,
-            fps=fps,
-            drop_frame=drop_frame,
+            mode=mode,
             time_reference_samples=me_audio.time_reference_samples,
             window_ms=tunables.window_ms,
             hop_ms=tunables.hop_ms,

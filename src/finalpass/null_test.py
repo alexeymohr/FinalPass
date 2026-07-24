@@ -12,9 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.signal import correlate
-
 from pydantic import BaseModel, ConfigDict
+from scipy.signal import correlate
 
 from .analysis_window import prepare_analysis_window
 from .audio_io import AudioFile, channel_config_from_count
@@ -26,11 +25,18 @@ from .errors import (
     UnsupportedChannelConfigError,
 )
 from .models import AnalysisWindow, FlaggedRegion, NullInputFile, NullSummary
-from .timecode import samples_to_tc
+from .timecode import TimecodeMode, samples_to_tc
 
 DEFAULT_NULL_WINDOW_MS = 1000.0
 DEFAULT_NULL_HOP_MS = 100.0
 DEFAULT_NULL_THRESHOLD_DBFS = -40.0
+NULL_DBFS_FLOOR = -300.0
+
+_NULL_LINEAR_FLOOR = 10 ** (NULL_DBFS_FLOOR / 20.0)
+_NULL_FLAG_DETAIL = "Residual exceeded threshold after summing stems against printmaster."
+_ALIGNMENT_MAX_LAG_SECONDS = 0.25
+_ALIGNMENT_TARGET_POINTS = 12000
+_ALIGNMENT_RELATIVE_MARGIN = 1.01
 
 
 class NullTunables(BaseModel):
@@ -41,12 +47,6 @@ class NullTunables(BaseModel):
     window_ms: float = DEFAULT_NULL_WINDOW_MS
     hop_ms: float = DEFAULT_NULL_HOP_MS
     threshold_dbfs: float = DEFAULT_NULL_THRESHOLD_DBFS
-NULL_DBFS_FLOOR = -300.0
-_NULL_LINEAR_FLOOR = 10 ** (NULL_DBFS_FLOOR / 20.0)
-_NULL_FLAG_DETAIL = "Residual exceeded threshold after summing stems against printmaster."
-_ALIGNMENT_MAX_LAG_SECONDS = 0.25
-_ALIGNMENT_TARGET_POINTS = 12000
-_ALIGNMENT_RELATIVE_MARGIN = 1.01
 
 
 @dataclass(frozen=True)
@@ -84,8 +84,7 @@ def analyze_null(
     printmaster: AudioFile,
     stems: list[AudioFile],
     *,
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
     time_reference_samples: int | None = None,
     window_ms: float = DEFAULT_NULL_WINDOW_MS,
     hop_ms: float = DEFAULT_NULL_HOP_MS,
@@ -96,8 +95,7 @@ def analyze_null(
 
     prepared_window = prepare_analysis_window(
         [("Printmaster", printmaster), *((f"Stem {index}", stem) for index, stem in enumerate(stems, start=1))],
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         anchor_index=0,
     )
     pm_windowed = prepared_window.inputs[0]
@@ -118,8 +116,7 @@ def analyze_null(
     flags = _merge_flagged_windows(
         [w for w in window_results if w.residual_rms_dbfs > threshold_dbfs],
         sample_rate=printmaster.sample_rate,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         time_reference_samples=time_reference_samples,
         threshold_dbfs=threshold_dbfs,
     )
@@ -275,8 +272,7 @@ def _merge_flagged_windows(
     windows: list[_WindowResult],
     *,
     sample_rate: int,
-    fps: float,
-    drop_frame: bool,
+    mode: TimecodeMode,
     time_reference_samples: int | None,
     threshold_dbfs: float,
 ) -> list[FlaggedRegion]:
@@ -313,16 +309,14 @@ def _merge_flagged_windows(
             start_tc=samples_to_tc(
                 int(region["start_sample"]),
                 sample_rate,
-                fps,
+                mode,
                 start_time_reference_samples=time_reference_samples,
-                drop_frame=drop_frame,
             ),
             end_tc=samples_to_tc(
                 int(region["end_sample"]),
                 sample_rate,
-                fps,
+                mode,
                 start_time_reference_samples=time_reference_samples,
-                drop_frame=drop_frame,
             ),
             duration_seconds=(int(region["end_sample"]) - int(region["start_sample"])) / float(sample_rate),
             detail=_NULL_FLAG_DETAIL,

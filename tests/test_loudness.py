@@ -4,6 +4,7 @@ from pathlib import Path
 
 from finalpass.audio_io import read_wav
 from finalpass.loudness import measure, true_peak_over_flags
+from finalpass.timecode import timecode_mode
 from tests.audio_cases import true_peak_over_program, write_audio
 
 
@@ -58,7 +59,7 @@ def test_mono_pink_integrated_finite(mono_10s: Path) -> None:
 def test_true_peak_over_flags_localize_short_burst(tmp_path: Path) -> None:
     path = write_audio(tmp_path / "tp_over.wav", true_peak_over_program())
     audio = read_wav(path)
-    flags = true_peak_over_flags(audio, threshold_dbtp=-1.0, fps=23.976)
+    flags = true_peak_over_flags(audio, threshold_dbtp=-1.0, mode=timecode_mode(23.976))
     assert len(flags) == 1
     flag = flags[0]
     assert flag.code == "LOUDNESS"
@@ -76,7 +77,7 @@ def test_true_peak_over_flags_use_embedded_start_timecode(tmp_path: Path) -> Non
         time_reference_samples=168648480,
     )
     audio = read_wav(path)
-    flags = true_peak_over_flags(audio, threshold_dbtp=-1.0, fps=23.976)
+    flags = true_peak_over_flags(audio, threshold_dbtp=-1.0, mode=timecode_mode(23.976))
 
     assert len(flags) == 1
     flag = flags[0]

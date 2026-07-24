@@ -61,7 +61,7 @@ from .presentation import (
 from .run_settings import AllSettings
 from .specs import list_bundled, load_spec
 from .terminal_spinner import processing_spinner
-from .timecode import frame_rate_info
+from .timecode import timecode_mode
 from .wizard import run_wizard
 
 _err_console = Console(stderr=True)
@@ -76,8 +76,8 @@ def _warn_if_drop_frame_rate(fps: float, drop_frame: bool) -> None:
     """One-line honesty note at DF-capable rates when the run is non-drop."""
     if drop_frame:
         return
-    info = frame_rate_info(fps)
-    if info.edit_rate.denominator == 1001 and info.nominal_fps in (30, 60):
+    mode = timecode_mode(fps)
+    if mode.edit_rate.denominator == 1001 and mode.nominal_fps in (30, 60):
         _err_console.print(
             "[yellow]note:[/yellow] timecode strings are non-drop; if this is a "
             "drop-frame show, rerun with --drop-frame (a drop-frame session "

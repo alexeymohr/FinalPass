@@ -12,7 +12,7 @@ from finalpass.cli import main
 from finalpass.errors import AAFExportError
 from finalpass.jobs import run_all
 from finalpass.models import AllReport
-from finalpass.timecode import sample_to_edit_units
+from finalpass.timecode import sample_to_edit_units, timecode_mode
 from tests.audio_cases import (
     SEED,
     SR,
@@ -187,7 +187,7 @@ def test_standalone_loudness_bext_start_shifts_aaf_timeline_and_marker_time(tmp_
     assert result.exit_code == 1, result.output
     parsed = _read_marker_aaf(out_dir / "markers.aaf")
     marker = parsed["markers"][0]
-    assert parsed["timecode_start"] == sample_to_edit_units(0, SR, 23.976, start_time_reference_samples=168648480)
+    assert parsed["timecode_start"] == sample_to_edit_units(0, SR, timecode_mode(23.976), start_time_reference_samples=168648480)
     assert marker["time"].startswith("00:58:35:")
     assert 0 < marker["position"] < 1000
 
@@ -392,7 +392,7 @@ def test_all_run_bext_start_shifts_combined_aaf_timeline_and_marker_times(tmp_pa
     ])
     assert result.exit_code == 1, result.output
     parsed = _read_marker_aaf(out_dir / "show-s01e03-s01e04-markers.aaf")
-    assert parsed["timecode_start"] == sample_to_edit_units(0, SR, 23.976, start_time_reference_samples=168648480)
+    assert parsed["timecode_start"] == sample_to_edit_units(0, SR, timecode_mode(23.976), start_time_reference_samples=168648480)
     assert any(marker["time"].startswith("00:58:35:") and "[ME]" in marker["title"] for marker in parsed["markers"])
     assert any("[NULL]" in marker["title"] for marker in parsed["markers"])
 
@@ -533,5 +533,5 @@ def test_all_me_marker_candidates_use_me_analysis_sample_rate(tmp_path: Path) ->
     flag = report.groups[0].me_check.flags[0]
     candidate = next(candidate for candidate in aaf_export.collect_marker_candidates(report) if candidate.code == "ME")
     assert candidate.sample_rate == 44100
-    assert candidate.start_edit_unit == sample_to_edit_units(flag.start_sample, 44100, 24.0)
-    assert candidate.start_edit_unit != sample_to_edit_units(flag.start_sample, 48000, 24.0)
+    assert candidate.start_edit_unit == sample_to_edit_units(flag.start_sample, 44100, timecode_mode(24.0))
+    assert candidate.start_edit_unit != sample_to_edit_units(flag.start_sample, 48000, timecode_mode(24.0))

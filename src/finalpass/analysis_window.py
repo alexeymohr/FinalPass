@@ -10,7 +10,7 @@ import numpy as np
 from .audio_io import AudioFile
 from .errors import ProgramWindowError
 from .models import AnalysisWindow, AnalysisWindowInput
-from .timecode import samples_to_tc, tc_to_sample_start
+from .timecode import TimecodeMode, samples_to_tc, tc_to_sample_start
 
 TAIL_MOS_THRESHOLD_DBFS = -80.0
 TAIL_PEAK_THRESHOLD_DBFS = -60.0
@@ -47,8 +47,7 @@ class PreparedAnalysisWindow:
 def prepare_analysis_window(
     inputs: list[tuple[str, AudioFile]],
     *,
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
     anchor_index: int = 0,
     tail_mos_threshold_dbfs: float = TAIL_MOS_THRESHOLD_DBFS,
     tail_peak_threshold_dbfs: float = TAIL_PEAK_THRESHOLD_DBFS,
@@ -70,11 +69,10 @@ def prepare_analysis_window(
         if audio.sample_rate != sample_rate:
             raise ProgramWindowError("Analysis window inputs must share one sample rate.")
 
-    starts, ends, mode = _window_bounds(
+    starts, ends, window_mode = _window_bounds(
         inputs,
         sample_rate=sample_rate,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         tail_mos_threshold_dbfs=tail_mos_threshold_dbfs,
         tail_peak_threshold_dbfs=tail_peak_threshold_dbfs,
     )
@@ -89,19 +87,17 @@ def prepare_analysis_window(
     start_tc = samples_to_tc(
         anchor.start_sample,
         anchor.audio.sample_rate,
-        fps,
+        mode,
         start_time_reference_samples=anchor.audio.time_reference_samples,
-        drop_frame=drop_frame,
     )
     end_tc = samples_to_tc(
         anchor.end_sample,
         anchor.audio.sample_rate,
-        fps,
+        mode,
         start_time_reference_samples=anchor.audio.time_reference_samples,
-        drop_frame=drop_frame,
     )
     analysis_window = AnalysisWindow(
-        mode=mode,
+        mode=window_mode,
         start_sample=anchor.start_sample,
         end_sample=anchor.end_sample,
         start_tc=start_tc,
@@ -138,8 +134,7 @@ def _window_bounds(
     inputs: list[tuple[str, AudioFile]],
     *,
     sample_rate: int,
-    fps: float,
-    drop_frame: bool,
+    mode: TimecodeMode,
     tail_mos_threshold_dbfs: float,
     tail_peak_threshold_dbfs: float,
 ) -> tuple[list[int], list[int], str]:
@@ -149,7 +144,7 @@ def _window_bounds(
         common_start = max(concrete_refs)
         common_end = min(ref + audio.sample_count for ref, (_, audio) in zip(concrete_refs, inputs, strict=True))
         boundary = _common_whole_hour_boundary(
-            common_start, common_end, sample_rate=sample_rate, fps=fps, drop_frame=drop_frame
+            common_start, common_end, sample_rate=sample_rate, mode=mode
         )
         if boundary is not None:
             raw_ends = [ref + audio.sample_count for ref, (_, audio) in zip(concrete_refs, inputs, strict=True)]
@@ -165,7 +160,7 @@ def _window_bounds(
             return starts, ends, "whole_hour_time_reference"
         if len(set(concrete_refs)) != 1:
             detail = ", ".join(
-                f"{audio.path.name}={_abs_tc(ref, sample_rate, fps, drop_frame=drop_frame)}"
+                f"{audio.path.name}={_abs_tc(ref, sample_rate, mode)}"
                 for ref, (_, audio) in zip(concrete_refs, inputs, strict=True)
             )
             raise ProgramWindowError(
@@ -205,17 +200,16 @@ def _common_whole_hour_boundary(
     end_sample: int,
     *,
     sample_rate: int,
-    fps: float,
-    drop_frame: bool,
+    mode: TimecodeMode,
 ) -> int | None:
     if end_sample <= start_sample:
         return None
-    start_tc = _abs_tc(start_sample, sample_rate, fps, drop_frame=drop_frame)
+    start_tc = _abs_tc(start_sample, sample_rate, mode)
     start_hour = int(start_tc.split(":", 1)[0])
     for hour in range(max(0, start_hour - 1), start_hour + 3):
         # In drop-frame mode the whole-hour label maps to the ST 12-1 frame
         # count (107,892/hour at 29.97), i.e. the wall-clock hour.
-        boundary = tc_to_sample_start(f"{hour:02d}:00:00:00", sample_rate, fps, drop_frame=drop_frame)
+        boundary = tc_to_sample_start(f"{hour:02d}:00:00:00", sample_rate, mode)
         if start_sample <= boundary < end_sample:
             if boundary - start_sample > int(round(MAX_WHOLE_HOUR_HEAD_SECONDS * sample_rate)):
                 return None
@@ -223,8 +217,8 @@ def _common_whole_hour_boundary(
     return None
 
 
-def _abs_tc(sample_index: int, sample_rate: int, fps: float, *, drop_frame: bool = False) -> str:
-    return samples_to_tc(0, sample_rate, fps, start_time_reference_samples=sample_index, drop_frame=drop_frame)
+def _abs_tc(sample_index: int, sample_rate: int, mode: TimecodeMode) -> str:
+    return samples_to_tc(0, sample_rate, mode, start_time_reference_samples=sample_index)
 
 
 def _analysis_end_after_unique_mos_tail(

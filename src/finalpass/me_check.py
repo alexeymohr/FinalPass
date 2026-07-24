@@ -23,7 +23,7 @@ from .errors import (
     UnsupportedChannelConfigError,
 )
 from .models import AnalysisInputFile, AnalysisWindow, FlaggedRegion, MECheckSummary
-from .timecode import samples_to_tc
+from .timecode import TimecodeMode, samples_to_tc
 
 DEFAULT_ME_WINDOW_MS = 500.0
 DEFAULT_ME_HOP_MS = 100.0
@@ -98,8 +98,7 @@ def analyze_me(
     me_file: AudioFile,
     dx_file: AudioFile,
     *,
-    fps: float,
-    drop_frame: bool = False,
+    mode: TimecodeMode,
     time_reference_samples: int | None = None,
     window_ms: float = DEFAULT_ME_WINDOW_MS,
     hop_ms: float = DEFAULT_ME_HOP_MS,
@@ -122,8 +121,7 @@ def analyze_me(
     )
     prepared_window = prepare_analysis_window(
         [("M&E", me_file), ("DX", dx_file)],
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         anchor_index=0,
     )
     me_windowed, dx_windowed = prepared_window.inputs
@@ -159,8 +157,7 @@ def analyze_me(
     flags = _merge_flagged_windows(
         flagged_windows,
         sample_rate=dx_file.sample_rate,
-        fps=fps,
-        drop_frame=drop_frame,
+        mode=mode,
         time_reference_samples=time_reference_samples,
     )
     analyzed = [window for window in windows if not window.gated_out]
@@ -437,8 +434,7 @@ def _merge_flagged_windows(
     windows: list[_WindowResult],
     *,
     sample_rate: int,
-    fps: float,
-    drop_frame: bool,
+    mode: TimecodeMode,
     time_reference_samples: int | None,
 ) -> list[FlaggedRegion]:
     if not windows:
@@ -480,16 +476,14 @@ def _merge_flagged_windows(
                 start_tc=samples_to_tc(
                     int(region["start_sample"]),
                     sample_rate,
-                    fps,
+                    mode,
                     start_time_reference_samples=time_reference_samples,
-                    drop_frame=drop_frame,
                 ),
                 end_tc=samples_to_tc(
                     int(region["end_sample"]),
                     sample_rate,
-                    fps,
+                    mode,
                     start_time_reference_samples=time_reference_samples,
-                    drop_frame=drop_frame,
                 ),
                 duration_seconds=(int(region["end_sample"]) - int(region["start_sample"])) / float(sample_rate),
                 detail=(
