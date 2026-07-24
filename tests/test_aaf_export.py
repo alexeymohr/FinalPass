@@ -527,19 +527,7 @@ def test_all_me_marker_candidates_use_me_analysis_sample_rate(tmp_path: Path) ->
         folder=folder,
         spec_name="ebu_r128",
         patterns_path=None,
-        include_unclassified=False,
         fps=24.0,
-        null_window_ms=1000.0,
-        null_hop_ms=100.0,
-        null_threshold_dbfs=-40.0,
-        me_window_ms=500.0,
-        me_hop_ms=100.0,
-        me_band_low_hz=200.0,
-        me_band_high_hz=4000.0,
-        me_corr_threshold=0.65,
-        me_coherence_threshold=0.60,
-        me_dx_gate_dbfs=-45.0,
-        me_me_floor_dbfs=-60.0,
     )
 
     flag = report.groups[0].me_check.flags[0]

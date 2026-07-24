@@ -25,6 +25,15 @@
 - The 29.97/59.94 stderr note now recommends `--drop-frame` for drop-frame
   shows instead of only describing the drift.
 
+### Internal — analysis run settings
+
+- Runner interfaces now take immutable settings values instead of loose
+  knob parameters: `NullTunables` / `METunables` (owned by their check
+  modules) and `AllSettings` (new `run_settings.py`) carrying folder-run
+  scope plus per-check tunables. CLI flags, JSON/HTML output, and defaults
+  are unchanged; `fps`/`--drop-frame` remain explicit timecode-mode
+  parameters. Added `CONTEXT.md` (domain glossary).
+
 ### Earlier unreleased changes
 
 - Split-mono discovery accepts Pro Tools bounce naming: spelled-out channel

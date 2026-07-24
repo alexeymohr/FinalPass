@@ -14,6 +14,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.signal import correlate
 
+from pydantic import BaseModel, ConfigDict
+
 from .analysis_window import prepare_analysis_window
 from .audio_io import AudioFile, channel_config_from_count
 from .errors import (
@@ -29,6 +31,16 @@ from .timecode import samples_to_tc
 DEFAULT_NULL_WINDOW_MS = 1000.0
 DEFAULT_NULL_HOP_MS = 100.0
 DEFAULT_NULL_THRESHOLD_DBFS = -40.0
+
+
+class NullTunables(BaseModel):
+    """Analysis knobs for the stem-sum null pass. Runtime-only; never persisted."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    window_ms: float = DEFAULT_NULL_WINDOW_MS
+    hop_ms: float = DEFAULT_NULL_HOP_MS
+    threshold_dbfs: float = DEFAULT_NULL_THRESHOLD_DBFS
 NULL_DBFS_FLOOR = -300.0
 _NULL_LINEAR_FLOOR = 10 ** (NULL_DBFS_FLOOR / 20.0)
 _NULL_FLAG_DETAIL = "Residual exceeded threshold after summing stems against printmaster."

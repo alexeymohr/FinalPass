@@ -31,26 +31,14 @@ def _build_null_fail_report(root: Path):
     dx = write_audio(root / "SHOW_S01E04_DX_STEREO.wav", data["dx"])
     mx = write_audio(root / "SHOW_S01E04_MX_STEREO.wav", data["mx"])
     fx = write_audio(root / "SHOW_S01E04_FX_STEREO.wav", data["fx"])
-    return run_null(pm=pm, stems=(dx, mx, fx), fps=23.976, window_ms=1000.0, hop_ms=100.0, threshold_dbfs=-40.0)
+    return run_null(pm=pm, stems=(dx, mx, fx), fps=23.976)
 
 
 def _build_me_fail_report(root: Path):
     data = me_check_components(base_seed=SEED + 1001, bleed_region=(5.0, 7.0), bleed_gain=0.08)
     me = write_audio(root / "SHOW_S01E04_ME_STEREO.wav", data["me"])
     dx = write_audio(root / "SHOW_S01E04_DX_STEREO.wav", data["dx"])
-    return run_me(
-        me_file=me,
-        dx_file=dx,
-        fps=23.976,
-        window_ms=500.0,
-        hop_ms=100.0,
-        band_low_hz=200.0,
-        band_high_hz=4000.0,
-        corr_threshold=0.65,
-        coherence_threshold=0.60,
-        dx_gate_dbfs=-45.0,
-        me_floor_dbfs=-60.0,
-    )
+    return run_me(me_file=me, dx_file=dx, fps=23.976)
 
 
 def test_render_loudness_html_smoke(pink_stereo_10s: Path) -> None:
@@ -105,19 +93,7 @@ def test_render_all_html_smoke(tmp_path: Path) -> None:
         folder=folder,
         spec_name="ebu_r128",
         patterns_path=None,
-        include_unclassified=False,
         fps=23.976,
-        null_window_ms=1000.0,
-        null_hop_ms=100.0,
-        null_threshold_dbfs=-40.0,
-        me_window_ms=500.0,
-        me_hop_ms=100.0,
-        me_band_low_hz=200.0,
-        me_band_high_hz=4000.0,
-        me_corr_threshold=0.65,
-        me_coherence_threshold=0.60,
-        me_dx_gate_dbfs=-45.0,
-        me_me_floor_dbfs=-60.0,
     )
     html = render_report_html(report)
     assert "Run Summary" in html
@@ -135,19 +111,7 @@ def test_render_all_html_shows_true_peak_flags(tmp_path: Path) -> None:
         folder=folder,
         spec_name="ebu_r128",
         patterns_path=None,
-        include_unclassified=False,
         fps=23.976,
-        null_window_ms=1000.0,
-        null_hop_ms=100.0,
-        null_threshold_dbfs=-40.0,
-        me_window_ms=500.0,
-        me_hop_ms=100.0,
-        me_band_low_hz=200.0,
-        me_band_high_hz=4000.0,
-        me_corr_threshold=0.65,
-        me_coherence_threshold=0.60,
-        me_dx_gate_dbfs=-45.0,
-        me_me_floor_dbfs=-60.0,
     )
     html = render_report_html(report)
     assert "True-peak flagged-region timeline" in html
@@ -205,19 +169,7 @@ def test_render_split_all_html_uses_polished_display_label(tmp_path: Path) -> No
         folder=folder,
         spec_name="ebu_r128",
         patterns_path=None,
-        include_unclassified=False,
         fps=23.976,
-        null_window_ms=1000.0,
-        null_hop_ms=100.0,
-        null_threshold_dbfs=-40.0,
-        me_window_ms=500.0,
-        me_hop_ms=100.0,
-        me_band_low_hz=200.0,
-        me_band_high_hz=4000.0,
-        me_corr_threshold=0.65,
-        me_coherence_threshold=0.60,
-        me_dx_gate_dbfs=-45.0,
-        me_me_floor_dbfs=-60.0,
     )
     html = render_report_html(report)
     assert "SHOW_S01E03_Comp_LtRt" in html
@@ -280,19 +232,7 @@ def test_render_all_html_surfaces_blocking_issues_summary(tmp_path: Path) -> Non
         folder=folder,
         spec_name="ebu_r128",
         patterns_path=None,
-        include_unclassified=False,
         fps=23.976,
-        null_window_ms=1000.0,
-        null_hop_ms=100.0,
-        null_threshold_dbfs=-40.0,
-        me_window_ms=500.0,
-        me_hop_ms=100.0,
-        me_band_low_hz=200.0,
-        me_band_high_hz=4000.0,
-        me_corr_threshold=0.65,
-        me_coherence_threshold=0.60,
-        me_dx_gate_dbfs=-45.0,
-        me_me_floor_dbfs=-60.0,
     )
     html = render_report_html(report)
     assert "Blocking issues" in html
@@ -314,19 +254,7 @@ def test_render_all_html_skipped_analyses_do_not_render_empty_timelines(tmp_path
         folder=folder,
         spec_name="ebu_r128",
         patterns_path=None,
-        include_unclassified=False,
         fps=23.976,
-        null_window_ms=1000.0,
-        null_hop_ms=100.0,
-        null_threshold_dbfs=-40.0,
-        me_window_ms=500.0,
-        me_hop_ms=100.0,
-        me_band_low_hz=200.0,
-        me_band_high_hz=4000.0,
-        me_corr_threshold=0.65,
-        me_coherence_threshold=0.60,
-        me_dx_gate_dbfs=-45.0,
-        me_me_floor_dbfs=-60.0,
     )
     html = render_report_html(report)
     assert "Auto-null was not run because no same-layout DX+MX+FX or DX+ME set was available." in html

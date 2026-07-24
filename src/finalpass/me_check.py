@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 from scipy.signal import butter, coherence, correlate, sosfiltfilt
 
 from .analysis_window import prepare_analysis_window
@@ -40,6 +41,21 @@ _ALIGNMENT_MAX_LAG_SECONDS = 0.25
 _ALIGNMENT_TARGET_POINTS = 12000
 _ALIGNMENT_RELATIVE_MARGIN = 1.05
 _ALIGNMENT_ABSOLUTE_MIN = 0.25
+
+
+class METunables(BaseModel):
+    """Analysis knobs for the M&E dialogue-bleed pass. Runtime-only; never persisted."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    window_ms: float = DEFAULT_ME_WINDOW_MS
+    hop_ms: float = DEFAULT_ME_HOP_MS
+    band_low_hz: float = DEFAULT_ME_BAND_LOW_HZ
+    band_high_hz: float = DEFAULT_ME_BAND_HIGH_HZ
+    corr_threshold: float = DEFAULT_ME_CORR_THRESHOLD
+    coherence_threshold: float = DEFAULT_ME_COHERENCE_THRESHOLD
+    dx_gate_dbfs: float = DEFAULT_ME_DX_GATE_DBFS
+    me_floor_dbfs: float = DEFAULT_ME_ME_FLOOR_DBFS
 
 
 @dataclass(frozen=True)

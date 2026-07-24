@@ -23,24 +23,10 @@ from .jobs import (
     run_null,
     write_report_artifacts,
 )
-from .me_check import (
-    DEFAULT_ME_BAND_HIGH_HZ,
-    DEFAULT_ME_BAND_LOW_HZ,
-    DEFAULT_ME_COHERENCE_THRESHOLD,
-    DEFAULT_ME_CORR_THRESHOLD,
-    DEFAULT_ME_DX_GATE_DBFS,
-    DEFAULT_ME_HOP_MS,
-    DEFAULT_ME_ME_FLOOR_DBFS,
-    DEFAULT_ME_WINDOW_MS,
-)
 from .models import AllReport, MEReport, NullReport, Report
-from .null_test import (
-    DEFAULT_NULL_HOP_MS,
-    DEFAULT_NULL_THRESHOLD_DBFS,
-    DEFAULT_NULL_WINDOW_MS,
-)
 from .presentation import asset_menu_label, logical_asset_display_name, source_summary
 from .prep_folders import PrepLayout, PrepScanResult, create_prep_layout, detect_prep_layout, scan_prep_layout
+from .run_settings import AllSettings
 from .specs import BundledSpecFamily, CHANNEL_COUNTS, Spec, list_bundled_families, load_spec
 from .wizard_io import Choice, WizardBack, WizardQuit, choose_many, choose_one, print_section, prompt_text
 
@@ -464,9 +450,6 @@ def _null_flow(folder_context: FolderContext, *, default_out_dir: Path, default_
                                 pm=pm_asset.logical_asset.canonical_path,
                                 stems=tuple(asset.logical_asset.canonical_path for asset in stem_assets),
                                 fps=fps,
-                                window_ms=DEFAULT_NULL_WINDOW_MS,
-                                hop_ms=DEFAULT_NULL_HOP_MS,
-                                threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
                             ),
                         )
                         return _result_screen(result, out_dir=out_dir, fps=fps)
@@ -534,14 +517,6 @@ def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fp
                                 me_file=me_asset.logical_asset.canonical_path,
                                 dx_file=dx_asset.logical_asset.canonical_path,
                                 fps=fps,
-                                window_ms=DEFAULT_ME_WINDOW_MS,
-                                hop_ms=DEFAULT_ME_HOP_MS,
-                                band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
-                                band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
-                                corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
-                                coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
-                                dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
-                                me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
                             ),
                         )
                         return _result_screen(result, out_dir=out_dir, fps=fps)
@@ -731,37 +706,15 @@ def _run_all_for_context(
                 path_hints=prep_scan.path_hints,
                 family=family,
                 patterns_path=None,
-                include_unclassified=False,
                 fps=fps,
-                null_window_ms=DEFAULT_NULL_WINDOW_MS,
-                null_hop_ms=DEFAULT_NULL_HOP_MS,
-                null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
-                me_window_ms=DEFAULT_ME_WINDOW_MS,
-                me_hop_ms=DEFAULT_ME_HOP_MS,
-                me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
-                me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
-                me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
-                me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
-                me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
-                me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
+                settings=AllSettings(),
             )
         return run_all_with_spec_family(
             folder=folder_context.folder,
             family=family,
             patterns_path=None,
-            include_unclassified=False,
             fps=fps,
-            null_window_ms=DEFAULT_NULL_WINDOW_MS,
-            null_hop_ms=DEFAULT_NULL_HOP_MS,
-            null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
-            me_window_ms=DEFAULT_ME_WINDOW_MS,
-            me_hop_ms=DEFAULT_ME_HOP_MS,
-            me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
-            me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
-            me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
-            me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
-            me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
-            me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
+            settings=AllSettings(),
         )
 
     if spec_name is None:
@@ -777,37 +730,15 @@ def _run_all_for_context(
             path_hints=prep_scan.path_hints,
             spec_name=spec_name,
             patterns_path=None,
-            include_unclassified=False,
             fps=fps,
-            null_window_ms=DEFAULT_NULL_WINDOW_MS,
-            null_hop_ms=DEFAULT_NULL_HOP_MS,
-            null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
-            me_window_ms=DEFAULT_ME_WINDOW_MS,
-            me_hop_ms=DEFAULT_ME_HOP_MS,
-            me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
-            me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
-            me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
-            me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
-            me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
-            me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
+            settings=AllSettings(),
         )
     return run_all(
         folder=folder_context.folder,
         spec_name=spec_name,
         patterns_path=None,
-        include_unclassified=False,
         fps=fps,
-        null_window_ms=DEFAULT_NULL_WINDOW_MS,
-        null_hop_ms=DEFAULT_NULL_HOP_MS,
-        null_threshold_dbfs=DEFAULT_NULL_THRESHOLD_DBFS,
-        me_window_ms=DEFAULT_ME_WINDOW_MS,
-        me_hop_ms=DEFAULT_ME_HOP_MS,
-        me_band_low_hz=DEFAULT_ME_BAND_LOW_HZ,
-        me_band_high_hz=DEFAULT_ME_BAND_HIGH_HZ,
-        me_corr_threshold=DEFAULT_ME_CORR_THRESHOLD,
-        me_coherence_threshold=DEFAULT_ME_COHERENCE_THRESHOLD,
-        me_dx_gate_dbfs=DEFAULT_ME_DX_GATE_DBFS,
-        me_me_floor_dbfs=DEFAULT_ME_ME_FLOOR_DBFS,
+        settings=AllSettings(),
     )
 
 

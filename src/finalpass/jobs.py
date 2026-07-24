@@ -63,11 +63,13 @@ from .models import (
 )
 from .me_check import (
     ANALYSIS_SIGNAL_NAME,
+    METunables,
     analyze_me,
 )
-from .null_test import analyze_null
+from .null_test import NullTunables, analyze_null
 from .prep_folders import PrepBucketHint
 from .report import render_report_html
+from .run_settings import AllSettings
 from .specs import BundledSpecFamily, CHANNEL_COUNTS, Spec, load_spec
 from .standalone_ingest import describe_analysis_input, resolve_standalone_asset
 from .timecode import frame_rate_info
@@ -183,9 +185,7 @@ def run_null(
     stems: tuple[Path, ...],
     fps: float,
     drop_frame: bool = False,
-    window_ms: float,
-    hop_ms: float,
-    threshold_dbfs: float,
+    tunables: NullTunables = NullTunables(),
 ) -> NullReport:
     _validate_fps(fps, drop_frame=drop_frame)
     pm_input = resolve_standalone_asset(pm)
@@ -198,9 +198,9 @@ def run_null(
         fps=fps,
         drop_frame=drop_frame,
         time_reference_samples=pm_audio.time_reference_samples,
-        window_ms=window_ms,
-        hop_ms=hop_ms,
-        threshold_dbfs=threshold_dbfs,
+        window_ms=tunables.window_ms,
+        hop_ms=tunables.hop_ms,
+        threshold_dbfs=tunables.threshold_dbfs,
     )
     passed = len(analysis.flags) == 0
     null_test = _attach_time_reference(
@@ -208,9 +208,9 @@ def run_null(
             **{"pass": passed},
             skipped=False,
             reason=None,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            threshold_dbfs=threshold_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            threshold_dbfs=tunables.threshold_dbfs,
             summary=analysis.summary,
             analysis_window=analysis.analysis_window,
             flags=analysis.flags,
@@ -246,14 +246,7 @@ def run_me(
     dx_file: Path,
     fps: float,
     drop_frame: bool = False,
-    window_ms: float,
-    hop_ms: float,
-    band_low_hz: float,
-    band_high_hz: float,
-    corr_threshold: float,
-    coherence_threshold: float,
-    dx_gate_dbfs: float,
-    me_floor_dbfs: float,
+    tunables: METunables = METunables(),
 ) -> MEReport:
     _validate_fps(fps, drop_frame=drop_frame)
     me_input = resolve_standalone_asset(me_file)
@@ -266,14 +259,14 @@ def run_me(
         fps=fps,
         drop_frame=drop_frame,
         time_reference_samples=me_audio.time_reference_samples,
-        window_ms=window_ms,
-        hop_ms=hop_ms,
-        band_low_hz=band_low_hz,
-        band_high_hz=band_high_hz,
-        corr_threshold=corr_threshold,
-        coherence_threshold=coherence_threshold,
-        dx_gate_dbfs=dx_gate_dbfs,
-        me_floor_dbfs=me_floor_dbfs,
+        window_ms=tunables.window_ms,
+        hop_ms=tunables.hop_ms,
+        band_low_hz=tunables.band_low_hz,
+        band_high_hz=tunables.band_high_hz,
+        corr_threshold=tunables.corr_threshold,
+        coherence_threshold=tunables.coherence_threshold,
+        dx_gate_dbfs=tunables.dx_gate_dbfs,
+        me_floor_dbfs=tunables.me_floor_dbfs,
     )
     passed = len(analysis.flags) == 0
     me_check = _attach_time_reference(
@@ -282,14 +275,14 @@ def run_me(
             skipped=False,
             reason=None,
             analysis_signal=ANALYSIS_SIGNAL_NAME,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            band_low_hz=band_low_hz,
-            band_high_hz=band_high_hz,
-            corr_threshold=corr_threshold,
-            coherence_threshold=coherence_threshold,
-            dx_gate_dbfs=dx_gate_dbfs,
-            me_floor_dbfs=me_floor_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            band_low_hz=tunables.band_low_hz,
+            band_high_hz=tunables.band_high_hz,
+            corr_threshold=tunables.corr_threshold,
+            coherence_threshold=tunables.coherence_threshold,
+            dx_gate_dbfs=tunables.dx_gate_dbfs,
+            me_floor_dbfs=tunables.me_floor_dbfs,
             summary=analysis.summary,
             analysis_window=analysis.analysis_window,
             flags=analysis.flags,
@@ -324,20 +317,9 @@ def run_all(
     folder: Path,
     spec_name: str,
     patterns_path: Path | None,
-    include_unclassified: bool,
     fps: float,
     drop_frame: bool = False,
-    null_window_ms: float,
-    null_hop_ms: float,
-    null_threshold_dbfs: float,
-    me_window_ms: float,
-    me_hop_ms: float,
-    me_band_low_hz: float,
-    me_band_high_hz: float,
-    me_corr_threshold: float,
-    me_coherence_threshold: float,
-    me_dx_gate_dbfs: float,
-    me_me_floor_dbfs: float,
+    settings: AllSettings = AllSettings(),
 ) -> AllReport:
     _validate_fps(fps, drop_frame=drop_frame)
     spec, source, _ = load_spec(spec_name)
@@ -348,20 +330,9 @@ def run_all(
         scan=scan,
         spec=spec,
         source=source,
-        include_unclassified=include_unclassified,
         fps=fps,
         drop_frame=drop_frame,
-        null_window_ms=null_window_ms,
-        null_hop_ms=null_hop_ms,
-        null_threshold_dbfs=null_threshold_dbfs,
-        me_window_ms=me_window_ms,
-        me_hop_ms=me_hop_ms,
-        me_band_low_hz=me_band_low_hz,
-        me_band_high_hz=me_band_high_hz,
-        me_corr_threshold=me_corr_threshold,
-        me_coherence_threshold=me_coherence_threshold,
-        me_dx_gate_dbfs=me_dx_gate_dbfs,
-        me_me_floor_dbfs=me_me_floor_dbfs,
+        settings=settings,
     )
 
 
@@ -372,20 +343,9 @@ def run_all_filtered(
     path_hints: dict[Path, PrepBucketHint],
     spec_name: str,
     patterns_path: Path | None,
-    include_unclassified: bool,
     fps: float,
     drop_frame: bool = False,
-    null_window_ms: float,
-    null_hop_ms: float,
-    null_threshold_dbfs: float,
-    me_window_ms: float,
-    me_hop_ms: float,
-    me_band_low_hz: float,
-    me_band_high_hz: float,
-    me_corr_threshold: float,
-    me_coherence_threshold: float,
-    me_dx_gate_dbfs: float,
-    me_me_floor_dbfs: float,
+    settings: AllSettings = AllSettings(),
 ) -> AllReport:
     _validate_fps(fps, drop_frame=drop_frame)
     spec, source, _ = load_spec(spec_name)
@@ -396,20 +356,9 @@ def run_all_filtered(
         scan=scan,
         spec=spec,
         source=source,
-        include_unclassified=include_unclassified,
         fps=fps,
         drop_frame=drop_frame,
-        null_window_ms=null_window_ms,
-        null_hop_ms=null_hop_ms,
-        null_threshold_dbfs=null_threshold_dbfs,
-        me_window_ms=me_window_ms,
-        me_hop_ms=me_hop_ms,
-        me_band_low_hz=me_band_low_hz,
-        me_band_high_hz=me_band_high_hz,
-        me_corr_threshold=me_corr_threshold,
-        me_coherence_threshold=me_coherence_threshold,
-        me_dx_gate_dbfs=me_dx_gate_dbfs,
-        me_me_floor_dbfs=me_me_floor_dbfs,
+        settings=settings,
     )
 
 
@@ -418,20 +367,9 @@ def run_all_with_spec_family(
     folder: Path,
     family: BundledSpecFamily,
     patterns_path: Path | None,
-    include_unclassified: bool,
     fps: float,
     drop_frame: bool = False,
-    null_window_ms: float,
-    null_hop_ms: float,
-    null_threshold_dbfs: float,
-    me_window_ms: float,
-    me_hop_ms: float,
-    me_band_low_hz: float,
-    me_band_high_hz: float,
-    me_corr_threshold: float,
-    me_coherence_threshold: float,
-    me_dx_gate_dbfs: float,
-    me_me_floor_dbfs: float,
+    settings: AllSettings = AllSettings(),
 ) -> AllReport:
     _validate_fps(fps, drop_frame=drop_frame)
     cfg = load_config(patterns_path)
@@ -440,20 +378,9 @@ def run_all_with_spec_family(
         folder=folder,
         scan=scan,
         family=family,
-        include_unclassified=include_unclassified,
         fps=fps,
         drop_frame=drop_frame,
-        null_window_ms=null_window_ms,
-        null_hop_ms=null_hop_ms,
-        null_threshold_dbfs=null_threshold_dbfs,
-        me_window_ms=me_window_ms,
-        me_hop_ms=me_hop_ms,
-        me_band_low_hz=me_band_low_hz,
-        me_band_high_hz=me_band_high_hz,
-        me_corr_threshold=me_corr_threshold,
-        me_coherence_threshold=me_coherence_threshold,
-        me_dx_gate_dbfs=me_dx_gate_dbfs,
-        me_me_floor_dbfs=me_me_floor_dbfs,
+        settings=settings,
     )
 
 
@@ -464,20 +391,9 @@ def run_all_filtered_with_spec_family(
     path_hints: dict[Path, PrepBucketHint],
     family: BundledSpecFamily,
     patterns_path: Path | None,
-    include_unclassified: bool,
     fps: float,
     drop_frame: bool = False,
-    null_window_ms: float,
-    null_hop_ms: float,
-    null_threshold_dbfs: float,
-    me_window_ms: float,
-    me_hop_ms: float,
-    me_band_low_hz: float,
-    me_band_high_hz: float,
-    me_corr_threshold: float,
-    me_coherence_threshold: float,
-    me_dx_gate_dbfs: float,
-    me_me_floor_dbfs: float,
+    settings: AllSettings = AllSettings(),
 ) -> AllReport:
     _validate_fps(fps, drop_frame=drop_frame)
     cfg = load_config(patterns_path)
@@ -486,20 +402,9 @@ def run_all_filtered_with_spec_family(
         folder=folder,
         scan=scan,
         family=family,
-        include_unclassified=include_unclassified,
         fps=fps,
         drop_frame=drop_frame,
-        null_window_ms=null_window_ms,
-        null_hop_ms=null_hop_ms,
-        null_threshold_dbfs=null_threshold_dbfs,
-        me_window_ms=me_window_ms,
-        me_hop_ms=me_hop_ms,
-        me_band_low_hz=me_band_low_hz,
-        me_band_high_hz=me_band_high_hz,
-        me_corr_threshold=me_corr_threshold,
-        me_coherence_threshold=me_coherence_threshold,
-        me_dx_gate_dbfs=me_dx_gate_dbfs,
-        me_me_floor_dbfs=me_me_floor_dbfs,
+        settings=settings,
     )
 
 
@@ -509,20 +414,9 @@ def run_all_from_scan(
     scan: AssetFolderScan,
     spec: Spec,
     source: str,
-    include_unclassified: bool,
     fps: float,
     drop_frame: bool = False,
-    null_window_ms: float,
-    null_hop_ms: float,
-    null_threshold_dbfs: float,
-    me_window_ms: float,
-    me_hop_ms: float,
-    me_band_low_hz: float,
-    me_band_high_hz: float,
-    me_corr_threshold: float,
-    me_coherence_threshold: float,
-    me_dx_gate_dbfs: float,
-    me_me_floor_dbfs: float,
+    settings: AllSettings = AllSettings(),
 ) -> AllReport:
     _validate_fps(fps, drop_frame=drop_frame)
     if not scan.groups and not scan.discovery_errors and not scan.unclassified:
@@ -539,20 +433,9 @@ def run_all_from_scan(
             group_id=group_id,
             classified_assets=classified_assets,
             spec=spec,
-            include_unclassified=include_unclassified,
             fps=fps,
             drop_frame=drop_frame,
-            null_window_ms=null_window_ms,
-            null_hop_ms=null_hop_ms,
-            null_threshold_dbfs=null_threshold_dbfs,
-            me_window_ms=me_window_ms,
-            me_hop_ms=me_hop_ms,
-            me_band_low_hz=me_band_low_hz,
-            me_band_high_hz=me_band_high_hz,
-            me_corr_threshold=me_corr_threshold,
-            me_coherence_threshold=me_coherence_threshold,
-            me_dx_gate_dbfs=me_dx_gate_dbfs,
-            me_me_floor_dbfs=me_me_floor_dbfs,
+            settings=settings,
         )
         groups_out.append(group)
         flat_files.extend(group.files)
@@ -610,20 +493,9 @@ def run_all_family_from_scan(
     folder: Path,
     scan: AssetFolderScan,
     family: BundledSpecFamily,
-    include_unclassified: bool,
     fps: float,
     drop_frame: bool = False,
-    null_window_ms: float,
-    null_hop_ms: float,
-    null_threshold_dbfs: float,
-    me_window_ms: float,
-    me_hop_ms: float,
-    me_band_low_hz: float,
-    me_band_high_hz: float,
-    me_corr_threshold: float,
-    me_coherence_threshold: float,
-    me_dx_gate_dbfs: float,
-    me_me_floor_dbfs: float,
+    settings: AllSettings = AllSettings(),
 ) -> AllReport:
     _validate_fps(fps, drop_frame=drop_frame)
     if not scan.groups and not scan.discovery_errors and not scan.unclassified:
@@ -640,20 +512,9 @@ def run_all_family_from_scan(
             group_id=group_id,
             classified_assets=classified_assets,
             family=family,
-            include_unclassified=include_unclassified,
             fps=fps,
             drop_frame=drop_frame,
-            null_window_ms=null_window_ms,
-            null_hop_ms=null_hop_ms,
-            null_threshold_dbfs=null_threshold_dbfs,
-            me_window_ms=me_window_ms,
-            me_hop_ms=me_hop_ms,
-            me_band_low_hz=me_band_low_hz,
-            me_band_high_hz=me_band_high_hz,
-            me_corr_threshold=me_corr_threshold,
-            me_coherence_threshold=me_coherence_threshold,
-            me_dx_gate_dbfs=me_dx_gate_dbfs,
-            me_me_floor_dbfs=me_me_floor_dbfs,
+            settings=settings,
         )
         groups_out.append(group)
         flat_files.extend(group.files)
@@ -810,20 +671,9 @@ def _process_group(
     group_id: str,
     classified_assets: list[ClassifiedLogicalAsset],
     spec: Spec,
-    include_unclassified: bool,
     fps: float,
     drop_frame: bool = False,
-    null_window_ms: float,
-    null_hop_ms: float,
-    null_threshold_dbfs: float,
-    me_window_ms: float,
-    me_hop_ms: float,
-    me_band_low_hz: float,
-    me_band_high_hz: float,
-    me_corr_threshold: float,
-    me_coherence_threshold: float,
-    me_dx_gate_dbfs: float,
-    me_me_floor_dbfs: float,
+    settings: AllSettings = AllSettings(),
 ) -> Group:
     errors: list[GroupError] = []
     used_by: dict[str, list[str]] = {asset.logical_asset.asset_id: [] for asset in classified_assets}
@@ -939,7 +789,7 @@ def _process_group(
                 _append_selection_note(selection_notes, asset, "dialog_fallback_ambiguous")
 
     unknown_assets = role_to_assets.get("unknown", [])
-    if include_unclassified:
+    if settings.include_unclassified:
         for asset in unknown_assets:
             _mark_used(used_by, asset, "unknown_loudness")
             _append_selection_note(selection_notes, asset, "selected_for_loudness_only")
@@ -953,7 +803,7 @@ def _process_group(
         measure_targets.append((pm_asset, "pm"))
     if dialog_dx is not None:
         measure_targets.append((dialog_dx, "dx"))
-    if include_unclassified:
+    if settings.include_unclassified:
         measure_targets.extend((asset, "unknown") for asset in unknown_assets)
 
     for asset, role in measure_targets:
@@ -974,23 +824,14 @@ def _process_group(
         used_by=used_by,
         fps=fps,
         drop_frame=drop_frame,
-        window_ms=null_window_ms,
-        hop_ms=null_hop_ms,
-        threshold_dbfs=null_threshold_dbfs,
+        tunables=settings.null,
     )
     me_check = _run_group_me_check(
         selected_assets=selected_target_assets,
         used_by=used_by,
         fps=fps,
         drop_frame=drop_frame,
-        window_ms=me_window_ms,
-        hop_ms=me_hop_ms,
-        band_low_hz=me_band_low_hz,
-        band_high_hz=me_band_high_hz,
-        corr_threshold=me_corr_threshold,
-        coherence_threshold=me_coherence_threshold,
-        dx_gate_dbfs=me_dx_gate_dbfs,
-        me_floor_dbfs=me_me_floor_dbfs,
+        tunables=settings.me,
     )
 
     inventory = [
@@ -1043,20 +884,9 @@ def _process_group_with_spec_family(
     group_id: str,
     classified_assets: list[ClassifiedLogicalAsset],
     family: BundledSpecFamily,
-    include_unclassified: bool,
     fps: float,
     drop_frame: bool = False,
-    null_window_ms: float,
-    null_hop_ms: float,
-    null_threshold_dbfs: float,
-    me_window_ms: float,
-    me_hop_ms: float,
-    me_band_low_hz: float,
-    me_band_high_hz: float,
-    me_corr_threshold: float,
-    me_coherence_threshold: float,
-    me_dx_gate_dbfs: float,
-    me_me_floor_dbfs: float,
+    settings: AllSettings = AllSettings(),
 ) -> Group:
     errors: list[GroupError] = []
     used_by: dict[str, list[str]] = {asset.logical_asset.asset_id: [] for asset in classified_assets}
@@ -1093,9 +923,9 @@ def _process_group_with_spec_family(
             reason="missing_target_layout_printmaster",
             stem_strategy=None,
             selected_roles=[],
-            window_ms=null_window_ms,
-            hop_ms=null_hop_ms,
-            threshold_dbfs=null_threshold_dbfs,
+            window_ms=settings.null.window_ms,
+            hop_ms=settings.null.hop_ms,
+            threshold_dbfs=settings.null.threshold_dbfs,
             summary=None,
             flags=[],
             errors=[],
@@ -1105,14 +935,14 @@ def _process_group_with_spec_family(
             skipped=True,
             reason="missing_dx_or_me",
             analysis_signal=ANALYSIS_SIGNAL_NAME,
-            window_ms=me_window_ms,
-            hop_ms=me_hop_ms,
-            band_low_hz=me_band_low_hz,
-            band_high_hz=me_band_high_hz,
-            corr_threshold=me_corr_threshold,
-            coherence_threshold=me_coherence_threshold,
-            dx_gate_dbfs=me_dx_gate_dbfs,
-            me_floor_dbfs=me_me_floor_dbfs,
+            window_ms=settings.me.window_ms,
+            hop_ms=settings.me.hop_ms,
+            band_low_hz=settings.me.band_low_hz,
+            band_high_hz=settings.me.band_high_hz,
+            corr_threshold=settings.me.corr_threshold,
+            coherence_threshold=settings.me.coherence_threshold,
+            dx_gate_dbfs=settings.me.dx_gate_dbfs,
+            me_floor_dbfs=settings.me.me_floor_dbfs,
             summary=None,
             flags=[],
             errors=[],
@@ -1225,7 +1055,7 @@ def _process_group_with_spec_family(
                     _append_selection_note(selection_notes, asset, "dialog_fallback_ambiguous")
 
         unknown_assets = role_to_assets.get("unknown", [])
-        if include_unclassified:
+        if settings.include_unclassified:
             for asset in unknown_assets:
                 _mark_used(used_by, asset, "unknown_loudness")
                 _append_selection_note(selection_notes, asset, "selected_for_loudness_only")
@@ -1238,7 +1068,7 @@ def _process_group_with_spec_family(
             measure_targets.append((pm_asset, "pm", primary_spec))
         if dialog_dx is not None:
             measure_targets.append((dialog_dx, "dx", primary_spec))
-        if include_unclassified:
+        if settings.include_unclassified:
             measure_targets.extend((asset, "unknown", primary_spec) for asset in unknown_assets)
 
         for layout in sorted(pm_layouts, key=lambda value: CHANNEL_COUNTS[value]):
@@ -1304,23 +1134,14 @@ def _process_group_with_spec_family(
             used_by=used_by,
             fps=fps,
             drop_frame=drop_frame,
-            window_ms=null_window_ms,
-            hop_ms=null_hop_ms,
-            threshold_dbfs=null_threshold_dbfs,
+            tunables=settings.null,
         )
         me_check = _run_group_me_check(
             selected_assets=selected_target_assets,
             used_by=used_by,
             fps=fps,
             drop_frame=drop_frame,
-            window_ms=me_window_ms,
-            hop_ms=me_hop_ms,
-            band_low_hz=me_band_low_hz,
-            band_high_hz=me_band_high_hz,
-            corr_threshold=me_corr_threshold,
-            coherence_threshold=me_coherence_threshold,
-            dx_gate_dbfs=me_dx_gate_dbfs,
-            me_floor_dbfs=me_me_floor_dbfs,
+            tunables=settings.me,
         )
 
     inventory = [
@@ -1447,9 +1268,7 @@ def _run_group_null_test(
     used_by: dict[str, list[str]],
     fps: float,
     drop_frame: bool = False,
-    window_ms: float,
-    hop_ms: float,
-    threshold_dbfs: float,
+    tunables: NullTunables,
 ) -> AutoNullTestResult:
     if printmaster is None:
         return AutoNullTestResult(
@@ -1458,9 +1277,9 @@ def _run_group_null_test(
             reason="missing_target_layout_printmaster",
             stem_strategy=None,
             selected_roles=[],
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            threshold_dbfs=threshold_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            threshold_dbfs=tunables.threshold_dbfs,
             summary=None,
             flags=[],
             errors=[],
@@ -1474,9 +1293,9 @@ def _run_group_null_test(
             reason="insufficient_stems_for_auto_null",
             stem_strategy=None,
             selected_roles=[],
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            threshold_dbfs=threshold_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            threshold_dbfs=tunables.threshold_dbfs,
             summary=None,
             flags=[],
             errors=[],
@@ -1495,9 +1314,9 @@ def _run_group_null_test(
             fps=fps,
             drop_frame=drop_frame,
             time_reference_samples=pm_audio.time_reference_samples,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            threshold_dbfs=threshold_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            threshold_dbfs=tunables.threshold_dbfs,
         )
     except FinalPassError as exc:
         return AutoNullTestResult(
@@ -1506,9 +1325,9 @@ def _run_group_null_test(
             reason=_analysis_reason(exc),
             stem_strategy=strategy,
             selected_roles=selected_roles,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            threshold_dbfs=threshold_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            threshold_dbfs=tunables.threshold_dbfs,
             summary=None,
             flags=[],
             errors=[GroupError(type=exc.__class__.__name__, message=str(exc))],
@@ -1522,9 +1341,9 @@ def _run_group_null_test(
             reason=None,
             stem_strategy=strategy,
             selected_roles=selected_roles,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            threshold_dbfs=threshold_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            threshold_dbfs=tunables.threshold_dbfs,
             summary=analysis.summary,
             analysis_window=analysis.analysis_window,
             flags=analysis.flags,
@@ -1540,14 +1359,7 @@ def _run_group_me_check(
     used_by: dict[str, list[str]],
     fps: float,
     drop_frame: bool = False,
-    window_ms: float,
-    hop_ms: float,
-    band_low_hz: float,
-    band_high_hz: float,
-    corr_threshold: float,
-    coherence_threshold: float,
-    dx_gate_dbfs: float,
-    me_floor_dbfs: float,
+    tunables: METunables,
 ) -> MECheckResult:
     dx_asset = selected_assets.get("dx")
     me_asset = selected_assets.get("me")
@@ -1557,14 +1369,14 @@ def _run_group_me_check(
             skipped=True,
             reason="missing_dx_or_me",
             analysis_signal=ANALYSIS_SIGNAL_NAME,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            band_low_hz=band_low_hz,
-            band_high_hz=band_high_hz,
-            corr_threshold=corr_threshold,
-            coherence_threshold=coherence_threshold,
-            dx_gate_dbfs=dx_gate_dbfs,
-            me_floor_dbfs=me_floor_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            band_low_hz=tunables.band_low_hz,
+            band_high_hz=tunables.band_high_hz,
+            corr_threshold=tunables.corr_threshold,
+            coherence_threshold=tunables.coherence_threshold,
+            dx_gate_dbfs=tunables.dx_gate_dbfs,
+            me_floor_dbfs=tunables.me_floor_dbfs,
             summary=None,
             flags=[],
             errors=[],
@@ -1582,14 +1394,14 @@ def _run_group_me_check(
             fps=fps,
             drop_frame=drop_frame,
             time_reference_samples=me_audio.time_reference_samples,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            band_low_hz=band_low_hz,
-            band_high_hz=band_high_hz,
-            corr_threshold=corr_threshold,
-            coherence_threshold=coherence_threshold,
-            dx_gate_dbfs=dx_gate_dbfs,
-            me_floor_dbfs=me_floor_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            band_low_hz=tunables.band_low_hz,
+            band_high_hz=tunables.band_high_hz,
+            corr_threshold=tunables.corr_threshold,
+            coherence_threshold=tunables.coherence_threshold,
+            dx_gate_dbfs=tunables.dx_gate_dbfs,
+            me_floor_dbfs=tunables.me_floor_dbfs,
         )
     except FinalPassError as exc:
         return MECheckResult(
@@ -1597,14 +1409,14 @@ def _run_group_me_check(
             skipped=False,
             reason=_analysis_reason(exc),
             analysis_signal=ANALYSIS_SIGNAL_NAME,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            band_low_hz=band_low_hz,
-            band_high_hz=band_high_hz,
-            corr_threshold=corr_threshold,
-            coherence_threshold=coherence_threshold,
-            dx_gate_dbfs=dx_gate_dbfs,
-            me_floor_dbfs=me_floor_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            band_low_hz=tunables.band_low_hz,
+            band_high_hz=tunables.band_high_hz,
+            corr_threshold=tunables.corr_threshold,
+            coherence_threshold=tunables.coherence_threshold,
+            dx_gate_dbfs=tunables.dx_gate_dbfs,
+            me_floor_dbfs=tunables.me_floor_dbfs,
             summary=None,
             flags=[],
             errors=[GroupError(type=exc.__class__.__name__, message=str(exc))],
@@ -1617,14 +1429,14 @@ def _run_group_me_check(
             skipped=False,
             reason=None,
             analysis_signal=ANALYSIS_SIGNAL_NAME,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            band_low_hz=band_low_hz,
-            band_high_hz=band_high_hz,
-            corr_threshold=corr_threshold,
-            coherence_threshold=coherence_threshold,
-            dx_gate_dbfs=dx_gate_dbfs,
-            me_floor_dbfs=me_floor_dbfs,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            band_low_hz=tunables.band_low_hz,
+            band_high_hz=tunables.band_high_hz,
+            corr_threshold=tunables.corr_threshold,
+            coherence_threshold=tunables.coherence_threshold,
+            dx_gate_dbfs=tunables.dx_gate_dbfs,
+            me_floor_dbfs=tunables.me_floor_dbfs,
             summary=analysis.summary,
             analysis_window=analysis.analysis_window,
             flags=analysis.flags,
