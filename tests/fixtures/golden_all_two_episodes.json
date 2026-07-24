@@ -1,6 +1,6 @@
 {
   "finalpass_version": "0.1.0",
-  "schema_version": 9,
+  "schema_version": 10,
   "spec": {
     "name": "ebu_r128",
     "display_name": "EBU R128 \u2014 stereo (pre-produced)",
@@ -27,7 +27,8 @@
           "channel_config_hint": "stereo",
           "used_by": [
             "null",
-            "me"
+            "me",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         },
@@ -44,7 +45,8 @@
           "channel_config_actual": "stereo",
           "channel_config_hint": "stereo",
           "used_by": [
-            "null"
+            "null",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         },
@@ -61,7 +63,8 @@
           "channel_config_actual": "stereo",
           "channel_config_hint": "stereo",
           "used_by": [
-            "me"
+            "me",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         },
@@ -78,7 +81,8 @@
           "channel_config_actual": "stereo",
           "channel_config_hint": "stereo",
           "used_by": [
-            "null"
+            "null",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         },
@@ -96,7 +100,8 @@
           "channel_config_hint": "stereo",
           "used_by": [
             "pm_loudness",
-            "null"
+            "null",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         }
@@ -308,11 +313,289 @@
         "flags": [],
         "errors": []
       },
+      "channel_checks": [
+        {
+          "path": "SHOW_S01E03_DX_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_DX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        },
+        {
+          "path": "SHOW_S01E03_FX_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_FX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        },
+        {
+          "path": "SHOW_S01E03_ME_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_ME_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        },
+        {
+          "path": "SHOW_S01E03_MX_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_MX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        },
+        {
+          "path": "SHOW_S01E03_PM_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E03_PM_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        }
+      ],
+      "downmix_check": {
+        "pass": null,
+        "skipped": true,
+        "reason": "missing_stereo_or_surround_printmaster",
+        "analysis_signal": "loro_fold_down",
+        "center_db": -3.0,
+        "surround_db": -3.0,
+        "lfe_db": null,
+        "lfe_lowpass_hz": 120.0,
+        "window_ms": 1000.0,
+        "hop_ms": 250.0,
+        "activity_dbfs": -60.0,
+        "similarity_corr": 0.6,
+        "mono_corr": -0.2,
+        "loudness_delta_lu": 2.0,
+        "summary": null,
+        "analysis_window": null,
+        "flags": [],
+        "notes": [],
+        "errors": []
+      },
       "group_summary": {
-        "total_checks": 5,
-        "passed": 5,
+        "total_checks": 11,
+        "passed": 10,
         "failed": 0,
-        "skipped": 0,
+        "skipped": 1,
         "overall_pass": true
       },
       "errors": []
@@ -334,7 +617,8 @@
           "channel_config_hint": "stereo",
           "used_by": [
             "null",
-            "me"
+            "me",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         },
@@ -351,7 +635,8 @@
           "channel_config_actual": "stereo",
           "channel_config_hint": "stereo",
           "used_by": [
-            "null"
+            "null",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         },
@@ -368,7 +653,8 @@
           "channel_config_actual": "stereo",
           "channel_config_hint": "stereo",
           "used_by": [
-            "me"
+            "me",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         },
@@ -385,7 +671,8 @@
           "channel_config_actual": "stereo",
           "channel_config_hint": "stereo",
           "used_by": [
-            "null"
+            "null",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         },
@@ -403,7 +690,8 @@
           "channel_config_hint": "stereo",
           "used_by": [
             "pm_loudness",
-            "null"
+            "null",
+            "channels"
           ],
           "selection_note": "selected_for_target_layout"
         }
@@ -615,11 +903,289 @@
         "flags": [],
         "errors": []
       },
+      "channel_checks": [
+        {
+          "path": "SHOW_S01E04_DX_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_DX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        },
+        {
+          "path": "SHOW_S01E04_FX_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_FX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        },
+        {
+          "path": "SHOW_S01E04_ME_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_ME_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        },
+        {
+          "path": "SHOW_S01E04_MX_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_MX_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        },
+        {
+          "path": "SHOW_S01E04_PM_STEREO.wav",
+          "sample_rate": 48000,
+          "bit_depth": 24,
+          "channel_count": 2,
+          "channel_config_actual": "stereo",
+          "duration_seconds": 10.0,
+          "source_kind": "interleaved",
+          "source_paths": [
+            "SHOW_S01E04_PM_STEREO.wav"
+          ],
+          "member_legs": [],
+          "presentation_label": "Stereo",
+          "pass": true,
+          "skipped": false,
+          "reason": null,
+          "window_ms": 5000.0,
+          "hop_ms": 2500.0,
+          "activity_dbfs": -60.0,
+          "silence_dbfs": -80.0,
+          "duplicate_null_db": 40.0,
+          "polarity_corr": -0.95,
+          "lfe_cutoff_hz": 250.0,
+          "lfe_energy_ratio": 0.25,
+          "imbalance_db": 6.0,
+          "fail_dual_mono": false,
+          "findings": [
+            {
+              "kind": "duplicate_channels",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            },
+            {
+              "kind": "polarity_inversion",
+              "severity": "info",
+              "channels": [],
+              "measured": null,
+              "threshold": null,
+              "skipped": true,
+              "reason": "insufficient_active_content",
+              "detail": "fewer than 8 windows had both channels above -60.0 dBFS"
+            }
+          ],
+          "notes": [],
+          "errors": []
+        }
+      ],
+      "downmix_check": {
+        "pass": null,
+        "skipped": true,
+        "reason": "missing_stereo_or_surround_printmaster",
+        "analysis_signal": "loro_fold_down",
+        "center_db": -3.0,
+        "surround_db": -3.0,
+        "lfe_db": null,
+        "lfe_lowpass_hz": 120.0,
+        "window_ms": 1000.0,
+        "hop_ms": 250.0,
+        "activity_dbfs": -60.0,
+        "similarity_corr": 0.6,
+        "mono_corr": -0.2,
+        "loudness_delta_lu": 2.0,
+        "summary": null,
+        "analysis_window": null,
+        "flags": [],
+        "notes": [],
+        "errors": []
+      },
       "group_summary": {
-        "total_checks": 5,
-        "passed": 5,
+        "total_checks": 11,
+        "passed": 10,
         "failed": 0,
-        "skipped": 0,
+        "skipped": 1,
         "overall_pass": true
       },
       "errors": []
@@ -753,10 +1319,10 @@
     "groups_total": 2,
     "groups_passed": 2,
     "groups_failed": 0,
-    "total_checks": 10,
-    "passed": 10,
+    "total_checks": 22,
+    "passed": 20,
     "failed": 0,
-    "skipped": 0,
+    "skipped": 2,
     "overall_pass": true
   }
 }

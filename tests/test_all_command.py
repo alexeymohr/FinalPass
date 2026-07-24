@@ -9,11 +9,15 @@ from click.testing import CliRunner
 from tests.audio_cases import (
     SEED,
     SR,
+    SPLIT_LEG_ORDERS,
+    build_clean_51,
     build_group,
     build_split_group,
     build_two_episodes,
     exact_sum_components,
+    fold_down_of,
     write_audio,
+    write_split_role,
 )
 from finalpass.cli import main
 
@@ -32,7 +36,7 @@ def test_all_two_episodes_both_pass(tmp_path: Path) -> None:
     ])
     assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 9
+    assert data["schema_version"] == 10
     assert data["command"] == "all"
     assert data["summary"]["groups_total"] == 2
     assert data["summary"]["groups_passed"] == 2
@@ -438,7 +442,7 @@ def test_all_split_51_group_discovers_as_one_editorial_group(tmp_path: Path) -> 
     ])
     assert result.exit_code in (0, 1), result.output
     data = json.loads(result.output)
-    assert data["schema_version"] == 9
+    assert data["schema_version"] == 10
     assert data["summary"]["groups_total"] == 1
     group = data["groups"][0]
     assert group["group_id"] == "S01E03"
@@ -671,3 +675,148 @@ def test_all_compound_split_role_stays_unknown_instead_of_becoming_mx(tmp_path: 
     assert compound_asset["role"] == "unknown"
     assert "unknown_skipped" in (compound_asset["selection_note"] or "")
     assert any("MX-FX" in entry["path"] for entry in data["unclassified"])
+
+
+# --- Phase 8C: channels + downmix inside `all` -------------------------------
+#
+# The example/test fixtures are 10 s, so the channels pairwise kinds
+# legitimately self-report as skipped at the default 5000 ms windowing. These
+# cases pass explicit --ch-window-ms where a pairwise verdict is the point.
+
+CH_WINDOW_ARGS = ["--ch-window-ms", "1000", "--ch-hop-ms", "500"]
+
+
+def _run_all(folder: Path, *extra: str) -> tuple[int, dict]:
+    runner = CliRunner()
+    result = runner.invoke(main, ["all", str(folder), "--spec", "ebu_r128", *extra, "--json-only"])
+    assert result.exit_code in (0, 1), result.output
+    return result.exit_code, json.loads(result.output)
+
+
+def _group(payload: dict, group_id: str) -> dict:
+    return next(group for group in payload["groups"] if group["group_id"] == group_id)
+
+
+def test_all_reports_schema_v10(tmp_path: Path) -> None:
+    folder = build_two_episodes(tmp_path / "delivery")
+
+    _, payload = _run_all(folder)
+
+    assert payload["schema_version"] == 10
+
+
+def test_channels_results_appear_per_classified_asset(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx", "mx", "fx"), base_seed=SEED + 700)
+
+    _, payload = _run_all(folder, *CH_WINDOW_ARGS)
+
+    group = _group(payload, "S01E03")
+    assert len(group["channel_checks"]) == 4
+    assert {Path(result["path"]).name for result in group["channel_checks"]}
+    assert all(result["pass"] is True for result in group["channel_checks"])
+
+
+def test_planted_dead_leg_fails_its_group_through_channels(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx", "mx", "fx"), base_seed=SEED + 701)
+    # Replace the printmaster's Rs leg with silence.
+    dead = build_clean_51(seed=SEED + 702)
+    dead[:, SPLIT_LEG_ORDERS["5.1"].index("Rs")] = 0.0
+    write_split_role(folder, "S01E03", "pm", "5.1", dead)
+
+    exit_code, payload = _run_all(folder, *CH_WINDOW_ARGS)
+
+    assert exit_code == 1
+    group = _group(payload, "S01E03")
+    assert group["group_summary"]["overall_pass"] is False
+    failing = [result for result in group["channel_checks"] if result["pass"] is False]
+    assert len(failing) == 1
+    assert failing[0]["findings"][0]["kind"] == "silent_leg"
+    assert failing[0]["findings"][0]["channels"] == ["Rs"]
+
+
+def test_skip_channels_omits_results_and_their_summary_contribution(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx", "mx", "fx"), base_seed=SEED + 703)
+
+    _, with_channels = _run_all(folder, *CH_WINDOW_ARGS)
+    _, without = _run_all(folder, "--skip-channels")
+
+    kept = _group(with_channels, "S01E03")
+    skipped = _group(without, "S01E03")
+    assert len(kept["channel_checks"]) == 4
+    # Opting out omits the results entirely; it does not fabricate skips.
+    assert skipped["channel_checks"] == []
+    assert (
+        skipped["group_summary"]["total_checks"]
+        == kept["group_summary"]["total_checks"] - 4
+    )
+
+
+def test_downmix_runs_automatically_on_a_stereo_plus_surround_group(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    surround = build_clean_51(seed=SEED + 704)
+    write_split_role(folder, "S01E03", "pm", "5.1", surround)
+    write_split_role(folder, "S01E03", "pm", "stereo", fold_down_of(surround))
+
+    _, payload = _run_all(folder, *CH_WINDOW_ARGS)
+
+    downmix = _group(payload, "S01E03")["downmix_check"]
+    assert downmix["skipped"] is False
+    assert downmix["pass"] is True
+    assert downmix["analysis_signal"] == "loro_fold_down"
+    assert downmix["summary"]["loudness_delta_lu"] < 0.1
+
+
+def test_missing_surround_printmaster_skips_downmix_with_an_honest_reason(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx", "mx", "fx"), base_seed=SEED + 705)
+
+    _, payload = _run_all(folder, "--skip-channels")
+
+    downmix = _group(payload, "S01E03")["downmix_check"]
+    assert downmix["skipped"] is True
+    assert downmix["pass"] is None
+    assert downmix["reason"] == "missing_stereo_or_surround_printmaster"
+    assert downmix["summary"] is None
+    assert downmix["flags"] == []
+
+
+def test_two_stereo_printmasters_are_ambiguous_for_downmix(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    surround = build_clean_51(seed=SEED + 706)
+    write_split_role(folder, "S01E03", "pm", "5.1", surround)
+    write_split_role(folder, "S01E03", "pm", "stereo", fold_down_of(surround))
+    # A second, differently-named stereo printmaster in the same group.
+    write_split_role(
+        folder, "S01E03", "pm", "stereo", fold_down_of(surround),
+        presentation_token="LoRo",
+    )
+
+    _, payload = _run_all(folder, "--skip-channels")
+
+    downmix = _group(payload, "S01E03")["downmix_check"]
+    assert downmix["skipped"] is True
+    assert downmix["reason"] == "ambiguous_downmix_candidates"
+
+
+def test_each_new_check_contributes_exactly_one_check_to_the_tallies(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    surround = build_clean_51(seed=SEED + 707)
+    write_split_role(folder, "S01E03", "pm", "5.1", surround)
+    write_split_role(folder, "S01E03", "pm", "stereo", fold_down_of(surround))
+
+    _, payload = _run_all(folder, *CH_WINDOW_ARGS)
+
+    group = _group(payload, "S01E03")
+    summary = group["group_summary"]
+    measured_checks = sum(len(item["checks"]) for item in group["files"])
+    # loudness checks + null + me + one per channels asset + one downmix.
+    expected = measured_checks + 2 + len(group["channel_checks"]) + 1
+    assert summary["total_checks"] == expected
+    assert summary["passed"] + summary["failed"] + summary["skipped"] == expected
+    # And the run summary is the sum of its groups.
+    assert payload["summary"]["total_checks"] == sum(
+        item["group_summary"]["total_checks"] for item in payload["groups"]
+    )

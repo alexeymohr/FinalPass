@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Phase 8C — channels and downmix inside `all`
+
+- `finalpass all` now runs both Phase 8 passes automatically and persists
+  them per group: `groups[].channel_checks[]` (one per classified asset) and
+  `groups[].downmix_check`. `ALL_SCHEMA_VERSION` 9 → 10.
+- Channels runs by default on every classified role asset, plus unclassified
+  assets when `--include-unclassified` is set. `--skip-channels` turns the
+  pass off and omits the results rather than fabricating skipped entries.
+- Downmix auto-runs only on an unambiguous pairing — exactly one stereo
+  printmaster and exactly one surround printmaster. Anything else is a
+  skipped check reading `missing_stereo_or_surround_printmaster` or
+  `ambiguous_downmix_candidates`.
+- Every channels tunable is available `--ch-` prefixed and every downmix
+  tunable `--dm-` prefixed, each defaulting to the standalone default.
+- Counting: each channels result and the downmix result contribute exactly
+  one check to the group and run summaries; findings and flags are detail.
+  Existing loudness/null/M&E counting is unchanged.
+- Terminal output gains `Channels:` and `Downmix:` group subsections in the
+  established null/M&E line grammar; the HTML `all` report gains a
+  per-asset channel-findings block and a downmix section with its comparison
+  window and timed-flag lanes.
+- The `all` golden was regenerated at v10. The diff is additive plus the new
+  counting: 55 new keys, no removed keys, no type changes, no drift in any
+  pre-existing measurement.
+
 ### Phase 8B — downmix consistency
 
 - New `finalpass downmix` command: derives a Lo/Ro-style fold-down from a

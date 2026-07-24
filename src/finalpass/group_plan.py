@@ -20,6 +20,9 @@ from .models import FileRole
 
 NullStemStrategy = Literal["dx_mx_fx", "dx_me"]
 
+REASON_MISSING_DOWNMIX_PRINTMASTER = "missing_stereo_or_surround_printmaster"
+REASON_AMBIGUOUS_DOWNMIX = "ambiguous_downmix_candidates"
+
 # Auto-null strategies in preference order: full stem set first, then the
 # dialogue-versus-M&E fallback. The persisted `stem_strategy` values in
 # models.AutoNullTestResult are exactly these keys.
@@ -72,6 +75,46 @@ def preferred_auto_null_plan(
     """The strategy an unattended run would choose, or None if no set qualifies."""
     plans = available_auto_null_plans(assets_by_role)
     return plans[0] if plans else None
+
+
+@dataclass(frozen=True)
+class DownmixPair:
+    """The one stereo/surround printmaster pairing a downmix check would use."""
+
+    stereo: ClassifiedLogicalAsset
+    surround: ClassifiedLogicalAsset
+
+
+def select_downmix_pair(
+    group_assets: list[ClassifiedLogicalAsset],
+) -> tuple[DownmixPair | None, str | None]:
+    """Pick the group's downmix pairing, or say honestly why there isn't one.
+
+    Requires exactly one stereo printmaster and exactly one surround
+    printmaster. Anything else is ambiguous, and guessing which master the
+    mixer meant is precisely the kind of invention this tool avoids.
+    """
+    printmasters = [asset for asset in group_assets if asset.role == "pm"]
+    stereo = [
+        asset for asset in printmasters
+        if asset.logical_asset.channel_config_actual == "stereo"
+    ]
+    surround = [
+        asset for asset in printmasters
+        if asset.logical_asset.channel_config_actual in ("5.1", "7.1")
+    ]
+
+    if not stereo or not surround:
+        return None, REASON_MISSING_DOWNMIX_PRINTMASTER
+    if len(stereo) > 1 or len(surround) > 1:
+        return None, REASON_AMBIGUOUS_DOWNMIX
+    return DownmixPair(stereo=stereo[0], surround=surround[0]), None
+
+
+def supports_downmix_job(group_assets: list[ClassifiedLogicalAsset]) -> bool:
+    """True when the group has an unambiguous stereo + surround printmaster pair."""
+    pair, _ = select_downmix_pair(group_assets)
+    return pair is not None
 
 
 def supports_null_job(group_assets: list[ClassifiedLogicalAsset]) -> bool:

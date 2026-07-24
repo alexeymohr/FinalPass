@@ -298,6 +298,11 @@ class Group(BaseModel):
     files: list[FileReport]
     null_test: AutoNullTestResult | None = None
     me_check: MECheckResult | None = None
+    # Phase 8C: one channels result per classified asset (empty when the pass
+    # is skipped), and one downmix result when the group has an unambiguous
+    # stereo + surround printmaster pair.
+    channel_checks: list[ChannelAssetResult] = Field(default_factory=list)
+    downmix_check: DownmixCheckResult | None = None
     group_summary: GroupSummary
     errors: list[GroupError] = Field(default_factory=list)
 
@@ -338,7 +343,7 @@ class AllSummary(BaseModel):
 
 
 class AllReport(BaseModel):
-    """`all` command report — `schema_version == 9` (8T adds `drop_frame`)."""
+    """`all` command report — `schema_version == 10` (8C adds the 8A/8B results)."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

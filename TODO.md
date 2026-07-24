@@ -229,6 +229,28 @@ Features outside the current phase's spec go here, not into the code.
   for FinalPass reading its own older files; external consumers pinned to the
   old value sets must update.
 
+## Phase 8C — design decisions
+
+- **Channels is default-on in `all`, with `--skip-channels` as the opt-out.**
+  It costs one full read per classified asset, which is the only reason the
+  flag exists. Opting out omits `channel_checks` entirely rather than
+  fabricating skipped entries — the user chose not to ask the question.
+- **Downmix auto-runs only on an unambiguous pairing.** Exactly one stereo
+  printmaster and exactly one surround printmaster. Two of either is
+  `ambiguous_downmix_candidates`, not a guess about which master the mixer
+  meant.
+- **The pairing query lives in `group_plan.py`**, not in `jobs.py`, so the
+  wizard's 8D menu availability and the runner's skip decision come from one
+  answer. Same rule as the auto-null plan.
+- **Counting stays one-check-per-check.** Each channels result and the
+  downmix result add exactly one to the group and run tallies; findings and
+  flagged regions are detail. Loudness/null/M&E counting is untouched.
+- **Known scale note:** at the default 5000 ms channels windowing, assets
+  shorter than about 22 s cannot reach the eight-window minimum, so the
+  pairwise kinds self-report as `insufficient_active_content`. Real
+  deliveries are far longer; the 10-second example fixtures are why the
+  smoke flow and several tests pass an explicit shorter window.
+
 ## Future optional artifacts
 
 - `summary.txt` — optional one-page text artifact if it proves useful after HTML and AAF land.

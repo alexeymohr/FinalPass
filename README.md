@@ -21,7 +21,7 @@ This repository is a `0.1.0` release candidate. The implemented commands are:
   dialogue bleed.
 - `finalpass all` - analyze a folder of deliverables, classify logical assets,
   select the correct presentation for the chosen spec, then run the applicable
-  loudness, null, and M&E checks.
+  loudness, null, M&E, channel-integrity, and downmix checks.
 - `finalpass channels` - per-channel integrity diagnostics on one or more
   logical assets.
 - `finalpass downmix` - compare a delivered 2.0 against a fold-down derived
@@ -171,6 +171,9 @@ uv run finalpass downmix <stereo> <surround> [--out <dir>] [--json-only] [--fps 
                                             [--loudness-delta-lu <lu>]
 uv run finalpass all <folder> --spec <name-or-yaml> [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
                                                     [--patterns <config.yaml>] [--include-unclassified]
+                                                    [--skip-channels]
+                                                    [--ch-* ...   channels tunables, ch- prefixed]
+                                                    [--dm-* ...   downmix tunables, dm- prefixed]
                                                     [--null-window-ms <ms>] [--null-hop-ms <ms>]
                                                     [--null-threshold-dbfs <dbfs>]
                                                     [--me-window-ms <ms>] [--me-hop-ms <ms>]
@@ -212,6 +215,21 @@ WAV/BWF files, assembles split-mono families into logical assets, classifies
 each logical asset by role, groups related deliverables by episode/reel/fallback
 identifier, selects the layout required by the spec, and runs the applicable
 checks.
+
+Channel integrity runs by default on every classified asset in every group
+(and on unclassified assets when `--include-unclassified` is set). It adds one
+full read per asset, so `--skip-channels` turns the pass off; opting out omits
+the results entirely rather than recording fabricated skips.
+
+Downmix consistency runs automatically when a group carries **exactly one**
+stereo printmaster and **exactly one** 5.1-or-7.1 printmaster. Anything else
+records a skipped check with an honest reason - `missing_stereo_or_surround_printmaster`
+or `ambiguous_downmix_candidates` - because guessing which master the mixer
+meant is exactly the kind of invention this tool avoids.
+
+Each channels result and the downmix result contribute exactly one check each
+to the group and run tallies. Findings and flagged regions are detail, not
+extra checks.
 
 The automatic null strategy is intentionally narrow:
 
@@ -370,8 +388,8 @@ Exportable timed flags:
 - Standalone `loudness`: `files[].flags[]` for true-peak-over regions.
 - Standalone `null`: `null_test.flags[]`.
 - Standalone `me`: `me_check.flags[]`.
-- `all`: `groups[].files[].flags[]`, `groups[].null_test.flags[]`, and
-  `groups[].me_check.flags[]`.
+- `all`: `groups[].files[].flags[]`, `groups[].null_test.flags[]`,
+  `groups[].me_check.flags[]`, and `groups[].downmix_check.flags[]`.
 
 - Standalone `downmix`: `downmix_check.flags[]` for both timed lanes, with
   marker labels `downmix mismatch` and `mono compatibility`.
@@ -626,7 +644,7 @@ Current schema versions:
 - `loudness`: `schema_version: 4`
 - `null`: `schema_version: 4`
 - `me`: `schema_version: 4`
-- `all`: `schema_version: 9`
+- `all`: `schema_version: 10`
 - `channels`: `schema_version: 1`
 - `downmix`: `schema_version: 1`
 
@@ -644,7 +662,8 @@ Important persisted fields include:
 - `flags[]` for timed loudness, null, and M&E failures.
 - `analysis_window` for null and M&E comparisons.
 - `groups[].assets[]`, `groups[].files[]`, `groups[].null_test`,
-  `groups[].me_check`, `unclassified[]`, and `discovery_errors[]` for `all`.
+  `groups[].me_check`, `groups[].channel_checks[]`, `groups[].downmix_check`,
+  `unclassified[]`, and `discovery_errors[]` for `all`.
 
 ## Channel Order
 

@@ -80,6 +80,10 @@ def _normalize_all(report: dict) -> dict:
     for g in report.get("groups", []):
         _normalize_analysis_window(g.get("null_test"))
         _normalize_analysis_window(g.get("me_check"))
+        _normalize_analysis_window(g.get("downmix_check"))
+        for asset in g.get("channel_checks", []):
+            asset["path"] = Path(asset["path"]).name
+            asset["source_paths"] = [Path(path).name for path in asset.get("source_paths", [])]
         for asset in g.get("assets", []):
             asset["asset_id"] = _normalize_asset_id(asset["asset_id"])
             asset["path"] = Path(asset["path"]).name

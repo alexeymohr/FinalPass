@@ -48,7 +48,7 @@ from .errors import (
     SampleRateMismatchError,
     UnsupportedChannelConfigError,
 )
-from .group_plan import preferred_auto_null_plan
+from .group_plan import preferred_auto_null_plan, select_downmix_pair
 from .loudness import check, measure, true_peak_over_flags
 from .models import (
     AllReport,
@@ -879,9 +879,10 @@ def _process_group(
         errors=errors,
         mode=mode,
     )
-    null_test, me_check = _run_group_checks(
+    checks = _run_group_checks(
         printmaster=selection.pm_asset,
         selected_assets=selection.selected_target_assets,
+        classified_assets=classified_assets,
         used_by=used_by,
         mode=mode,
         settings=settings,
@@ -890,8 +891,7 @@ def _process_group(
         group_id=group_id,
         classified_assets=classified_assets,
         file_reports=file_reports,
-        null_test=null_test,
-        me_check=me_check,
+        checks=checks,
         used_by=used_by,
         selection_notes=selection_notes,
         errors=errors,
@@ -928,9 +928,10 @@ def _process_group_with_spec_family(
         ))
         for asset in role_to_assets.get("unknown", []):
             _append_selection_note(selection_notes, asset, "unknown_skipped")
-        null_test, me_check = _run_group_checks(
+        checks = _run_group_checks(
             printmaster=None,
             selected_assets={},
+            classified_assets=classified_assets,
             used_by=used_by,
             mode=mode,
             settings=settings,
@@ -939,8 +940,7 @@ def _process_group_with_spec_family(
             group_id=group_id,
             classified_assets=classified_assets,
             file_reports=[],
-            null_test=null_test,
-            me_check=me_check,
+            checks=checks,
             used_by=used_by,
             selection_notes=selection_notes,
             errors=errors,
@@ -973,9 +973,10 @@ def _process_group_with_spec_family(
         errors=errors,
         mode=mode,
     )
-    null_test, me_check = _run_group_checks(
+    checks = _run_group_checks(
         printmaster=selection.pm_asset,
         selected_assets=selection.selected_target_assets,
+        classified_assets=classified_assets,
         used_by=used_by,
         mode=mode,
         settings=settings,
@@ -987,8 +988,7 @@ def _process_group_with_spec_family(
         group_id=group_id,
         classified_assets=classified_assets,
         file_reports=file_reports,
-        null_test=null_test,
-        me_check=me_check,
+        checks=checks,
         used_by=used_by,
         selection_notes=selection_notes,
         errors=errors,
@@ -1234,14 +1234,23 @@ def _measure_selected_files(
     return file_reports
 
 
+@dataclass(frozen=True)
+class _GroupCheckResults:
+    null_test: AutoNullTestResult
+    me_check: MECheckResult
+    channel_checks: list[ChannelAssetResult]
+    downmix_check: DownmixCheckResult | None
+
+
 def _run_group_checks(
     *,
     printmaster: ClassifiedLogicalAsset | None,
     selected_assets: dict[FileRole, ClassifiedLogicalAsset],
+    classified_assets: list[ClassifiedLogicalAsset],
     used_by: dict[str, list[str]],
     mode: TimecodeMode,
     settings: AllSettings,
-) -> tuple[AutoNullTestResult, MECheckResult]:
+) -> _GroupCheckResults:
     null_test = _run_group_null_test(
         printmaster=printmaster,
         selected_assets=selected_assets,
@@ -1255,7 +1264,252 @@ def _run_group_checks(
         mode=mode,
         tunables=settings.me,
     )
-    return null_test, me_check
+    channel_checks = _run_group_channel_checks(
+        classified_assets=classified_assets,
+        used_by=used_by,
+        settings=settings,
+    )
+    downmix_check = _run_group_downmix_check(
+        classified_assets=classified_assets,
+        used_by=used_by,
+        mode=mode,
+        tunables=settings.downmix,
+    )
+    return _GroupCheckResults(
+        null_test=null_test,
+        me_check=me_check,
+        channel_checks=channel_checks,
+        downmix_check=downmix_check,
+    )
+
+
+def _run_group_channel_checks(
+    *,
+    classified_assets: list[ClassifiedLogicalAsset],
+    used_by: dict[str, list[str]],
+    settings: AllSettings,
+) -> list[ChannelAssetResult]:
+    """Channel integrity for every classified asset in the group.
+
+    Opting out omits the results entirely rather than fabricating skipped
+    entries — the user chose not to ask the question.
+    """
+    if settings.skip_channels:
+        return []
+
+    results: list[ChannelAssetResult] = []
+    for asset in classified_assets:
+        if asset.role == "unknown" and not settings.include_unclassified:
+            continue
+        logical_asset = asset.logical_asset
+        try:
+            audio = read_classified_audio(asset)
+            analysis = analyze_channels(
+                audio,
+                member_legs=list(logical_asset.member_legs),
+                channel_config=logical_asset.channel_config_actual,
+                tunables=settings.channels,
+            )
+        except FinalPassError as exc:
+            results.append(_channel_asset_skip(
+                asset,
+                reason=_analysis_reason(exc),
+                tunables=settings.channels,
+                error=GroupError(type=exc.__class__.__name__, message=str(exc)),
+            ))
+            continue
+
+        _mark_used(used_by, asset, "channels")
+        failed = any(
+            finding.severity == "fail" and not finding.skipped
+            for finding in analysis.findings
+        )
+        results.append(_attach_time_reference(
+            _channel_asset_result(
+                asset,
+                audio=audio,
+                tunables=settings.channels,
+                passed=not failed,
+                findings=analysis.findings,
+                notes=analysis.notes,
+            ),
+            audio.time_reference_samples,
+        ))
+    return results
+
+
+def _run_group_downmix_check(
+    *,
+    classified_assets: list[ClassifiedLogicalAsset],
+    used_by: dict[str, list[str]],
+    mode: TimecodeMode,
+    tunables: DownmixTunables,
+) -> DownmixCheckResult | None:
+    pair, skip_reason = select_downmix_pair(classified_assets)
+    if pair is None:
+        return _downmix_skip(reason=skip_reason, tunables=tunables)
+
+    try:
+        _mark_used(used_by, pair.stereo, "downmix")
+        _mark_used(used_by, pair.surround, "downmix")
+        stereo_audio = read_classified_audio(pair.stereo)
+        surround_audio = read_classified_audio(pair.surround)
+        analysis = analyze_downmix(
+            stereo_audio,
+            surround_audio,
+            mode=mode,
+            time_reference_samples=stereo_audio.time_reference_samples,
+            presentation_label=pair.stereo.logical_asset.presentation_label,
+            tunables=tunables,
+        )
+    except FinalPassError as exc:
+        return _downmix_result(
+            tunables=tunables,
+            passed=False,
+            reason=_analysis_reason(exc),
+            errors=[GroupError(type=exc.__class__.__name__, message=str(exc))],
+        )
+
+    passed = analysis.level_passed and not analysis.flags
+    result = _attach_time_reference(
+        _downmix_result(
+            tunables=tunables,
+            passed=passed,
+            summary=analysis.summary,
+            analysis_window=analysis.analysis_window,
+            flags=analysis.flags,
+            notes=analysis.notes,
+        ),
+        stereo_audio.time_reference_samples,
+    )
+    result._sample_rate = stereo_audio.sample_rate
+    return result
+
+
+def _channel_asset_result(
+    asset: ClassifiedLogicalAsset,
+    *,
+    audio: AudioFile,
+    tunables: ChannelsTunables,
+    passed: bool,
+    findings,
+    notes: list[str],
+) -> ChannelAssetResult:
+    logical_asset = asset.logical_asset
+    return ChannelAssetResult(
+        path=str(logical_asset.canonical_path),
+        sample_rate=audio.sample_rate,
+        bit_depth=audio.bit_depth,
+        channel_count=audio.channel_count,
+        channel_config_actual=logical_asset.channel_config_actual,
+        duration_seconds=round(audio.duration_seconds, 3),
+        source_kind=logical_asset.source_kind,
+        source_paths=[str(path) for path in logical_asset.source_paths],
+        member_legs=list(logical_asset.member_legs),
+        presentation_label=logical_asset.presentation_label,
+        **{"pass": passed},
+        skipped=False,
+        reason=None,
+        **_channel_threshold_fields(tunables),
+        findings=[
+            ChannelFinding(
+                kind=finding.kind,
+                severity=finding.severity,
+                channels=list(finding.channels),
+                measured=finding.measured,
+                threshold=finding.threshold,
+                skipped=finding.skipped,
+                reason=finding.reason,
+                detail=finding.detail,
+            )
+            for finding in findings
+        ],
+        notes=list(notes),
+        errors=[],
+    )
+
+
+def _channel_asset_skip(
+    asset: ClassifiedLogicalAsset,
+    *,
+    reason: str,
+    tunables: ChannelsTunables,
+    error: GroupError,
+) -> ChannelAssetResult:
+    logical_asset = asset.logical_asset
+    return ChannelAssetResult(
+        path=str(logical_asset.canonical_path),
+        sample_rate=logical_asset.sample_rate,
+        bit_depth=logical_asset.bit_depth or 0,
+        channel_count=len(logical_asset.member_legs) or 0,
+        channel_config_actual=logical_asset.channel_config_actual,
+        duration_seconds=0.0,
+        source_kind=logical_asset.source_kind,
+        source_paths=[str(path) for path in logical_asset.source_paths],
+        member_legs=list(logical_asset.member_legs),
+        presentation_label=logical_asset.presentation_label,
+        **{"pass": None},
+        skipped=True,
+        reason=reason,
+        **_channel_threshold_fields(tunables),
+        findings=[],
+        notes=[],
+        errors=[error],
+    )
+
+
+def _channel_threshold_fields(tunables: ChannelsTunables) -> dict[str, float | bool]:
+    return {
+        "window_ms": tunables.window_ms,
+        "hop_ms": tunables.hop_ms,
+        "activity_dbfs": tunables.activity_dbfs,
+        "silence_dbfs": tunables.silence_dbfs,
+        "duplicate_null_db": tunables.duplicate_null_db,
+        "polarity_corr": tunables.polarity_corr,
+        "lfe_cutoff_hz": tunables.lfe_cutoff_hz,
+        "lfe_energy_ratio": tunables.lfe_energy_ratio,
+        "imbalance_db": tunables.imbalance_db,
+        "fail_dual_mono": tunables.fail_dual_mono,
+    }
+
+
+def _downmix_result(
+    *,
+    tunables: DownmixTunables,
+    passed: bool | None,
+    reason: str | None = None,
+    summary=None,
+    analysis_window=None,
+    flags=None,
+    notes: list[str] | None = None,
+    errors: list[GroupError] | None = None,
+    skipped: bool = False,
+) -> DownmixCheckResult:
+    return DownmixCheckResult(
+        **{"pass": passed},
+        skipped=skipped,
+        reason=reason,
+        analysis_signal=DOWNMIX_ANALYSIS_SIGNAL_NAME,
+        center_db=tunables.center_db,
+        surround_db=tunables.surround_db,
+        lfe_db=tunables.lfe_db,
+        lfe_lowpass_hz=tunables.lfe_lowpass_hz,
+        window_ms=tunables.window_ms,
+        hop_ms=tunables.hop_ms,
+        activity_dbfs=tunables.activity_dbfs,
+        similarity_corr=tunables.similarity_corr,
+        mono_corr=tunables.mono_corr,
+        loudness_delta_lu=tunables.loudness_delta_lu,
+        summary=summary,
+        analysis_window=analysis_window,
+        flags=list(flags or []),
+        notes=list(notes or []),
+        errors=list(errors or []),
+    )
+
+
+def _downmix_skip(*, reason: str | None, tunables: DownmixTunables) -> DownmixCheckResult:
+    return _downmix_result(tunables=tunables, passed=None, reason=reason, skipped=True)
 
 
 def _finalize_group(
@@ -1263,8 +1517,7 @@ def _finalize_group(
     group_id: str,
     classified_assets: list[ClassifiedLogicalAsset],
     file_reports: list[FileReport],
-    null_test: AutoNullTestResult,
-    me_check: MECheckResult,
+    checks: _GroupCheckResults,
     used_by: dict[str, list[str]],
     selection_notes: dict[str, str | None],
     errors: list[GroupError],
@@ -1280,16 +1533,17 @@ def _finalize_group(
     inventory.sort(key=lambda item: (item.role, item.path.lower()))
     summary = _group_summary_from_results(
         file_reports=file_reports,
-        null_test=null_test,
-        me_check=me_check,
+        checks=checks,
         errors=errors,
     )
     return Group(
         group_id=group_id,
         assets=inventory,
         files=file_reports,
-        null_test=null_test,
-        me_check=me_check,
+        null_test=checks.null_test,
+        me_check=checks.me_check,
+        channel_checks=checks.channel_checks,
+        downmix_check=checks.downmix_check,
         group_summary=summary,
         errors=errors,
     )
@@ -1298,28 +1552,30 @@ def _finalize_group(
 def _group_summary_from_results(
     *,
     file_reports: list[FileReport],
-    null_test: AutoNullTestResult,
-    me_check: MECheckResult,
+    checks: _GroupCheckResults,
     errors: list[GroupError],
 ) -> GroupSummary:
+    """Tally the group. Each check counts once; findings and flags are detail."""
     all_checks = [c for fr in file_reports for c in fr.checks]
     passed = sum(1 for c in all_checks if c.pass_ is True)
     failed = sum(1 for c in all_checks if c.pass_ is False)
     skipped = sum(1 for c in all_checks if c.skipped)
-    if null_test.pass_ is True:
-        passed += 1
-    elif null_test.pass_ is False:
-        failed += 1
-    if null_test.skipped:
-        skipped += 1
-    if me_check.pass_ is True:
-        passed += 1
-    elif me_check.pass_ is False:
-        failed += 1
-    if me_check.skipped:
-        skipped += 1
+
+    # null and me are always present; each channels result and the downmix
+    # result (when the group has one) contribute exactly one check each.
+    countable = [checks.null_test, checks.me_check, *checks.channel_checks]
+    if checks.downmix_check is not None:
+        countable.append(checks.downmix_check)
+    for result in countable:
+        if result.pass_ is True:
+            passed += 1
+        elif result.pass_ is False:
+            failed += 1
+        if result.skipped:
+            skipped += 1
+
     return GroupSummary(
-        total_checks=len(all_checks) + 2,
+        total_checks=len(all_checks) + len(countable),
         passed=passed,
         failed=failed,
         skipped=skipped,

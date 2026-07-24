@@ -253,6 +253,77 @@
     {% endif %}
   </section>
   {% endif %}
+
+  {% if group.channel_checks %}
+  <section class="card section-stack">
+    <h3>Channel integrity</h3>
+    {% for asset in group.channel_checks %}
+    <div class="card card-muted">
+      <h4>
+        {{ display_label(asset) }}
+        {{ macros.badge(asset.pass_|verdict_label(asset.skipped), asset.pass_|verdict_class(asset.skipped)) }}
+      </h4>
+      <p class="muted">{{ source_summary(asset) }}</p>
+      {% if asset.notes %}
+      <ul class="muted">
+        {% for note in asset.notes %}
+        <li>{{ humanize_code(note) }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if asset.skipped %}
+      <p class="muted">{{ humanize_code(asset.reason) }}</p>
+      {% endif %}
+      {{ macros.channel_findings_table(asset.findings) }}
+      {{ macros.errors_block(asset.errors) }}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if group.downmix_check %}
+  {% set downmix = group.downmix_check %}
+  <section class="card section-stack">
+    <h3>
+      Downmix consistency
+      {{ macros.badge(downmix.pass_|verdict_label(downmix.skipped), downmix.pass_|verdict_class(downmix.skipped)) }}
+    </h3>
+    {% if downmix.skipped %}
+    <p class="muted">{{ skip_detail(downmix.reason) }}</p>
+    {% else %}
+    <p class="muted">
+      The derived signal is a plain in-phase Lo/Ro-style fold-down. It is not an
+      Lt/Rt matrix encode, and FinalPass does not emulate any matrix decoder.
+    </p>
+    {% if downmix.notes %}
+    <ul class="muted">
+      {% for note in downmix.notes %}
+      <li>{{ humanize_code(note) }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if downmix.summary %}
+    {{ macros.summary_stats([
+      ("Delivered integrated", "%.1f LUFS"|format(downmix.summary.delivered_integrated_lufs) if downmix.summary.delivered_integrated_lufs is not none else "—"),
+      ("Derived integrated", "%.1f LUFS"|format(downmix.summary.derived_integrated_lufs) if downmix.summary.derived_integrated_lufs is not none else "—"),
+      ("Loudness delta", "%.2f LU"|format(downmix.summary.loudness_delta_lu) if downmix.summary.loudness_delta_lu is not none else "—"),
+      ("Level sub-check", macros.badge(downmix.summary.level_pass|verdict_label(false), downmix.summary.level_pass|verdict_class(false))),
+      ("Similarity flagged", downmix.summary.similarity_windows_flagged),
+      ("Min similarity", downmix.summary.similarity_min_corr|fmt_float(3)),
+      ("Mono flagged", downmix.summary.mono_windows_flagged),
+      ("Min L/R correlation", downmix.summary.mono_min_corr|fmt_float(3)),
+      ("Flagged regions", downmix.summary.flagged_regions),
+    ]) }}
+    {% endif %}
+    {{ macros.analysis_window(downmix.analysis_window) }}
+    {% if downmix.flags %}
+      {{ macros.flagged_timeline(timeline_lane(downmix.flags, sample_rate=group_sample_rate(group), duration_seconds=group_duration_seconds(group)), "Downmix flagged-region timeline") }}
+      {{ macros.flagged_table(downmix.flags, "Min correlation") }}
+    {% endif %}
+    {{ macros.errors_block(downmix.errors) }}
+    {% endif %}
+  </section>
+  {% endif %}
 </section>
 {% endfor %}
 {% endblock %}

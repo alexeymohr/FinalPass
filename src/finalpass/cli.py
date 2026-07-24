@@ -450,6 +450,27 @@ def downmix_cmd(
 @click.option("--me-coherence-threshold", type=float, default=DEFAULT_ME_COHERENCE_THRESHOLD, show_default=True, help="Auto-M&E coherence threshold.")
 @click.option("--me-dx-gate-dbfs", type=float, default=DEFAULT_ME_DX_GATE_DBFS, show_default=True, help="Auto-M&E DX gate in dBFS.")
 @click.option("--me-me-floor-dbfs", type=float, default=DEFAULT_ME_ME_FLOOR_DBFS, show_default=True, help="Auto-M&E M&E floor in dBFS.")
+@click.option("--skip-channels", is_flag=True, help="Skip the per-asset channel-integrity pass (it reads every classified asset).")
+@click.option("--ch-window-ms", type=float, default=DEFAULT_CHANNELS_WINDOW_MS, show_default=True, help="Channels pairwise window size in milliseconds.")
+@click.option("--ch-hop-ms", type=float, default=DEFAULT_CHANNELS_HOP_MS, show_default=True, help="Channels pairwise hop size in milliseconds.")
+@click.option("--ch-activity-dbfs", type=float, default=DEFAULT_CHANNELS_ACTIVITY_DBFS, show_default=True, help="Channels window activity floor in dBFS.")
+@click.option("--ch-silence-dbfs", type=float, default=DEFAULT_CHANNELS_SILENCE_DBFS, show_default=True, help="Channels silent-leg threshold in dBFS.")
+@click.option("--ch-duplicate-null-db", type=float, default=DEFAULT_CHANNELS_DUPLICATE_NULL_DB, show_default=True, help="Channels duplicate null-depth threshold in dB.")
+@click.option("--ch-polarity-corr", type=float, default=DEFAULT_CHANNELS_POLARITY_CORR, show_default=True, help="Channels polarity correlation threshold.")
+@click.option("--ch-lfe-cutoff-hz", type=float, default=DEFAULT_CHANNELS_LFE_CUTOFF_HZ, show_default=True, help="Channels LFE broadband cutoff in Hz.")
+@click.option("--ch-lfe-energy-ratio", type=float, default=DEFAULT_CHANNELS_LFE_ENERGY_RATIO, show_default=True, help="Channels LFE broadband energy ratio.")
+@click.option("--ch-imbalance-db", type=float, default=DEFAULT_CHANNELS_IMBALANCE_DB, show_default=True, help="Channels L/R imbalance note threshold in dB.")
+@click.option("--ch-fail-dual-mono", is_flag=True, help="Treat dual-mono stereo assets as failures during the channels pass.")
+@click.option("--dm-center-db", type=float, default=DEFAULT_DOWNMIX_CENTER_DB, show_default=True, help="Downmix center fold gain.")
+@click.option("--dm-surround-db", type=float, default=DEFAULT_DOWNMIX_SURROUND_DB, show_default=True, help="Downmix surround fold gain.")
+@click.option("--dm-lfe-db", type=float, default=None, help="Include the LFE in the derived fold-down at this gain.")
+@click.option("--dm-lfe-lowpass-hz", type=float, default=DEFAULT_DOWNMIX_LFE_LOWPASS_HZ, show_default=True, help="Downmix LFE low-pass cutoff in Hz.")
+@click.option("--dm-window-ms", type=float, default=DEFAULT_DOWNMIX_WINDOW_MS, show_default=True, help="Downmix window size in milliseconds.")
+@click.option("--dm-hop-ms", type=float, default=DEFAULT_DOWNMIX_HOP_MS, show_default=True, help="Downmix hop size in milliseconds.")
+@click.option("--dm-activity-dbfs", type=float, default=DEFAULT_DOWNMIX_ACTIVITY_DBFS, show_default=True, help="Downmix window activity floor in dBFS.")
+@click.option("--dm-similarity-corr", type=float, default=DEFAULT_DOWNMIX_SIMILARITY_CORR, show_default=True, help="Downmix similarity correlation threshold.")
+@click.option("--dm-mono-corr", type=float, default=DEFAULT_DOWNMIX_MONO_CORR, show_default=True, help="Downmix mono-compatibility correlation threshold.")
+@click.option("--dm-loudness-delta-lu", type=float, default=DEFAULT_DOWNMIX_LOUDNESS_DELTA_LU, show_default=True, help="Downmix integrated-loudness delta threshold in LU.")
 def all_cmd(
     folder: Path,
     spec_name: str,
@@ -470,6 +491,27 @@ def all_cmd(
     me_coherence_threshold: float,
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
+    skip_channels: bool,
+    ch_window_ms: float,
+    ch_hop_ms: float,
+    ch_activity_dbfs: float,
+    ch_silence_dbfs: float,
+    ch_duplicate_null_db: float,
+    ch_polarity_corr: float,
+    ch_lfe_cutoff_hz: float,
+    ch_lfe_energy_ratio: float,
+    ch_imbalance_db: float,
+    ch_fail_dual_mono: bool,
+    dm_center_db: float,
+    dm_surround_db: float,
+    dm_lfe_db: float | None,
+    dm_lfe_lowpass_hz: float,
+    dm_window_ms: float,
+    dm_hop_ms: float,
+    dm_activity_dbfs: float,
+    dm_similarity_corr: float,
+    dm_mono_corr: float,
+    dm_loudness_delta_lu: float,
 ) -> None:
     _warn_if_drop_frame_rate(fps, drop_frame)
     try:
@@ -482,6 +524,31 @@ def all_cmd(
                 drop_frame=drop_frame,
                 settings=AllSettings(
                     include_unclassified=include_unclassified,
+                    skip_channels=skip_channels,
+                    channels=ChannelsTunables(
+                        window_ms=ch_window_ms,
+                        hop_ms=ch_hop_ms,
+                        activity_dbfs=ch_activity_dbfs,
+                        silence_dbfs=ch_silence_dbfs,
+                        duplicate_null_db=ch_duplicate_null_db,
+                        polarity_corr=ch_polarity_corr,
+                        lfe_cutoff_hz=ch_lfe_cutoff_hz,
+                        lfe_energy_ratio=ch_lfe_energy_ratio,
+                        imbalance_db=ch_imbalance_db,
+                        fail_dual_mono=ch_fail_dual_mono,
+                    ),
+                    downmix=DownmixTunables(
+                        center_db=dm_center_db,
+                        surround_db=dm_surround_db,
+                        lfe_db=dm_lfe_db,
+                        lfe_lowpass_hz=dm_lfe_lowpass_hz,
+                        window_ms=dm_window_ms,
+                        hop_ms=dm_hop_ms,
+                        activity_dbfs=dm_activity_dbfs,
+                        similarity_corr=dm_similarity_corr,
+                        mono_corr=dm_mono_corr,
+                        loudness_delta_lu=dm_loudness_delta_lu,
+                    ),
                     null=NullTunables(
                         window_ms=null_window_ms,
                         hop_ms=null_hop_ms,
@@ -855,6 +922,9 @@ def _render_all_report(report: AllReport) -> None:
                     )
                 )
 
+        _render_group_channel_checks(group.channel_checks)
+        _render_group_downmix_check(group.downmix_check)
+
         _print_summary(
             group.group_summary.overall_pass,
             group.group_summary.passed,
@@ -885,6 +955,73 @@ def _render_all_report(report: AllReport) -> None:
         f"[green]{summary.groups_passed} passed[/green], [red]{summary.groups_failed} failed[/red]. "
         f"Overall: [{color}]{verdict_explainer(overall_pass=summary.overall_pass, failed=summary.failed, blocking_issues=blocking_issue_count(report))}[/{color}]."
     )
+
+
+def _render_group_channel_checks(channel_checks: list[ChannelAssetResult]) -> None:
+    if not channel_checks:
+        return
+
+    failing = [result for result in channel_checks if result.pass_ is False]
+    skipped = [result for result in channel_checks if result.skipped]
+    if not failing and not skipped:
+        count = len(channel_checks)
+        noun = "asset" if count == 1 else "assets"
+        _out_console.print(f"  [green]Channels:[/green] PASS — {count} {noun} clean")
+        return
+
+    if failing:
+        noun = "asset" if len(failing) == 1 else "assets"
+        _out_console.print(f"  [red]Channels:[/red] FAIL — {len(failing)} {noun} with findings")
+    else:
+        _out_console.print(f"  [dim]Channels:[/dim] SKIPPED — {len(skipped)} unreadable")
+
+    for result in channel_checks:
+        if result.skipped:
+            _out_console.print(
+                f"    [dim]{escape(logical_asset_display_name(result))}:[/dim] "
+                f"skipped — {humanize_code(result.reason)}"
+            )
+            continue
+        if result.pass_ is False:
+            kinds = humanize_code_list(sorted({
+                finding.kind for finding in result.findings
+                if finding.severity == "fail" and not finding.skipped
+            }))
+            _out_console.print(
+                f"    [red]{escape(logical_asset_display_name(result))}:[/red] {escape(kinds)}"
+            )
+
+
+def _render_group_downmix_check(downmix_check) -> None:
+    if downmix_check is None:
+        return
+
+    if downmix_check.skipped:
+        _out_console.print(f"  [dim]Downmix:[/dim] SKIPPED — {humanize_code(downmix_check.reason)}")
+    elif downmix_check.pass_ is True and downmix_check.summary is not None:
+        delta = downmix_check.summary.loudness_delta_lu
+        delta_label = "—" if delta is None else f"Δ{delta:.1f} LU"
+        _out_console.print(f"  [green]Downmix:[/green] PASS — {delta_label}")
+    elif downmix_check.summary is not None and downmix_check.flags:
+        flagged = downmix_check.summary.flagged_regions
+        noun = "region" if flagged == 1 else "regions"
+        _out_console.print(f"  [red]Downmix:[/red] FAIL — {flagged} flagged {noun}")
+    elif downmix_check.summary is not None:
+        delta = downmix_check.summary.loudness_delta_lu
+        delta_label = "—" if delta is None else f"Δ{delta:.1f} LU"
+        _out_console.print(f"  [red]Downmix:[/red] FAIL — level delta {delta_label}")
+    else:
+        _out_console.print(f"  [red]Downmix:[/red] FAIL — {humanize_code(downmix_check.reason)}")
+
+    for error in downmix_check.errors:
+        _out_console.print(f"    [red]{humanize_code(error.type)}:[/red] {error.message}")
+    for metric, title in (
+        ("downmix_correlation", "Downmix Similarity Flags"),
+        ("stereo_correlation", "Mono Compatibility Flags"),
+    ):
+        lane = [flag for flag in downmix_check.flags if flag.metric == metric]
+        if lane:
+            _out_console.print(_flagged_regions_table(lane, title=title))
 
 
 def _render_file_checks(file_report: FileReport) -> None:
