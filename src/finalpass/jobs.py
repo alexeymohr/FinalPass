@@ -11,6 +11,7 @@ import tempfile
 from . import (
     ALL_SCHEMA_VERSION,
     CHANNELS_SCHEMA_VERSION,
+    DOWNMIX_SCHEMA_VERSION,
     LOUDNESS_SCHEMA_VERSION,
     ME_SCHEMA_VERSION,
     NULL_SCHEMA_VERSION,
@@ -28,6 +29,12 @@ from .all_assets import (
 from .audio_io import AudioFile
 from .channel_check import ChannelsTunables, analyze_channels
 from .classify import load_config
+from .downmix_check import (
+    ANALYSIS_SIGNAL_NAME as DOWNMIX_ANALYSIS_SIGNAL_NAME,
+    DownmixTunables,
+    analyze_downmix,
+    validate_windowing as validate_downmix_windowing,
+)
 from .errors import (
     AAFExportError,
     AlignmentError,
@@ -52,6 +59,8 @@ from .models import (
     ChannelFinding,
     ChannelsReport,
     DiscoveryIssue,
+    DownmixCheckResult,
+    DownmixReport,
     FileReport,
     FileRole,
     Group,
@@ -410,6 +419,79 @@ def run_channels(
     )
 
 
+def run_downmix(
+    *,
+    stereo: Path,
+    surround: Path,
+    fps: float,
+    drop_frame: bool = False,
+    tunables: DownmixTunables = DownmixTunables(),
+) -> DownmixReport:
+    """Compare a delivered 2.0 against a fold-down of the surround master."""
+    mode = _resolve_timecode_mode(fps, drop_frame=drop_frame)
+    validate_downmix_windowing(window_ms=tunables.window_ms, hop_ms=tunables.hop_ms)
+    stereo_input = resolve_standalone_asset(stereo)
+    surround_input = resolve_standalone_asset(surround)
+    stereo_audio = stereo_input.audio
+    surround_audio = surround_input.audio
+
+    analysis = analyze_downmix(
+        stereo_audio,
+        surround_audio,
+        mode=mode,
+        time_reference_samples=stereo_audio.time_reference_samples,
+        presentation_label=stereo_input.logical_asset.presentation_label,
+        tunables=tunables,
+    )
+    passed = analysis.level_passed and not analysis.flags
+    downmix_check = _attach_time_reference(
+        DownmixCheckResult(
+            **{"pass": passed},
+            skipped=False,
+            reason=None,
+            analysis_signal=DOWNMIX_ANALYSIS_SIGNAL_NAME,
+            center_db=tunables.center_db,
+            surround_db=tunables.surround_db,
+            lfe_db=tunables.lfe_db,
+            lfe_lowpass_hz=tunables.lfe_lowpass_hz,
+            window_ms=tunables.window_ms,
+            hop_ms=tunables.hop_ms,
+            activity_dbfs=tunables.activity_dbfs,
+            similarity_corr=tunables.similarity_corr,
+            mono_corr=tunables.mono_corr,
+            loudness_delta_lu=tunables.loudness_delta_lu,
+            summary=analysis.summary,
+            analysis_window=analysis.analysis_window,
+            flags=analysis.flags,
+            notes=analysis.notes,
+            errors=[],
+        ),
+        stereo_audio.time_reference_samples,
+    )
+    downmix_check._sample_rate = stereo_audio.sample_rate
+
+    now, run_id = _run_timestamp()
+    return DownmixReport(
+        finalpass_version=__version__,
+        schema_version=DOWNMIX_SCHEMA_VERSION,
+        command="downmix",
+        run_id=run_id,
+        run_started_at=now.isoformat().replace("+00:00", "Z"),
+        fps=fps,
+        drop_frame=drop_frame,
+        stereo_file=describe_analysis_input(stereo_input),
+        surround_file=describe_analysis_input(surround_input),
+        downmix_check=downmix_check,
+        summary=Summary(
+            total_checks=1,
+            passed=1 if passed else 0,
+            failed=0 if passed else 1,
+            skipped=0,
+            overall_pass=passed,
+        ),
+    )
+
+
 def run_all(
     *,
     folder: Path,
@@ -665,7 +747,7 @@ def run_all_family_from_scan(
 
 def write_report_artifacts(
     *,
-    report: Report | NullReport | MEReport | AllReport | ChannelsReport,
+    report: Report | NullReport | MEReport | AllReport | ChannelsReport | DownmixReport,
     payload: str,
     out_dir: Path,
 ) -> WrittenArtifacts:

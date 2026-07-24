@@ -12,8 +12,9 @@ from dataclasses import dataclass
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
-from scipy.signal import butter, coherence, correlate, sosfiltfilt
+from scipy.signal import butter, coherence, sosfiltfilt
 
+from .analysis_common import estimate_offset_samples
 from .analysis_window import prepare_analysis_window
 from .audio_io import AudioFile, channel_config_from_count
 from .errors import (
@@ -37,8 +38,6 @@ ME_DBFS_FLOOR = -300.0
 ANALYSIS_SIGNAL_NAME = "mono_downmix_excluding_lfe"
 
 _ME_LINEAR_FLOOR = 10 ** (ME_DBFS_FLOOR / 20.0)
-_ALIGNMENT_MAX_LAG_SECONDS = 0.25
-_ALIGNMENT_TARGET_POINTS = 12000
 _ALIGNMENT_RELATIVE_MARGIN = 1.05
 _ALIGNMENT_ABSOLUTE_MIN = 0.25
 
@@ -248,6 +247,17 @@ def _band_limit(signal: np.ndarray, *, sample_rate: int, low_hz: float, high_hz:
     return sosfiltfilt(sos, signal.astype(np.float64, copy=False), padlen=0)
 
 
+def _estimate_offset_samples(reference: np.ndarray, candidate: np.ndarray, sample_rate: int) -> int:
+    """M&E's alignment call: mono band-limited inputs, with a score floor."""
+    return estimate_offset_samples(
+        reference,
+        candidate,
+        sample_rate=sample_rate,
+        relative_margin=_ALIGNMENT_RELATIVE_MARGIN,
+        absolute_min=_ALIGNMENT_ABSOLUTE_MIN,
+    )
+
+
 def _detect_alignment_error(dx_band: np.ndarray, me_band: np.ndarray, sample_rate: int) -> None:
     lag = _estimate_offset_samples(dx_band, me_band, sample_rate)
     if lag != 0:
@@ -255,46 +265,6 @@ def _detect_alignment_error(dx_band: np.ndarray, me_band: np.ndarray, sample_rat
             f"Detected a constant global offset of approximately {lag} samples between "
             "DX and M&E. Phase 4 does not auto-align M&E inputs."
         )
-
-
-def _estimate_offset_samples(reference: np.ndarray, candidate: np.ndarray, sample_rate: int) -> int:
-    n_samples = int(reference.shape[0])
-    if n_samples < 2:
-        return 0
-
-    stride = max(1, n_samples // _ALIGNMENT_TARGET_POINTS)
-    ref = reference[::stride] - float(np.mean(reference[::stride]))
-    cand = candidate[::stride] - float(np.mean(candidate[::stride]))
-
-    ref_norm = float(np.linalg.norm(ref))
-    cand_norm = float(np.linalg.norm(cand))
-    if ref_norm == 0.0 or cand_norm == 0.0:
-        return 0
-
-    corr = correlate(ref / ref_norm, cand / cand_norm, mode="full", method="fft")
-    lags = np.arange(-len(cand) + 1, len(ref))
-    max_lag = max(1, int(round(min(_ALIGNMENT_MAX_LAG_SECONDS * sample_rate, n_samples - 1) / stride)))
-    mask = np.abs(lags) <= max_lag
-    corr = corr[mask]
-    lags = lags[mask]
-    if corr.size == 0:
-        return 0
-
-    best_idx = int(np.argmax(np.abs(corr)))
-    best_lag = int(lags[best_idx])
-    zero_idx = int(np.where(lags == 0)[0][0])
-    zero_score = float(abs(corr[zero_idx]))
-    best_score = float(abs(corr[best_idx]))
-
-    if best_lag == 0:
-        return 0
-    if best_score < _ALIGNMENT_ABSOLUTE_MIN:
-        return 0
-    if best_score <= zero_score * _ALIGNMENT_RELATIVE_MARGIN:
-        return 0
-
-    estimated_samples = best_lag * stride
-    return estimated_samples if abs(estimated_samples) >= stride else 0
 
 
 def _analyze_windows(

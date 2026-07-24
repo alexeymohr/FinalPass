@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
-from scipy.signal import correlate
 
+from .analysis_common import estimate_offset_samples
 from .analysis_window import prepare_analysis_window
 from .audio_io import AudioFile, channel_config_from_count
 from .errors import (
@@ -34,8 +34,6 @@ NULL_DBFS_FLOOR = -300.0
 
 _NULL_LINEAR_FLOOR = 10 ** (NULL_DBFS_FLOOR / 20.0)
 _NULL_FLAG_DETAIL = "Residual exceeded threshold after summing stems against printmaster."
-_ALIGNMENT_MAX_LAG_SECONDS = 0.25
-_ALIGNMENT_TARGET_POINTS = 12000
 _ALIGNMENT_RELATIVE_MARGIN = 1.01
 
 
@@ -151,6 +149,16 @@ def _validate_inputs(printmaster: AudioFile, stems: list[AudioFile]) -> None:
             )
 
 
+def _estimate_offset_samples(reference: np.ndarray, candidate: np.ndarray, sample_rate: int) -> int:
+    """Null's alignment call: multichannel inputs, no absolute-score floor."""
+    return estimate_offset_samples(
+        np.mean(reference, axis=1),
+        np.mean(candidate, axis=1),
+        sample_rate=sample_rate,
+        relative_margin=_ALIGNMENT_RELATIVE_MARGIN,
+    )
+
+
 def _detect_alignment_error(printmaster: np.ndarray, stems: list[np.ndarray], stem_sum: np.ndarray, sample_rate: int) -> None:
     lag = _estimate_offset_samples(printmaster, stem_sum, sample_rate)
     if lag != 0:
@@ -165,47 +173,6 @@ def _detect_alignment_error(printmaster: np.ndarray, stems: list[np.ndarray], st
                 f"Detected a constant global offset of approximately {stem_lag} samples "
                 f"between the printmaster and stem {index}. Phase 3 does not auto-align null inputs."
             )
-
-
-def _estimate_offset_samples(printmaster: np.ndarray, stem_sum: np.ndarray, sample_rate: int) -> int:
-    n_samples = int(printmaster.shape[0])
-    if n_samples < 2:
-        return 0
-
-    stride = max(1, n_samples // _ALIGNMENT_TARGET_POINTS)
-    pm = np.mean(printmaster, axis=1)[::stride]
-    summed = np.mean(stem_sum, axis=1)[::stride]
-    pm = pm - float(np.mean(pm))
-    summed = summed - float(np.mean(summed))
-
-    pm_norm = float(np.linalg.norm(pm))
-    summed_norm = float(np.linalg.norm(summed))
-    if pm_norm == 0.0 or summed_norm == 0.0:
-        return 0
-
-    corr = correlate(pm / pm_norm, summed / summed_norm, mode="full", method="fft")
-    lags = np.arange(-len(summed) + 1, len(pm))
-    max_lag = max(1, int(round(min(_ALIGNMENT_MAX_LAG_SECONDS * sample_rate, n_samples - 1) / stride)))
-    mask = np.abs(lags) <= max_lag
-    corr = corr[mask]
-    lags = lags[mask]
-
-    if corr.size == 0:
-        return 0
-
-    best_idx = int(np.argmax(np.abs(corr)))
-    best_lag = int(lags[best_idx])
-    zero_idx = int(np.where(lags == 0)[0][0])
-    zero_score = float(abs(corr[zero_idx]))
-    best_score = float(abs(corr[best_idx]))
-
-    if best_lag == 0:
-        return 0
-    if best_score <= zero_score * _ALIGNMENT_RELATIVE_MARGIN:
-        return 0
-
-    estimated_samples = best_lag * stride
-    return estimated_samples if abs(estimated_samples) >= stride else 0
 
 
 def _window_residual_rms(

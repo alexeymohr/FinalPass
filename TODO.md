@@ -205,6 +205,30 @@ Features outside the current phase's spec go here, not into the code.
   proving a mono FX file is a fold-down of the stereo FX). Phase 8A is
   within-one-asset only, per the spec's stated non-goals.
 
+## Phase 8B — design decisions
+
+- **The derived signal is a plain in-phase Lo/Ro-style fold-down.** Not an
+  Lt/Rt matrix encode, and no decoder of any kind is emulated. Default gains
+  are the published derivation values (center and surrounds at -3 dB, LFE
+  omitted). This keeps the pass defensible and clear of trademarked process
+  names.
+- **One verdict from three sub-checks.** Level (untimed integrated-loudness
+  delta), similarity (windowed correlation between the mono sums), and mono
+  compatibility (the delivered stereo's own L/R correlation). Sub-check
+  detail lives in the payload; the summary still counts exactly one check,
+  matching the null/M&E convention.
+- **A discrete stereo mix must pass.** The defaults catch the wrong episode,
+  gross level offsets, sync drift, missing elements, and phase-hostile
+  stereo — not fold-down identity. Verified against the PYL704 delivery and
+  against a deliberately re-balanced discrete fixture.
+- **Constant offsets stay hard failures.** Same stance as Phases 3 and 4; the
+  shared estimator now lives in `analysis_common.py`, but each check keeps
+  its own decision margins because they were tuned on different material.
+- **`FlaggedRegion` literals widened** with `DOWNMIX` plus the
+  `downmix_correlation` / `stereo_correlation` metrics. Backward-compatible
+  for FinalPass reading its own older files; external consumers pinned to the
+  old value sets must update.
+
 ## Future optional artifacts
 
 - `summary.txt` — optional one-page text artifact if it proves useful after HTML and AAF land.

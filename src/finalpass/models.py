@@ -55,8 +55,14 @@ class CheckResult(BaseModel):
 class FlaggedRegion(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    code: Literal["NULL", "ME", "LOUDNESS"]
-    metric: Literal["residual_rms_dbfs", "dialog_bleed_score", "true_peak_dbtp"]
+    code: Literal["NULL", "ME", "LOUDNESS", "DOWNMIX"]
+    metric: Literal[
+        "residual_rms_dbfs",
+        "dialog_bleed_score",
+        "true_peak_dbtp",
+        "downmix_correlation",
+        "stereo_correlation",
+    ]
     value: float
     threshold: float
     start_sample: int
@@ -367,6 +373,72 @@ class NullReport(BaseModel):
     printmaster: AnalysisInputFile
     stems: list[AnalysisInputFile]
     null_test: NullTestResult
+    summary: Summary
+
+
+class DownmixSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    delivered_integrated_lufs: float | None = None
+    derived_integrated_lufs: float | None = None
+    loudness_delta_lu: float | None = None
+    level_pass: bool
+    similarity_windows_total: int
+    similarity_windows_gated_out: int
+    similarity_windows_analyzed: int
+    similarity_windows_flagged: int
+    similarity_min_corr: float | None = None
+    similarity_skipped_reason: str | None = None
+    mono_windows_analyzed: int
+    mono_windows_flagged: int
+    mono_min_corr: float | None = None
+    flagged_regions: int
+
+
+class DownmixCheckResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    _time_reference_samples: int | None = PrivateAttr(default=None)
+    _sample_rate: int | None = PrivateAttr(default=None)
+
+    pass_: bool | None = Field(alias="pass")
+    skipped: bool = False
+    reason: str | None = None
+    # A plain in-phase fold-down. Not an Lt/Rt matrix encode, and not a
+    # decoder emulation of any kind.
+    analysis_signal: Literal["loro_fold_down"]
+    center_db: float
+    surround_db: float
+    lfe_db: float | None = None
+    lfe_lowpass_hz: float
+    window_ms: float
+    hop_ms: float
+    activity_dbfs: float
+    similarity_corr: float
+    mono_corr: float
+    loudness_delta_lu: float
+    summary: DownmixSummary | None = None
+    analysis_window: AnalysisWindow | None = None
+    flags: list[FlaggedRegion] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    errors: list[GroupError] = Field(default_factory=list)
+
+
+class DownmixReport(BaseModel):
+    """Standalone `downmix` command report — `schema_version == 1`."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    finalpass_version: str
+    schema_version: int
+    command: Literal["downmix"]
+    run_id: str
+    run_started_at: str
+    fps: float
+    drop_frame: bool
+    stereo_file: AnalysisInputFile
+    surround_file: AnalysisInputFile
+    downmix_check: DownmixCheckResult
     summary: Summary
 
 

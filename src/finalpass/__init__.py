@@ -11,5 +11,7 @@ ME_SCHEMA_VERSION = 4
 ALL_SCHEMA_VERSION = 9
 # Phase 8A `channels` is a new report shape, born drop-frame aware.
 CHANNELS_SCHEMA_VERSION = 1
+# Phase 8B `downmix` is likewise a new shape.
+DOWNMIX_SCHEMA_VERSION = 1
 # Back-compat alias used by the Phase 1 loudness path. Do not bump.
 SCHEMA_VERSION = LOUDNESS_SCHEMA_VERSION

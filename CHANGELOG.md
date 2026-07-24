@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Phase 8B — downmix consistency
+
+- New `finalpass downmix` command: derives a Lo/Ro-style fold-down from a
+  5.1/7.1 master and compares it against the delivered 2.0. One verdict from
+  three sub-checks — integrated-loudness delta (untimed), windowed similarity
+  between the mono sums, and the delivered stereo's own mono compatibility.
+  `schema_version: 1`, born drop-frame aware.
+- Default fold gains are the published derivation values (center and
+  surrounds at -3 dB, LFE omitted unless `--lfe-db` is given). This is a
+  plain in-phase fold-down: not an Lt/Rt matrix encode, and no decoder is
+  emulated. An `LtRt`-labelled delivery gets an explanatory note.
+- Both timed lanes export to AAF with the marker labels `downmix mismatch`
+  and `mono compatibility`. `FlaggedRegion.code` gains `"DOWNMIX"` and
+  `metric` gains `downmix_correlation` / `stereo_correlation`; consumers
+  pinned to the old value sets must update.
+- A discrete stereo mix that is not a mechanical fold-down passes at the
+  default thresholds by design; a constant offset between the inputs remains
+  a hard alignment failure.
+- The near-duplicate offset estimator behind null and M&E now lives once in
+  `analysis_common.py` alongside the shared windowing and pairwise
+  statistics. Each check keeps its own decision margins, which were tuned
+  against different material and are not interchangeable.
+
 ### Phase 8A — channel integrity
 
 - New `finalpass channels` command: per-channel diagnostics on interleaved

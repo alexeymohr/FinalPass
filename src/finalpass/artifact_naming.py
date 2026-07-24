@@ -8,9 +8,9 @@ from pathlib import Path
 import re
 from typing import Iterable
 
-from .models import AllReport, ChannelsReport, MEReport, NullReport, Report
+from .models import AllReport, ChannelsReport, DownmixReport, MEReport, NullReport, Report
 
-NamedReport = Report | NullReport | MEReport | AllReport | ChannelsReport
+NamedReport = Report | NullReport | MEReport | AllReport | ChannelsReport | DownmixReport
 
 
 @dataclass(frozen=True)
@@ -160,6 +160,12 @@ def _report_source_paths(report: NamedReport) -> list[str]:
         return [
             source_path
             for item in (report.me_file, report.dx_file)
+            for source_path in (item.source_paths or [item.path])
+        ]
+    if isinstance(report, DownmixReport):
+        return [
+            source_path
+            for item in (report.stereo_file, report.surround_file)
             for source_path in (item.source_paths or [item.path])
         ]
     return [

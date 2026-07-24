@@ -24,6 +24,8 @@ This repository is a `0.1.0` release candidate. The implemented commands are:
   loudness, null, and M&E checks.
 - `finalpass channels` - per-channel integrity diagnostics on one or more
   logical assets.
+- `finalpass downmix` - compare a delivered 2.0 against a fold-down derived
+  from the matching 5.1/7.1 master.
 - `finalpass wizard` - guide a user through folder-first analysis and optional
   `FinalPass Prep/` curation.
 - `finalpass specs list` and `finalpass specs show` - inspect bundled spec
@@ -56,6 +58,8 @@ FinalPass currently supports:
 - Standalone and automatic M&E dialogue-bleed checks.
 - Standalone channel-integrity diagnostics: dead legs, duplicated channels,
   polarity inversion, broadband LFE content, and channel-imbalance notes.
+- Standalone downmix-consistency checks between a delivered 2.0 and its
+  surround master: loudness delta, windowed similarity, mono compatibility.
 - Program-window comparison logic for null and M&E checks when files differ only
   by pre-program or tail MOS.
 - Self-contained HTML reports rendered from the persisted report model.
@@ -158,6 +162,13 @@ uv run finalpass channels <file-or-seed>... [--out <dir>] [--json-only] [--fps <
                                            [--duplicate-null-db <db>] [--polarity-corr <value>]
                                            [--lfe-cutoff-hz <hz>] [--lfe-energy-ratio <value>]
                                            [--imbalance-db <db>] [--fail-dual-mono]
+uv run finalpass downmix <stereo> <surround> [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
+                                            [--center-db <db>] [--surround-db <db>]
+                                            [--lfe-db <db>] [--lfe-lowpass-hz <hz>]
+                                            [--window-ms <ms>] [--hop-ms <ms>]
+                                            [--activity-dbfs <dbfs>]
+                                            [--similarity-corr <value>] [--mono-corr <value>]
+                                            [--loudness-delta-lu <lu>]
 uv run finalpass all <folder> --spec <name-or-yaml> [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
                                                     [--patterns <config.yaml>] [--include-unclassified]
                                                     [--null-window-ms <ms>] [--null-hop-ms <ms>]
@@ -362,6 +373,9 @@ Exportable timed flags:
 - `all`: `groups[].files[].flags[]`, `groups[].null_test.flags[]`, and
   `groups[].me_check.flags[]`.
 
+- Standalone `downmix`: `downmix_check.flags[]` for both timed lanes, with
+  marker labels `downmix mismatch` and `mono compatibility`.
+
 Channel-integrity findings are never exported: they describe a channel, not a
 moment on the timeline, so `finalpass channels` writes `report.json` and
 `report.html` only — even when it fails.
@@ -476,6 +490,44 @@ FinalPass-synthesized silence. All LFE findings are suppressed for that asset
 and the report records `lfe_synthesized_from_5_0_source`. A mono asset reports
 its pairwise checks as structurally not applicable and passes.
 
+### Downmix Consistency
+
+`finalpass downmix` takes a delivered 2.0 and the matching 5.1/7.1 master,
+derives a fold-down from the surround in memory, and compares the two:
+
+```text
+L' = L + g_c*C + g_s*Ls [+ g_s*Lss]
+R' = R + g_c*C + g_s*Rs [+ g_s*Rss]
+g_c = --center-db    (default -3 dB)
+g_s = --surround-db  (default -3 dB)
+LFE omitted unless --lfe-db is supplied, in which case it is low-passed first
+```
+
+The default gains are the published derivation values used across the
+industry. There is no clipping, normalization, limiting, or phase
+manipulation, and the derived signal is never written to disk.
+
+**This is a plain in-phase fold-down. It is not an Lt/Rt matrix encode, and
+FinalPass does not emulate any matrix decoder.** When the delivered stereo is
+labelled `LtRt`, the report adds a note saying that matrix-encoded surround
+content can legitimately depress similarity in surround-heavy passages.
+
+Three sub-checks contribute to one verdict:
+
+- **Level** (untimed) - integrated loudness of both signals over the
+  comparison window; fails when the difference exceeds `--loudness-delta-lu`.
+- **Similarity** (timed) - per-window correlation between the two mono sums;
+  windows below `--similarity-corr` merge into flagged regions.
+- **Mono compatibility** (timed) - per-window L/R correlation of the
+  *delivered* stereo alone; windows below `--mono-corr` merge into their own
+  flagged regions.
+
+A discrete stereo mix that is not a mechanical fold-down is normal and passes
+at the default thresholds. This check is tuned to catch the wrong episode, a
+gross level offset, sync drift between layouts, missing elements, and
+phase-hostile stereo - not to demand fold-down identity. A constant offset
+between the two inputs is a hard alignment failure, never auto-corrected.
+
 ### Program-Window Comparison
 
 Null and M&E comparisons often encounter files with different head builds or MOS
@@ -576,6 +628,7 @@ Current schema versions:
 - `me`: `schema_version: 4`
 - `all`: `schema_version: 9`
 - `channels`: `schema_version: 1`
+- `downmix`: `schema_version: 1`
 
 The version bumps from 3/3/3/8 add one envelope field: `drop_frame: bool`,
 recorded beside `fps`. Timecode strings persist in the selected counting mode

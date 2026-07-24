@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TypeAlias
 
 from .errors import AAFExportError
-from .models import AllReport, ChannelsReport, FlaggedRegion, Group, MEReport, NullReport, Report
+from .models import AllReport, ChannelsReport, DownmixReport, FlaggedRegion, Group, MEReport, NullReport, Report
 from .presentation import logical_asset_display_name
 from .timecode import TimecodeMode, sample_to_edit_units, timecode_mode
 
@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover - explicit tool error path
     component_module = None
     AAFRational = None
 
-ExportableReport: TypeAlias = Report | NullReport | MEReport | AllReport | ChannelsReport
+ExportableReport: TypeAlias = Report | NullReport | MEReport | AllReport | ChannelsReport | DownmixReport
 
 EXPORT_TRACK_NAME = "FinalPass Markers"
 LOUDNESS_MARKER_MIN_SPACING_SECONDS = 1.0
@@ -88,6 +88,15 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                     sample_rate=report.me_file.sample_rate,
                     mode=mode,
                     time_reference_samples=_time_reference_samples(report.me_file),
+                )
+            )
+    elif isinstance(report, DownmixReport):
+        candidates.extend(
+                _candidates_from_flags(
+                    flags=report.downmix_check.flags,
+                    sample_rate=report.stereo_file.sample_rate,
+                    mode=mode,
+                    time_reference_samples=_time_reference_samples(report.stereo_file),
                 )
             )
     else:
@@ -316,6 +325,12 @@ def _short_failure_label(candidate: MarkerCandidate) -> str:
         return "dialog bleed"
     if candidate.code == "LOUDNESS":
         return "true peak over"
+    if candidate.code == "DOWNMIX":
+        return (
+            "mono compatibility"
+            if candidate.metric == "stereo_correlation"
+            else "downmix mismatch"
+        )
     return candidate.metric.replace("_", " ").lower()
 
 

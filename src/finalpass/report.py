@@ -15,7 +15,7 @@ from typing import TypeAlias
 from jinja2 import Environment, FunctionLoader, TemplateNotFound, select_autoescape
 
 from .errors import ReportRenderError
-from .models import AllReport, ChannelsReport, FileReport, FlaggedRegion, Group, MEReport, NullReport, Report
+from .models import AllReport, ChannelsReport, DownmixReport, FileReport, FlaggedRegion, Group, MEReport, NullReport, Report
 from .presentation import (
     blocking_issue_count,
     display_group_name,
@@ -30,7 +30,7 @@ from .presentation import (
     verdict_explainer,
 )
 
-RenderableReport: TypeAlias = Report | NullReport | MEReport | AllReport | ChannelsReport
+RenderableReport: TypeAlias = Report | NullReport | MEReport | AllReport | ChannelsReport | DownmixReport
 
 _TEMPLATE_PACKAGE = "finalpass.templates"
 _SVG_VIEWBOX_WIDTH = 1000.0
@@ -149,6 +149,8 @@ def _title_for_report(report: RenderableReport) -> str:
         return "M&E Dialogue-Bleed Report"
     if isinstance(report, ChannelsReport):
         return "Channel Integrity Report"
+    if isinstance(report, DownmixReport):
+        return "Downmix Consistency Report"
     return "Folder QC Report"
 
 
@@ -162,6 +164,8 @@ def _subtitle_for_report(report: RenderableReport) -> str:
     if isinstance(report, ChannelsReport):
         count = len(report.assets)
         return f"{count} asset{'' if count == 1 else 's'}"
+    if isinstance(report, DownmixReport):
+        return logical_asset_display_name(report.stereo_file)
     return ""
 
 
@@ -230,6 +234,12 @@ def _source_paths_for_report(report: RenderableReport) -> list[str]:
             source_path
             for asset in report.assets
             for source_path in _source_paths_for_item(asset)
+        ]
+    if isinstance(report, DownmixReport):
+        return [
+            source_path
+            for item in (report.stereo_file, report.surround_file)
+            for source_path in _source_paths_for_item(item)
         ]
     return []
 

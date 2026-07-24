@@ -8,6 +8,7 @@ This regenerates the deterministic example deliveries, then runs:
 
 - a failing standalone ``me`` command (timed flags + AAF)
 - a failing standalone ``channels`` command (untimed findings, never an AAF)
+- a ``downmix`` command over the S01E04 5.1/LtRt pair (timed flags + AAF)
 - the integrated ``all`` command (JSON + HTML + conditional AAF)
 
 Outputs land under ``examples/out/`` by default.
@@ -151,6 +152,25 @@ def main() -> None:
         expected_exit=1,
     )
     _assert_artifacts(channels_out, expect_aaf=False)
+
+    # The example S01E04 stereo PM is an independently generated mix, not a
+    # fold-down of the 5.1 PM, so this pair legitimately fails on level and
+    # similarity. Downmix flags are timed, so this run does write an AAF.
+    downmix_out = out_root / "downmix_failing"
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "finalpass.cli",
+            "downmix",
+            str(split_root / "SHOW_S01E04_Comp_LtRt.L.wav"),
+            str(split_root / "SHOW_S01E04_Comp_5.1.L.wav"),
+            "--out",
+            str(downmix_out),
+        ],
+        expected_exit=1,
+    )
+    _assert_artifacts(downmix_out, expect_aaf=True)
 
     all_out = out_root / "all"
     _run(

@@ -536,3 +536,77 @@ def build_head_tone_stereo(
     data[:tone_samples, 0] = tone
     data[:tone_samples, 1] = tone
     return data
+
+
+# --- Phase 8B downmix fixtures ----------------------------------------------
+
+DOWNMIX_CENTER_GAIN = 10 ** (-3.0 / 20.0)
+DOWNMIX_SURROUND_GAIN = 10 ** (-3.0 / 20.0)
+
+
+def build_surround_program(
+    *,
+    seconds: float = SECONDS,
+    seed: int = SEED,
+    sr: int = SR,
+    layout: str = "5.1",
+) -> np.ndarray:
+    """A 5.1/7.1 program with decorrelated legs and a band-limited LFE."""
+    n = int(round(seconds * sr))
+    rng = np.random.default_rng(seed)
+    channels = 6 if layout == "5.1" else 8
+    data = rng.standard_normal((n, channels)) * 0.08
+    data[:, 3] = band_limited_lfe(n, seed + 1, sr=sr)
+    return data
+
+
+def fold_down_of(surround: np.ndarray) -> np.ndarray:
+    """The Lo/Ro-style fold-down FinalPass derives, at default gains."""
+    left = surround[:, 0] + DOWNMIX_CENTER_GAIN * surround[:, 2] + DOWNMIX_SURROUND_GAIN * surround[:, 4]
+    right = surround[:, 1] + DOWNMIX_CENTER_GAIN * surround[:, 2] + DOWNMIX_SURROUND_GAIN * surround[:, 5]
+    if surround.shape[1] == 8:
+        left = left + DOWNMIX_SURROUND_GAIN * surround[:, 6]
+        right = right + DOWNMIX_SURROUND_GAIN * surround[:, 7]
+    return np.column_stack([left, right])
+
+
+def build_downmix_pair(
+    variant: str = "exact",
+    *,
+    seconds: float = SECONDS,
+    seed: int = SEED,
+    sr: int = SR,
+    level_offset_db: float = 4.0,
+    invert_region: tuple[float, float] = (4.0, 6.0),
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return (delivered_stereo, surround) for one downmix scenario.
+
+    Variants: ``exact`` (the mechanical fold), ``discrete`` (a related but
+    independently balanced stereo), ``unrelated`` (a different programme),
+    ``level_offset`` (the fold, gain-shifted), ``inverted_region`` (the fold
+    with its right leg flipped over one span).
+    """
+    surround = build_surround_program(seconds=seconds, seed=seed, sr=sr)
+    fold = fold_down_of(surround)
+
+    if variant == "exact":
+        return fold, surround
+    if variant == "level_offset":
+        return fold * (10 ** (level_offset_db / 20.0)), surround
+    if variant == "discrete":
+        # Same programme, re-balanced by hand: different centre and surround
+        # proportions, which is what a real discrete stereo mix looks like.
+        left = surround[:, 0] * 1.1 + 0.5 * surround[:, 2] + 0.3 * surround[:, 4]
+        right = surround[:, 1] * 1.1 + 0.5 * surround[:, 2] + 0.3 * surround[:, 5]
+        return np.column_stack([left, right]), surround
+    if variant == "unrelated":
+        rng = np.random.default_rng(seed + 999)
+        n = surround.shape[0]
+        return rng.standard_normal((n, 2)) * 0.1, surround
+    if variant == "inverted_region":
+        delivered = fold.copy()
+        start = int(round(invert_region[0] * sr))
+        end = int(round(invert_region[1] * sr))
+        delivered[start:end, 1] = -delivered[start:end, 1]
+        return delivered, surround
+    raise ValueError(f"unknown downmix variant {variant!r}")

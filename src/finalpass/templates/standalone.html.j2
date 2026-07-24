@@ -186,5 +186,80 @@
   {% for asset in report.assets %}
     {{ macros.channel_asset(asset) }}
   {% endfor %}
+
+  {% elif command == "downmix" %}
+  {% set check = report.downmix_check %}
+  <section class="card">
+    <h2>Downmix Summary</h2>
+    <p class="muted">
+      The derived signal is a plain in-phase Lo/Ro-style fold-down. It is not an
+      Lt/Rt matrix encode, and FinalPass does not emulate any matrix decoder.
+    </p>
+    {{ macros.summary_stats([
+      ("Overall", macros.badge(report.summary.overall_pass|verdict_label(false), report.summary.overall_pass|verdict_class(false))),
+      ("Delivered 2.0", display_label(report.stereo_file)),
+      ("Surround master", display_label(report.surround_file)),
+      ("Analysis signal", humanize_code(check.analysis_signal)),
+      ("Fold-down gains", "center %+.1f dB / surround %+.1f dB"|format(check.center_db, check.surround_db)),
+      ("LFE", "omitted" if check.lfe_db is none else "%+.1f dB below %.0f Hz"|format(check.lfe_db, check.lfe_lowpass_hz)),
+      ("Window / hop", "%.0f ms / %.0f ms"|format(check.window_ms, check.hop_ms)),
+      ("Thresholds", "similarity %.2f / mono %.2f / level %.1f LU"|format(check.similarity_corr, check.mono_corr, check.loudness_delta_lu)),
+    ]) }}
+    {% if check.notes %}
+    <ul class="muted">
+      {% for note in check.notes %}
+      <li>{{ humanize_code(note) }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Input metadata</h2>
+    <div class="section-stack">
+      {% for item, label in [(report.stereo_file, "Delivered 2.0"), (report.surround_file, "Surround master")] %}
+      <div class="card card-muted">
+        <h3>{{ label }} — {{ display_label(item) }}</h3>
+        <p class="muted">{{ source_summary(item) }}</p>
+        <div class="meta-grid">
+          <div class="stat"><div class="stat-label">File</div><div class="stat-value mono">{{ item.path|basename }}</div></div>
+          <div class="stat"><div class="stat-label">Sample rate</div><div class="stat-value">{{ item.sample_rate }} Hz</div></div>
+          <div class="stat"><div class="stat-label">Channels</div><div class="stat-value">{{ channel_display(item.channel_config_actual, item.channel_count) }}</div></div>
+          <div class="stat"><div class="stat-label">Duration</div><div class="stat-value">{{ item.duration_seconds|fmt_seconds(2) }}</div></div>
+        </div>
+        {{ macros.source_provenance(item) }}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if check.summary %}
+  <section class="card">
+    <h2>Analysis Summary</h2>
+    {{ macros.summary_stats([
+      ("Delivered integrated", "%.1f LUFS"|format(check.summary.delivered_integrated_lufs) if check.summary.delivered_integrated_lufs is not none else "—"),
+      ("Derived integrated", "%.1f LUFS"|format(check.summary.derived_integrated_lufs) if check.summary.derived_integrated_lufs is not none else "—"),
+      ("Loudness delta", "%.2f LU"|format(check.summary.loudness_delta_lu) if check.summary.loudness_delta_lu is not none else "—"),
+      ("Level sub-check", macros.badge(check.summary.level_pass|verdict_label(false), check.summary.level_pass|verdict_class(false))),
+      ("Similarity windows", check.summary.similarity_windows_analyzed),
+      ("Similarity flagged", check.summary.similarity_windows_flagged),
+      ("Min similarity", check.summary.similarity_min_corr|fmt_float(3)),
+      ("Mono flagged", check.summary.mono_windows_flagged),
+      ("Min L/R correlation", check.summary.mono_min_corr|fmt_float(3)),
+      ("Flagged regions", check.summary.flagged_regions),
+    ]) }}
+    {% if check.summary.similarity_skipped_reason %}
+    <p class="muted">Similarity: {{ humanize_code(check.summary.similarity_skipped_reason) }}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {{ macros.analysis_window(check.analysis_window) }}
+  {{ macros.flagged_timeline(timeline_lane(check.flags, sample_rate=report.stereo_file.sample_rate, duration_seconds=report.stereo_file.duration_seconds), "Flagged-region timeline") }}
+
+  {% if check.flags %}
+    {{ macros.flagged_table(check.flags, "Min correlation") }}
+  {% endif %}
+  {{ macros.errors_block(check.errors) }}
   {% endif %}
 {% endblock %}

@@ -31,11 +31,24 @@ from .channel_check import (
     DEFAULT_CHANNELS_WINDOW_MS,
     ChannelsTunables,
 )
+from .downmix_check import (
+    DEFAULT_DOWNMIX_ACTIVITY_DBFS,
+    DEFAULT_DOWNMIX_CENTER_DB,
+    DEFAULT_DOWNMIX_HOP_MS,
+    DEFAULT_DOWNMIX_LFE_LOWPASS_HZ,
+    DEFAULT_DOWNMIX_LOUDNESS_DELTA_LU,
+    DEFAULT_DOWNMIX_MONO_CORR,
+    DEFAULT_DOWNMIX_SIMILARITY_CORR,
+    DEFAULT_DOWNMIX_SURROUND_DB,
+    DEFAULT_DOWNMIX_WINDOW_MS,
+    DownmixTunables,
+)
 from .errors import FinalPassError
 from .jobs import (
     WrittenArtifacts,
     run_all as execute_all,
     run_channels as execute_channels,
+    run_downmix as execute_downmix,
     run_loudness as execute_loudness,
     run_me as execute_me,
     run_null as execute_null,
@@ -52,7 +65,7 @@ from .me_check import (
     DEFAULT_ME_WINDOW_MS,
     METunables,
 )
-from .models import AllReport, ChannelAssetResult, ChannelsReport, FileReport, MEReport, NullReport, Report
+from .models import AllReport, ChannelAssetResult, ChannelsReport, DownmixReport, FileReport, MEReport, NullReport, Report
 from .null_test import (
     DEFAULT_NULL_HOP_MS,
     DEFAULT_NULL_THRESHOLD_DBFS,
@@ -350,6 +363,73 @@ def channels_cmd(
     _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_channels_report)
 
 
+@main.command("downmix")
+@click.argument("stereo", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("surround", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
+@click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
+@click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate for flagged-region timecode fields.")
+@click.option("--drop-frame", "drop_frame", is_flag=True, help="Count timecode as SMPTE drop-frame (29.97/59.94 only; HH:MM:SS;FF).")
+@click.option("--center-db", type=float, default=DEFAULT_DOWNMIX_CENTER_DB, show_default=True, help="Center gain into each derived channel.")
+@click.option("--surround-db", type=float, default=DEFAULT_DOWNMIX_SURROUND_DB, show_default=True, help="Gain per surround leg into its side.")
+@click.option("--lfe-db", type=float, default=None, help="Include the LFE at this gain (omitted by default).")
+@click.option("--lfe-lowpass-hz", type=float, default=DEFAULT_DOWNMIX_LFE_LOWPASS_HZ, show_default=True, help="LFE low-pass cutoff when --lfe-db is given.")
+@click.option("--window-ms", type=float, default=DEFAULT_DOWNMIX_WINDOW_MS, show_default=True, help="Similarity / mono-compatibility window size in milliseconds.")
+@click.option("--hop-ms", type=float, default=DEFAULT_DOWNMIX_HOP_MS, show_default=True, help="Similarity / mono-compatibility hop size in milliseconds.")
+@click.option("--activity-dbfs", type=float, default=DEFAULT_DOWNMIX_ACTIVITY_DBFS, show_default=True, help="Windows quieter than this are not compared.")
+@click.option("--similarity-corr", type=float, default=DEFAULT_DOWNMIX_SIMILARITY_CORR, show_default=True, help="Flag windows whose derived-vs-delivered correlation falls below this.")
+@click.option("--mono-corr", type=float, default=DEFAULT_DOWNMIX_MONO_CORR, show_default=True, help="Flag windows whose delivered L/R correlation falls below this.")
+@click.option("--loudness-delta-lu", type=float, default=DEFAULT_DOWNMIX_LOUDNESS_DELTA_LU, show_default=True, help="Fail when the integrated-loudness difference exceeds this.")
+def downmix_cmd(
+    stereo: Path,
+    surround: Path,
+    out_dir: Path,
+    json_only: bool,
+    fps: float,
+    drop_frame: bool,
+    center_db: float,
+    surround_db: float,
+    lfe_db: float | None,
+    lfe_lowpass_hz: float,
+    window_ms: float,
+    hop_ms: float,
+    activity_dbfs: float,
+    similarity_corr: float,
+    mono_corr: float,
+    loudness_delta_lu: float,
+) -> None:
+    _warn_if_drop_frame_rate(fps, drop_frame)
+    try:
+        report, payload, written = _execute_direct_job(
+            runner=lambda: execute_downmix(
+                stereo=stereo,
+                surround=surround,
+                fps=fps,
+                drop_frame=drop_frame,
+                tunables=DownmixTunables(
+                    center_db=center_db,
+                    surround_db=surround_db,
+                    lfe_db=lfe_db,
+                    lfe_lowpass_hz=lfe_lowpass_hz,
+                    window_ms=window_ms,
+                    hop_ms=hop_ms,
+                    activity_dbfs=activity_dbfs,
+                    similarity_corr=similarity_corr,
+                    mono_corr=mono_corr,
+                    loudness_delta_lu=loudness_delta_lu,
+                ),
+            ),
+            message="Running downmix check...",
+            out_dir=out_dir,
+            json_only=json_only,
+        )
+    except FinalPassError as exc:
+        _err_console.print(f"[red]error:[/red] {exc}")
+        sys.exit(2)
+
+    _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_downmix_report)
+
+
 @main.command("all")
 @click.argument("folder", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--spec", "spec_name", required=True, help="Name of a bundled spec or path to a YAML.")
@@ -436,7 +516,7 @@ def _execute_direct_job(
     message: str,
     out_dir: Path,
     json_only: bool,
-) -> tuple[Report | NullReport | MEReport | AllReport | ChannelsReport, str, WrittenArtifacts | None]:
+) -> tuple[Report | NullReport | MEReport | AllReport | ChannelsReport | DownmixReport, str, WrittenArtifacts | None]:
     with processing_spinner(message, stream=_err_console.file, enabled=not json_only):
         report = runner()
         payload = report.model_dump_json(indent=2, by_alias=True)
@@ -447,7 +527,7 @@ def _execute_direct_job(
 
 
 def _finalize_run(
-    report: Report | NullReport | MEReport | AllReport | ChannelsReport,
+    report: Report | NullReport | MEReport | AllReport | ChannelsReport | DownmixReport,
     *,
     payload: str,
     written: WrittenArtifacts | None,
@@ -621,6 +701,68 @@ def _channel_measured_label(finding) -> str:
     if finding.threshold is None:
         return f"{finding.measured:g}"
     return f"{finding.measured:g} vs {finding.threshold:g}"
+
+
+def _render_downmix_report(report: DownmixReport) -> None:
+    check = report.downmix_check
+    meta = Table(title="Downmix Consistency", title_justify="left", show_header=False)
+    meta.add_column("label", style="cyan")
+    meta.add_column("value")
+    meta.add_row("delivered 2.0", logical_asset_display_name(report.stereo_file))
+    meta.add_row("delivered source", source_summary(report.stereo_file))
+    meta.add_row("delivered path", report.stereo_file.path)
+    meta.add_row("surround master", logical_asset_display_name(report.surround_file))
+    meta.add_row("surround source", source_summary(report.surround_file))
+    meta.add_row("surround path", report.surround_file.path)
+    meta.add_row("sample rate", f"{report.stereo_file.sample_rate} Hz")
+    meta.add_row("analysis signal", humanize_code(check.analysis_signal))
+    lfe_label = "omitted" if check.lfe_db is None else f"{check.lfe_db:+.1f} dB below {check.lfe_lowpass_hz:.0f} Hz"
+    meta.add_row(
+        "fold-down gains",
+        f"center {check.center_db:+.1f} dB / surround {check.surround_db:+.1f} dB / LFE {lfe_label}",
+    )
+    meta.add_row("window / hop", f"{check.window_ms:.0f} ms / {check.hop_ms:.0f} ms")
+    meta.add_row(
+        "thresholds",
+        (
+            f"similarity {check.similarity_corr:.2f} / mono {check.mono_corr:.2f} / "
+            f"level {check.loudness_delta_lu:.1f} LU"
+        ),
+    )
+    _out_console.print(meta)
+
+    for note in check.notes:
+        _out_console.print(f"[dim]note:[/dim] {escape(humanize_code(note))}")
+
+    if check.summary is not None:
+        _out_console.print(_downmix_loudness_line(check.summary))
+
+    color = "green" if check.pass_ else "red"
+    verdict = "PASS" if check.pass_ else "FAIL"
+    _out_console.print(f"[{color}]{verdict}[/{color}]")
+
+    for error in check.errors:
+        _out_console.print(f"  [red]{humanize_code(error.type)}:[/red] {error.message}")
+
+    for metric, title in (
+        ("downmix_correlation", "Downmix Similarity Flags"),
+        ("stereo_correlation", "Mono Compatibility Flags"),
+    ):
+        lane = [flag for flag in check.flags if flag.metric == metric]
+        if lane:
+            _out_console.print(_flagged_regions_table(lane, title=title))
+
+
+def _downmix_loudness_line(summary) -> str:
+    delivered = summary.delivered_integrated_lufs
+    derived = summary.derived_integrated_lufs
+    if delivered is None or derived is None or summary.loudness_delta_lu is None:
+        return "[dim]integrated loudness unavailable on this material[/dim]"
+    color = "green" if summary.level_pass else "red"
+    return (
+        f"delivered {delivered:.1f} LUFS / derived {derived:.1f} LUFS / "
+        f"[{color}]\u0394 {summary.loudness_delta_lu:.1f} LU[/{color}]"
+    )
 
 
 def _render_all_report(report: AllReport) -> None:

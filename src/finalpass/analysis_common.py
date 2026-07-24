@@ -13,7 +13,7 @@ checks that own them.
 from __future__ import annotations
 
 import numpy as np
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, correlate, sosfiltfilt
 
 ANALYSIS_DBFS_FLOOR = -300.0
 
@@ -119,3 +119,72 @@ def energy_ratio_above(
     sos = butter(4, cutoff_hz / nyquist, btype="highpass", output="sos")
     high = sosfiltfilt(sos, signal)
     return float(np.dot(high, high) / total_energy)
+
+
+# Alignment estimation. Null, M&E, and downmix all ask the same question — "is
+# this material shifted against its reference?" — and all answer it the same
+# way: hard-fail rather than auto-correct. The decision margins stay with each
+# check, because they were tuned against different material and are not
+# interchangeable.
+ALIGNMENT_MAX_LAG_SECONDS = 0.25
+ALIGNMENT_TARGET_POINTS = 12000
+
+
+def estimate_offset_samples(
+    reference: np.ndarray,
+    candidate: np.ndarray,
+    *,
+    sample_rate: int,
+    relative_margin: float,
+    absolute_min: float | None = None,
+    max_lag_seconds: float = ALIGNMENT_MAX_LAG_SECONDS,
+    target_points: int = ALIGNMENT_TARGET_POINTS,
+) -> int:
+    """Estimate a constant sample offset between two mono signals; 0 if aligned.
+
+    Both signals are decimated to roughly ``target_points`` before a normalized
+    cross-correlation, so cost is bounded by the target rather than by file
+    length. A non-zero lag is only reported when its correlation beats the
+    zero-lag score by ``relative_margin`` — and, when ``absolute_min`` is given,
+    only when the winning score clears that floor as well. Offsets smaller than
+    the decimation stride are not resolvable and read as aligned.
+    """
+    n_samples = int(reference.shape[0])
+    if n_samples < 2:
+        return 0
+
+    stride = max(1, n_samples // target_points)
+    ref = reference[::stride]
+    cand = candidate[::stride]
+    ref = ref - float(np.mean(ref))
+    cand = cand - float(np.mean(cand))
+
+    ref_norm = float(np.linalg.norm(ref))
+    cand_norm = float(np.linalg.norm(cand))
+    if ref_norm == 0.0 or cand_norm == 0.0:
+        return 0
+
+    corr = correlate(ref / ref_norm, cand / cand_norm, mode="full", method="fft")
+    lags = np.arange(-len(cand) + 1, len(ref))
+    max_lag = max(1, int(round(min(max_lag_seconds * sample_rate, n_samples - 1) / stride)))
+    mask = np.abs(lags) <= max_lag
+    corr = corr[mask]
+    lags = lags[mask]
+    if corr.size == 0:
+        return 0
+
+    best_idx = int(np.argmax(np.abs(corr)))
+    best_lag = int(lags[best_idx])
+    zero_idx = int(np.where(lags == 0)[0][0])
+    zero_score = float(abs(corr[zero_idx]))
+    best_score = float(abs(corr[best_idx]))
+
+    if best_lag == 0:
+        return 0
+    if absolute_min is not None and best_score < absolute_min:
+        return 0
+    if best_score <= zero_score * relative_margin:
+        return 0
+
+    estimated_samples = best_lag * stride
+    return estimated_samples if abs(estimated_samples) >= stride else 0
