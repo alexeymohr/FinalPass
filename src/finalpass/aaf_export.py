@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TypeAlias
 
 from .errors import AAFExportError
-from .models import AllReport, FlaggedRegion, Group, MEReport, NullReport, Report
+from .models import AllReport, ChannelsReport, FlaggedRegion, Group, MEReport, NullReport, Report
 from .presentation import logical_asset_display_name
 from .timecode import TimecodeMode, sample_to_edit_units, timecode_mode
 
@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover - explicit tool error path
     component_module = None
     AAFRational = None
 
-ExportableReport: TypeAlias = Report | NullReport | MEReport | AllReport
+ExportableReport: TypeAlias = Report | NullReport | MEReport | AllReport | ChannelsReport
 
 EXPORT_TRACK_NAME = "FinalPass Markers"
 LOUDNESS_MARKER_MIN_SPACING_SECONDS = 1.0
@@ -52,6 +52,10 @@ class MarkerCandidate:
 def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]:
     """Return the timed marker candidates that Phase 6 is allowed to export."""
     candidates: list[MarkerCandidate] = []
+    if isinstance(report, ChannelsReport):
+        # Channel-integrity findings describe a channel, not a moment. Phase 6's
+        # rule stands: no timeline position, no marker, no synthetic AAF.
+        return candidates
     # The envelope persists the run's timecode mode; rebuild it once here so
     # placement and marker labels use exactly what the run was measured with.
     mode = timecode_mode(report.fps, drop_frame=report.drop_frame)

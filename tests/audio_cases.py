@@ -405,3 +405,134 @@ def build_split_group(
             stem_token=role_stem_tokens.get(role),
         )
     return out
+
+
+# --- Phase 8A channel-integrity fixtures ------------------------------------
+#
+# Channel checks need decorrelated content per channel: independent noise is
+# the honest stand-in for a real mix's channel independence.
+
+
+def band_limited_lfe(n_samples: int, seed: int, *, sr: int = SR, cutoff_hz: float = 80.0) -> np.ndarray:
+    """A legitimate LFE leg: noise low-passed well under the broadband cutoff."""
+    rng = np.random.default_rng(seed)
+    sos = butter(4, cutoff_hz / (sr / 2.0), btype="lowpass", output="sos")
+    low = sosfiltfilt(sos, rng.standard_normal(n_samples))
+    peak = float(np.max(np.abs(low)))
+    return (low / peak * 0.3) if peak > 0 else low
+
+
+def build_clean_51(
+    *,
+    seconds: float = SECONDS,
+    seed: int = SEED,
+    sr: int = SR,
+) -> np.ndarray:
+    """Six decorrelated legs in SMPTE order with a band-limited LFE."""
+    n = int(round(seconds * sr))
+    rng = np.random.default_rng(seed)
+    data = rng.standard_normal((n, 6)) * 0.1
+    data[:, 3] = band_limited_lfe(n, seed + 1, sr=sr)
+    return data
+
+
+def build_fake_51(*, seconds: float = SECONDS, seed: int = SEED, sr: int = SR) -> np.ndarray:
+    """A stereo pair smeared across the 5.1 slots — the classic fake surround."""
+    n = int(round(seconds * sr))
+    rng = np.random.default_rng(seed)
+    left = rng.standard_normal(n) * 0.1
+    right = rng.standard_normal(n) * 0.1
+    data = np.zeros((n, 6))
+    data[:, 0] = left
+    data[:, 1] = right
+    data[:, 2] = left
+    data[:, 3] = band_limited_lfe(n, seed + 1, sr=sr)
+    data[:, 4] = left
+    data[:, 5] = right
+    return data
+
+
+def build_dead_leg_51(
+    *,
+    leg: str = "Ls",
+    seconds: float = SECONDS,
+    seed: int = SEED,
+    sr: int = SR,
+) -> np.ndarray:
+    """A normal 5.1 with one leg silenced."""
+    data = build_clean_51(seconds=seconds, seed=seed, sr=sr)
+    data[:, SPLIT_LEG_ORDERS["5.1"].index(leg)] = 0.0
+    return data
+
+
+def build_polarity_flip(
+    *,
+    layout: str = "stereo",
+    seconds: float = SECONDS,
+    seed: int = SEED,
+    sr: int = SR,
+) -> np.ndarray:
+    """A canonical pair whose right member is polarity-inverted."""
+    n = int(round(seconds * sr))
+    if layout == "stereo":
+        rng = np.random.default_rng(seed)
+        left = rng.standard_normal(n) * 0.1
+        return np.column_stack([left, -left])
+    data = build_clean_51(seconds=seconds, seed=seed, sr=sr)
+    data[:, 5] = -data[:, 4]
+    return data
+
+
+def build_film_order_51(*, seconds: float = SECONDS, seed: int = SEED, sr: int = SR) -> np.ndarray:
+    """Film-order legs (L C R Ls Rs LFE) laid into a SMPTE-ordered container.
+
+    Read as SMPTE, the LFE slot holds a full-range surround leg — the
+    fingerprint this check exists to catch.
+    """
+    n = int(round(seconds * sr))
+    rng = np.random.default_rng(seed)
+    film = [rng.standard_normal(n) * 0.1 for _ in range(5)]
+    lfe = band_limited_lfe(n, seed + 1, sr=sr)
+    # L C R Ls Rs LFE written into the six SMPTE slots without remapping.
+    return np.column_stack([film[0], film[1], film[2], film[3], film[4], lfe])
+
+
+def build_dual_mono(
+    *,
+    seconds: float = SECONDS,
+    seed: int = SEED,
+    sr: int = SR,
+    right_gain: float = 1.0,
+    dither_lsb: float | None = None,
+) -> np.ndarray:
+    """One signal on both legs, optionally level-scaled or dither-separated."""
+    n = int(round(seconds * sr))
+    rng = np.random.default_rng(seed)
+    left = rng.standard_normal(n) * 0.1
+    right = left * right_gain
+    if dither_lsb is not None:
+        right = right + rng.standard_normal(n) * dither_lsb
+    return np.column_stack([left, right])
+
+
+def build_head_tone_stereo(
+    *,
+    seconds: float = SECONDS,
+    tone_seconds: float = 2.0,
+    seed: int = SEED,
+    sr: int = SR,
+) -> np.ndarray:
+    """Identical head tone on both legs, then genuinely decorrelated program.
+
+    A whole-file correlation would call this dual-mono; a windowed median
+    must not.
+    """
+    n = int(round(seconds * sr))
+    rng = np.random.default_rng(seed)
+    data = np.column_stack([rng.standard_normal(n) * 0.1, rng.standard_normal(n) * 0.1])
+    tone_samples = int(round(tone_seconds * sr))
+    t = np.arange(tone_samples) / sr
+    tone = 0.2 * np.sin(2 * np.pi * 1000.0 * t)
+    data[:tone_samples, 0] = tone
+    data[:tone_samples, 1] = tone
+    return data

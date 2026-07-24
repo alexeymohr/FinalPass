@@ -10,6 +10,7 @@ import tempfile
 
 from . import (
     ALL_SCHEMA_VERSION,
+    CHANNELS_SCHEMA_VERSION,
     LOUDNESS_SCHEMA_VERSION,
     ME_SCHEMA_VERSION,
     NULL_SCHEMA_VERSION,
@@ -25,8 +26,8 @@ from .all_assets import (
     read_classified_audio,
 )
 from .audio_io import AudioFile
+from .channel_check import ChannelsTunables, analyze_channels
 from .classify import load_config
-from .group_plan import preferred_auto_null_plan
 from .errors import (
     AAFExportError,
     AlignmentError,
@@ -40,12 +41,16 @@ from .errors import (
     SampleRateMismatchError,
     UnsupportedChannelConfigError,
 )
+from .group_plan import preferred_auto_null_plan
 from .loudness import check, measure, true_peak_over_flags
 from .models import (
     AllReport,
     AllSummary,
     AssetInventoryEntry,
     AutoNullTestResult,
+    ChannelAssetResult,
+    ChannelFinding,
+    ChannelsReport,
     DiscoveryIssue,
     FileReport,
     FileRole,
@@ -311,6 +316,100 @@ def run_me(
     )
 
 
+def run_channels(
+    *,
+    files: tuple[Path, ...],
+    fps: float,
+    drop_frame: bool = False,
+    tunables: ChannelsTunables = ChannelsTunables(),
+) -> ChannelsReport:
+    """Analyse channel integrity for each input asset.
+
+    Findings are untimed, so this report never produces AAF markers.
+    """
+    _resolve_timecode_mode(fps, drop_frame=drop_frame)
+    results: list[ChannelAssetResult] = []
+    for path in files:
+        resolved = resolve_standalone_asset(path)
+        logical_asset = resolved.logical_asset
+        audio = resolved.audio
+        analysis = analyze_channels(
+            audio,
+            member_legs=list(logical_asset.member_legs),
+            channel_config=logical_asset.channel_config_actual,
+            tunables=tunables,
+        )
+        failed = any(
+            finding.severity == "fail" and not finding.skipped
+            for finding in analysis.findings
+        )
+        results.append(_attach_time_reference(
+            ChannelAssetResult(
+                path=str(logical_asset.canonical_path),
+                sample_rate=audio.sample_rate,
+                bit_depth=audio.bit_depth,
+                channel_count=audio.channel_count,
+                channel_config_actual=logical_asset.channel_config_actual,
+                duration_seconds=round(audio.duration_seconds, 3),
+                source_kind=logical_asset.source_kind,
+                source_paths=[str(item) for item in logical_asset.source_paths],
+                member_legs=list(logical_asset.member_legs),
+                presentation_label=logical_asset.presentation_label,
+                **{"pass": not failed},
+                skipped=False,
+                reason=None,
+                window_ms=tunables.window_ms,
+                hop_ms=tunables.hop_ms,
+                activity_dbfs=tunables.activity_dbfs,
+                silence_dbfs=tunables.silence_dbfs,
+                duplicate_null_db=tunables.duplicate_null_db,
+                polarity_corr=tunables.polarity_corr,
+                lfe_cutoff_hz=tunables.lfe_cutoff_hz,
+                lfe_energy_ratio=tunables.lfe_energy_ratio,
+                imbalance_db=tunables.imbalance_db,
+                fail_dual_mono=tunables.fail_dual_mono,
+                findings=[
+                    ChannelFinding(
+                        kind=finding.kind,
+                        severity=finding.severity,
+                        channels=list(finding.channels),
+                        measured=finding.measured,
+                        threshold=finding.threshold,
+                        skipped=finding.skipped,
+                        reason=finding.reason,
+                        detail=finding.detail,
+                    )
+                    for finding in analysis.findings
+                ],
+                notes=list(analysis.notes),
+                errors=[],
+            ),
+            audio.time_reference_samples,
+        ))
+
+    passed = sum(1 for result in results if result.pass_ is True)
+    failed_count = sum(1 for result in results if result.pass_ is False)
+    skipped = sum(1 for result in results if result.skipped)
+    now, run_id = _run_timestamp()
+    return ChannelsReport(
+        finalpass_version=__version__,
+        schema_version=CHANNELS_SCHEMA_VERSION,
+        command="channels",
+        run_id=run_id,
+        run_started_at=now.isoformat().replace("+00:00", "Z"),
+        fps=fps,
+        drop_frame=drop_frame,
+        assets=results,
+        summary=Summary(
+            total_checks=len(results),
+            passed=passed,
+            failed=failed_count,
+            skipped=skipped,
+            overall_pass=failed_count == 0,
+        ),
+    )
+
+
 def run_all(
     *,
     folder: Path,
@@ -566,7 +665,7 @@ def run_all_family_from_scan(
 
 def write_report_artifacts(
     *,
-    report: Report | NullReport | MEReport | AllReport,
+    report: Report | NullReport | MEReport | AllReport | ChannelsReport,
     payload: str,
     out_dir: Path,
 ) -> WrittenArtifacts:

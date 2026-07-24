@@ -9,5 +9,7 @@ LOUDNESS_SCHEMA_VERSION = 4
 NULL_SCHEMA_VERSION = 4
 ME_SCHEMA_VERSION = 4
 ALL_SCHEMA_VERSION = 9
+# Phase 8A `channels` is a new report shape, born drop-frame aware.
+CHANNELS_SCHEMA_VERSION = 1
 # Back-compat alias used by the Phase 1 loudness path. Do not bump.
 SCHEMA_VERSION = LOUDNESS_SCHEMA_VERSION

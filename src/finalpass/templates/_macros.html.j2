@@ -230,3 +230,72 @@
   </table>
 </section>
 {%- endmacro %}
+
+{% macro channel_findings_table(findings) -%}
+  {% if findings %}
+  <table>
+    <thead>
+      <tr>
+        <th>Finding</th>
+        <th>Severity</th>
+        <th>Channels</th>
+        <th>Measured</th>
+        <th>Threshold</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for finding in findings %}
+      <tr>
+        <td>{{ humanize_code(finding.kind) }}</td>
+        <td>
+          {% if finding.skipped %}
+            {{ badge("SKIPPED", "badge-skipped") }}
+          {% elif finding.severity == "fail" %}
+            {{ badge("FAIL", "badge-fail") }}
+          {% else %}
+            {{ badge("INFO", "badge-skipped") }}
+          {% endif %}
+        </td>
+        <td>{{ finding.channels|join(", ") if finding.channels else "—" }}</td>
+        <td>{{ finding.measured if finding.measured is not none else "—" }}</td>
+        <td>{{ finding.threshold if finding.threshold is not none else "—" }}</td>
+        <td>
+          {{ finding.detail }}
+          {% if finding.skipped and finding.reason %}
+            <span class="muted">({{ humanize_code(finding.reason) }})</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No channel integrity findings.</p>
+  {% endif %}
+{%- endmacro %}
+
+{% macro channel_asset(asset) -%}
+<section class="card">
+  <h2>{{ display_label(asset) }}</h2>
+  <p class="muted">{{ source_summary(asset) }}</p>
+  {{ summary_stats([
+    ("Verdict", badge(asset.pass_|verdict_label(asset.skipped), asset.pass_|verdict_class(asset.skipped))),
+    ("Layout", channel_display(asset.channel_config_actual, asset.channel_count)),
+    ("Sample rate", "%d Hz"|format(asset.sample_rate)),
+    ("Bit depth", "%d-bit"|format(asset.bit_depth)),
+    ("Duration", asset.duration_seconds|fmt_seconds(1)),
+    ("Window / hop", "%.0f ms / %.0f ms"|format(asset.window_ms, asset.hop_ms)),
+  ]) }}
+  {% if asset.notes %}
+  <ul class="muted">
+    {% for note in asset.notes %}
+    <li>{{ humanize_code(note) }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {{ source_provenance(asset) }}
+  {{ channel_findings_table(asset.findings) }}
+  {{ errors_block(asset.errors) }}
+</section>
+{%- endmacro %}

@@ -177,6 +177,34 @@ Features outside the current phase's spec go here, not into the code.
   - Placement comes from persisted sample positions and the shared timecode helper path.
   - The CLI still exposes only `--fps`, so FinalPass formats persisted timecode strings in non-drop notation while placing AAF markers at the exact rational edit rate.
 
+## Phase 8A — design decisions
+
+- **Silent legs fail everywhere except the LFE.** Every delivered full-range
+  channel is expected to carry at least minimal content, so the asset's role
+  is deliberately not an input to the check. A silent LFE is an info note:
+  programs that never feed it are legitimate deliveries.
+- **Duplicate detection is a phase-invert null test**, not a correlation
+  threshold. Per window, fit the gain that best cancels one channel with the
+  other and measure the residual depth; a positive median gain with a median
+  depth past `--duplicate-null-db` means the same signal, and the fitted gain
+  quantifies a level-scaled copy. A deep null against a *negative* gain is an
+  inverted copy and is reported as a polarity inversion instead.
+- **Pairwise statistics are windowed and reduced by median.** A whole-file
+  correlation would let identical head tone, sync pops, or silence manufacture
+  duplicate findings on legitimately decorrelated content.
+- **Fewer than 8 qualifying windows is a per-kind skip**, never a silent pass.
+  The default 5000 ms / 2500 ms windowing means a file under ~22 s reports
+  `insufficient_active_content` for the pairwise kinds while the full-span
+  silence, LFE, and imbalance checks still run.
+- **Dual-mono stereo is an info notification by default.** It is low-rent but
+  real (audiobooks, mono-source content); `--fail-dual-mono` escalates it.
+  The same finding on a 5.1/7.1 asset always fails — that is fake surround.
+- **Channel findings are untimed and never produce AAF markers.** They
+  describe a channel, not a moment; this restates the Phase 6 rule.
+- **Deferred to a later phase:** cross-asset duplicate detection (for example,
+  proving a mono FX file is a fold-down of the stereo FX). Phase 8A is
+  within-one-asset only, per the spec's stated non-goals.
+
 ## Future optional artifacts
 
 - `summary.txt` — optional one-page text artifact if it proves useful after HTML and AAF land.

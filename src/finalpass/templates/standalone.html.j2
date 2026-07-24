@@ -169,5 +169,22 @@
     {{ macros.flagged_table(report.me_check.flags, "Bleed score") }}
   {% endif %}
   {{ macros.errors_block(report.me_check.errors) }}
+
+  {% elif command == "channels" %}
+  <section class="card">
+    <h2>Channel Integrity Summary</h2>
+    <p class="muted">Findings describe a channel, not a moment, so this report has no timeline and writes no AAF markers.</p>
+    {{ macros.summary_stats([
+      ("Overall", macros.badge(report.summary.overall_pass|verdict_label(false), report.summary.overall_pass|verdict_class(false))),
+      ("Assets checked", report.summary.total_checks),
+      ("Passed", report.summary.passed),
+      ("Failed", report.summary.failed),
+      ("Skipped", report.summary.skipped),
+    ]) }}
+  </section>
+
+  {% for asset in report.assets %}
+    {{ macros.channel_asset(asset) }}
+  {% endfor %}
   {% endif %}
 {% endblock %}

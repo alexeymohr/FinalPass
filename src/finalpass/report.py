@@ -15,7 +15,7 @@ from typing import TypeAlias
 from jinja2 import Environment, FunctionLoader, TemplateNotFound, select_autoescape
 
 from .errors import ReportRenderError
-from .models import AllReport, FileReport, FlaggedRegion, Group, MEReport, NullReport, Report
+from .models import AllReport, ChannelsReport, FileReport, FlaggedRegion, Group, MEReport, NullReport, Report
 from .presentation import (
     blocking_issue_count,
     display_group_name,
@@ -30,7 +30,7 @@ from .presentation import (
     verdict_explainer,
 )
 
-RenderableReport: TypeAlias = Report | NullReport | MEReport | AllReport
+RenderableReport: TypeAlias = Report | NullReport | MEReport | AllReport | ChannelsReport
 
 _TEMPLATE_PACKAGE = "finalpass.templates"
 _SVG_VIEWBOX_WIDTH = 1000.0
@@ -147,6 +147,8 @@ def _title_for_report(report: RenderableReport) -> str:
         return "Stem-Sum Null Report"
     if isinstance(report, MEReport):
         return "M&E Dialogue-Bleed Report"
+    if isinstance(report, ChannelsReport):
+        return "Channel Integrity Report"
     return "Folder QC Report"
 
 
@@ -157,6 +159,9 @@ def _subtitle_for_report(report: RenderableReport) -> str:
         return logical_asset_display_name(report.printmaster)
     if isinstance(report, MEReport):
         return logical_asset_display_name(report.me_file)
+    if isinstance(report, ChannelsReport):
+        count = len(report.assets)
+        return f"{count} asset{'' if count == 1 else 's'}"
     return ""
 
 
@@ -219,6 +224,12 @@ def _source_paths_for_report(report: RenderableReport) -> list[str]:
             source_path
             for item in (report.me_file, report.dx_file)
             for source_path in _source_paths_for_item(item)
+        ]
+    if isinstance(report, ChannelsReport):
+        return [
+            source_path
+            for asset in report.assets
+            for source_path in _source_paths_for_item(asset)
         ]
     return []
 

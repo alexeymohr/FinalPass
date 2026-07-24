@@ -19,10 +19,23 @@ from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
+from .channel_check import (
+    DEFAULT_CHANNELS_ACTIVITY_DBFS,
+    DEFAULT_CHANNELS_DUPLICATE_NULL_DB,
+    DEFAULT_CHANNELS_HOP_MS,
+    DEFAULT_CHANNELS_IMBALANCE_DB,
+    DEFAULT_CHANNELS_LFE_CUTOFF_HZ,
+    DEFAULT_CHANNELS_LFE_ENERGY_RATIO,
+    DEFAULT_CHANNELS_POLARITY_CORR,
+    DEFAULT_CHANNELS_SILENCE_DBFS,
+    DEFAULT_CHANNELS_WINDOW_MS,
+    ChannelsTunables,
+)
 from .errors import FinalPassError
 from .jobs import (
     WrittenArtifacts,
     run_all as execute_all,
+    run_channels as execute_channels,
     run_loudness as execute_loudness,
     run_me as execute_me,
     run_null as execute_null,
@@ -39,7 +52,7 @@ from .me_check import (
     DEFAULT_ME_WINDOW_MS,
     METunables,
 )
-from .models import AllReport, FileReport, MEReport, NullReport, Report
+from .models import AllReport, ChannelAssetResult, ChannelsReport, FileReport, MEReport, NullReport, Report
 from .null_test import (
     DEFAULT_NULL_HOP_MS,
     DEFAULT_NULL_THRESHOLD_DBFS,
@@ -273,6 +286,70 @@ def me_cmd(
     _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_me_report)
 
 
+@main.command("channels")
+@click.argument("files", nargs=-1, type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
+@click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
+@click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
+@click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate (recorded in the report; channel findings are untimed).")
+@click.option("--drop-frame", "drop_frame", is_flag=True, help="Count timecode as SMPTE drop-frame (29.97/59.94 only; HH:MM:SS;FF).")
+@click.option("--window-ms", type=float, default=DEFAULT_CHANNELS_WINDOW_MS, show_default=True, help="Pairwise statistics window size in milliseconds.")
+@click.option("--hop-ms", type=float, default=DEFAULT_CHANNELS_HOP_MS, show_default=True, help="Pairwise statistics hop size in milliseconds.")
+@click.option("--activity-dbfs", type=float, default=DEFAULT_CHANNELS_ACTIVITY_DBFS, show_default=True, help="Both channels must exceed this window RMS to be compared.")
+@click.option("--silence-dbfs", type=float, default=DEFAULT_CHANNELS_SILENCE_DBFS, show_default=True, help="Full-span RMS below this marks a leg silent.")
+@click.option("--duplicate-null-db", type=float, default=DEFAULT_CHANNELS_DUPLICATE_NULL_DB, show_default=True, help="Median phase-invert null depth marking a duplicated pair.")
+@click.option("--polarity-corr", type=float, default=DEFAULT_CHANNELS_POLARITY_CORR, show_default=True, help="Median signed correlation marking a polarity inversion.")
+@click.option("--lfe-cutoff-hz", type=float, default=DEFAULT_CHANNELS_LFE_CUTOFF_HZ, show_default=True, help="LFE energy above this frequency counts as broadband.")
+@click.option("--lfe-energy-ratio", type=float, default=DEFAULT_CHANNELS_LFE_ENERGY_RATIO, show_default=True, help="Fraction of LFE energy above the cutoff that fails.")
+@click.option("--imbalance-db", type=float, default=DEFAULT_CHANNELS_IMBALANCE_DB, show_default=True, help="L/R full-span RMS delta that produces an informational note.")
+@click.option("--fail-dual-mono", is_flag=True, help="Treat a dual-mono stereo asset as a failure instead of a notification.")
+def channels_cmd(
+    files: tuple[Path, ...],
+    out_dir: Path,
+    json_only: bool,
+    fps: float,
+    drop_frame: bool,
+    window_ms: float,
+    hop_ms: float,
+    activity_dbfs: float,
+    silence_dbfs: float,
+    duplicate_null_db: float,
+    polarity_corr: float,
+    lfe_cutoff_hz: float,
+    lfe_energy_ratio: float,
+    imbalance_db: float,
+    fail_dual_mono: bool,
+) -> None:
+    _warn_if_drop_frame_rate(fps, drop_frame)
+    try:
+        report, payload, written = _execute_direct_job(
+            runner=lambda: execute_channels(
+                files=files,
+                fps=fps,
+                drop_frame=drop_frame,
+                tunables=ChannelsTunables(
+                    window_ms=window_ms,
+                    hop_ms=hop_ms,
+                    activity_dbfs=activity_dbfs,
+                    silence_dbfs=silence_dbfs,
+                    duplicate_null_db=duplicate_null_db,
+                    polarity_corr=polarity_corr,
+                    lfe_cutoff_hz=lfe_cutoff_hz,
+                    lfe_energy_ratio=lfe_energy_ratio,
+                    imbalance_db=imbalance_db,
+                    fail_dual_mono=fail_dual_mono,
+                ),
+            ),
+            message="Running channel integrity...",
+            out_dir=out_dir,
+            json_only=json_only,
+        )
+    except FinalPassError as exc:
+        _err_console.print(f"[red]error:[/red] {exc}")
+        sys.exit(2)
+
+    _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_channels_report)
+
+
 @main.command("all")
 @click.argument("folder", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--spec", "spec_name", required=True, help="Name of a bundled spec or path to a YAML.")
@@ -359,7 +436,7 @@ def _execute_direct_job(
     message: str,
     out_dir: Path,
     json_only: bool,
-) -> tuple[Report | NullReport | MEReport | AllReport, str, WrittenArtifacts | None]:
+) -> tuple[Report | NullReport | MEReport | AllReport | ChannelsReport, str, WrittenArtifacts | None]:
     with processing_spinner(message, stream=_err_console.file, enabled=not json_only):
         report = runner()
         payload = report.model_dump_json(indent=2, by_alias=True)
@@ -370,7 +447,7 @@ def _execute_direct_job(
 
 
 def _finalize_run(
-    report: Report | NullReport | MEReport | AllReport,
+    report: Report | NullReport | MEReport | AllReport | ChannelsReport,
     *,
     payload: str,
     written: WrittenArtifacts | None,
@@ -469,6 +546,81 @@ def _render_me_report(report: MEReport) -> None:
                 title="Flagged Regions",
             )
         )
+
+
+def _render_channels_report(report: ChannelsReport) -> None:
+    for asset in report.assets:
+        _out_console.print(_channels_asset_heading(asset))
+        _out_console.print(f"[dim]source:[/dim] {escape(source_summary(asset))}")
+        _out_console.print(f"[dim]path:[/dim] {escape(asset.path)}", soft_wrap=True)
+        for note in asset.notes:
+            _out_console.print(f"  [dim]note:[/dim] {escape(humanize_code(note))}")
+        for error in asset.errors:
+            _out_console.print(f"  [red]{humanize_code(error.type)}:[/red] {error.message}")
+
+        if asset.findings:
+            _out_console.print(_channel_findings_table(asset.findings))
+        else:
+            _out_console.print("[dim]No channel integrity findings.[/dim]")
+
+        if asset.skipped:
+            _out_console.print(f"[dim]SKIPPED[/dim] — {humanize_code(asset.reason)}")
+        else:
+            color = "green" if asset.pass_ else "red"
+            _out_console.print(f"[{color}]{'PASS' if asset.pass_ else 'FAIL'}[/{color}]")
+
+    _print_summary(
+        report.summary.overall_pass,
+        report.summary.passed,
+        report.summary.failed,
+        report.summary.skipped,
+        report.summary.total_checks,
+    )
+
+
+def _channels_asset_heading(asset: ChannelAssetResult) -> str:
+    name = escape(logical_asset_display_name(asset))
+    meta = escape(
+        f"{asset.channel_config_actual or f'{asset.channel_count}ch'} · "
+        f"{asset.sample_rate}Hz · {asset.bit_depth}-bit · {asset.duration_seconds:.1f}s"
+    )
+    return f"[bold]{name}[/bold]  [dim]{meta}[/dim]"
+
+
+def _channel_findings_table(findings) -> Table:
+    table = Table(title="Channel Findings", title_justify="left")
+    table.add_column("finding", style="cyan")
+    table.add_column("severity")
+    table.add_column("channels")
+    table.add_column("measured vs threshold", justify="right")
+    table.add_column("detail")
+    for finding in findings:
+        if finding.skipped:
+            severity = f"[dim]skipped: {humanize_code(finding.reason)}[/dim]"
+            measured = "[dim]—[/dim]"
+        elif finding.severity == "fail":
+            severity = "[red]FAIL[/red]"
+            measured = _channel_measured_label(finding)
+        else:
+            severity = "[dim]info[/dim]"
+            measured = f"[dim]{_channel_measured_label(finding)}[/dim]"
+        detail = escape(finding.detail)
+        table.add_row(
+            humanize_code(finding.kind),
+            severity,
+            ", ".join(finding.channels) or "—",
+            measured,
+            detail if finding.severity == "fail" and not finding.skipped else f"[dim]{detail}[/dim]",
+        )
+    return table
+
+
+def _channel_measured_label(finding) -> str:
+    if finding.measured is None:
+        return "—"
+    if finding.threshold is None:
+        return f"{finding.measured:g}"
+    return f"{finding.measured:g} vs {finding.threshold:g}"
 
 
 def _render_all_report(report: AllReport) -> None:

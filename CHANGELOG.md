@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Phase 8A — channel integrity
+
+- New `finalpass channels` command: per-channel diagnostics on interleaved
+  files or split-mono seeds. Reports dead legs, duplicated channels
+  (dual-mono "stereo", stereo-duplicated "5.1"), polarity inversion between
+  canonical pairs, broadband energy in the LFE slot, and channel-imbalance
+  notes. `schema_version: 1`, born drop-frame aware.
+- Duplicate detection is a windowed phase-invert null test with a fitted
+  gain, so level-scaled copies are caught and quantified; an inverted copy is
+  reported as a polarity inversion rather than a duplicate.
+- Pairwise statistics use a windowed median so identical head tone cannot
+  manufacture a duplicate finding; a pair with fewer than eight active
+  windows is recorded as skipped, never as a silent pass.
+- Silent legs fail for every full-range channel regardless of role; a silent
+  LFE is an informational note. A 5.0 split family assembled into a 5.1
+  container suppresses all LFE findings and records why.
+- Dual-mono stereo is an informational notification by default;
+  `--fail-dual-mono` escalates it.
+- Channel findings are untimed, so this command writes `report.json` and
+  `report.html` only — never an AAF, even when it fails.
+
 ### Phase 8T — timecode completion
 
 - SMPTE ST 12-1 drop-frame timecode support for 29.97 and 59.94 via a new

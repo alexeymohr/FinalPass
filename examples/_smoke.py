@@ -4,9 +4,10 @@ Run from the repo root::
 
     uv run python examples/_smoke.py
 
-This regenerates the deterministic two-episode delivery, then runs:
+This regenerates the deterministic example deliveries, then runs:
 
 - a failing standalone ``me`` command (timed flags + AAF)
+- a failing standalone ``channels`` command (untimed findings, never an AAF)
 - the integrated ``all`` command (JSON + HTML + conditional AAF)
 
 Outputs land under ``examples/out/`` by default.
@@ -23,6 +24,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DELIVERY_ROOT = Path(__file__).parent / "delivery_two_episodes"
+DEFAULT_SPLIT_ROOT = Path(__file__).parent / "delivery_split_assets"
 DEFAULT_OUT_ROOT = Path(__file__).parent / "out"
 
 
@@ -79,6 +81,12 @@ def main() -> None:
         help="Directory for the deterministic example delivery.",
     )
     parser.add_argument(
+        "--split-root",
+        type=Path,
+        default=DEFAULT_SPLIT_ROOT,
+        help="Directory for the deterministic split-mono example delivery.",
+    )
+    parser.add_argument(
         "--out-root",
         type=Path,
         default=DEFAULT_OUT_ROOT,
@@ -87,6 +95,7 @@ def main() -> None:
     args = parser.parse_args()
 
     delivery_root = args.delivery_root
+    split_root = args.split_root
     out_root = args.out_root
 
     shutil.rmtree(out_root, ignore_errors=True)
@@ -98,6 +107,8 @@ def main() -> None:
             str(Path("examples") / "_generate.py"),
             "--output",
             str(delivery_root),
+            "--split-output",
+            str(split_root),
         ],
         expected_exit=0,
     )
@@ -118,6 +129,28 @@ def main() -> None:
         expected_exit=1,
     )
     _assert_artifacts(me_out, expect_aaf=True)
+
+    # S01E06 is a deliberately defective family: a stereo pair smeared across
+    # the 5.1 slots with a dead Rs leg. Channel findings are untimed, so this
+    # failing run must still produce no AAF.
+    channels_out = out_root / "channels_failing"
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "finalpass.cli",
+            "channels",
+            str(split_root / "SHOW_S01E06_Comp_5.1.L.wav"),
+            "--window-ms",
+            "1000",
+            "--hop-ms",
+            "500",
+            "--out",
+            str(channels_out),
+        ],
+        expected_exit=1,
+    )
+    _assert_artifacts(channels_out, expect_aaf=False)
 
     all_out = out_root / "all"
     _run(

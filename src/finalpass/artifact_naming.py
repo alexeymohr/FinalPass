@@ -8,7 +8,9 @@ from pathlib import Path
 import re
 from typing import Iterable
 
-from .models import AllReport, MEReport, NullReport, Report
+from .models import AllReport, ChannelsReport, MEReport, NullReport, Report
+
+NamedReport = Report | NullReport | MEReport | AllReport | ChannelsReport
 
 
 @dataclass(frozen=True)
@@ -94,7 +96,7 @@ _ANCHOR_PATTERNS = (
 _SHOW_CODE_PATTERN = re.compile(r"(?i)^([a-z]+)(\d+)$")
 
 
-def derive_program_name_from_report(report: Report | NullReport | MEReport | AllReport) -> DerivedProgramName | None:
+def derive_program_name_from_report(report: NamedReport) -> DerivedProgramName | None:
     """Infer a stable program slug from the report's source filenames."""
     return derive_program_name_from_paths(_report_source_paths(report))
 
@@ -135,7 +137,13 @@ def derive_program_name_from_paths(paths: Iterable[str | Path]) -> DerivedProgra
     return DerivedProgramName(show_slug=show_slug, slug=slug, episodes=episodes)
 
 
-def _report_source_paths(report: Report | NullReport | MEReport | AllReport) -> list[str]:
+def _report_source_paths(report: NamedReport) -> list[str]:
+    if isinstance(report, ChannelsReport):
+        return [
+            source_path
+            for asset in report.assets
+            for source_path in (asset.source_paths or [asset.path])
+        ]
     if isinstance(report, Report):
         return [
             source_path

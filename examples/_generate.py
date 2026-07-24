@@ -22,7 +22,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tests.audio_cases import SEED, build_split_group, build_two_episodes
+from tests.audio_cases import (
+    SEED,
+    build_fake_51,
+    build_split_group,
+    build_two_episodes,
+    write_split_role,
+)
 
 
 def _build_split_examples(root: Path) -> None:
@@ -58,6 +64,12 @@ def _build_split_examples(root: Path) -> None:
     )["pm"]
     for leg in ("C", "LFE", "Ls", "Rs"):
         broken[leg].unlink()
+
+    # S01E06 is deliberately defective for the channel-integrity pass: a stereo
+    # pair smeared across the 5.1 slots, with the Rs leg dead on top of it.
+    defective = build_fake_51(seed=SEED + 2030)
+    defective[:, 5] = 0.0
+    write_split_role(root, "S01E06", "pm", "5.1", defective)
 
 
 def main() -> None:

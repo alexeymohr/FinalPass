@@ -370,6 +370,77 @@ class NullReport(BaseModel):
     summary: Summary
 
 
+class ChannelFinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal[
+        "silent_leg",
+        "duplicate_channels",
+        "polarity_inversion",
+        "broadband_lfe",
+        "channel_imbalance",
+    ]
+    severity: Literal["fail", "info"]
+    channels: list[str] = Field(default_factory=list)
+    measured: float | None = None
+    threshold: float | None = None
+    skipped: bool = False
+    reason: str | None = None
+    detail: str
+
+
+class ChannelAssetResult(BaseModel):
+    """One asset's channel-integrity result, with the thresholds it was judged by."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    _time_reference_samples: int | None = PrivateAttr(default=None)
+
+    path: str
+    sample_rate: int
+    bit_depth: int
+    channel_count: int
+    channel_config_actual: str | None = None
+    duration_seconds: float
+    source_kind: Literal["interleaved", "split_mono"]
+    source_paths: list[str]
+    member_legs: list[str]
+    presentation_label: str | None = None
+    # `pass` is None when the asset could not be analysed at all.
+    pass_: bool | None = Field(alias="pass")
+    skipped: bool = False
+    reason: str | None = None
+    window_ms: float
+    hop_ms: float
+    activity_dbfs: float
+    silence_dbfs: float
+    duplicate_null_db: float
+    polarity_corr: float
+    lfe_cutoff_hz: float
+    lfe_energy_ratio: float
+    imbalance_db: float
+    fail_dual_mono: bool = False
+    findings: list[ChannelFinding] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    errors: list[GroupError] = Field(default_factory=list)
+
+
+class ChannelsReport(BaseModel):
+    """Standalone `channels` command report — `schema_version == 1`."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    finalpass_version: str
+    schema_version: int
+    command: Literal["channels"]
+    run_id: str
+    run_started_at: str
+    fps: float
+    drop_frame: bool
+    assets: list[ChannelAssetResult]
+    summary: Summary
+
+
 class MEReport(BaseModel):
     """Standalone `me` command report — `schema_version == 4` (8T adds `drop_frame`)."""
 

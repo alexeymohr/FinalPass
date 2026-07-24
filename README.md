@@ -22,6 +22,8 @@ This repository is a `0.1.0` release candidate. The implemented commands are:
 - `finalpass all` - analyze a folder of deliverables, classify logical assets,
   select the correct presentation for the chosen spec, then run the applicable
   loudness, null, and M&E checks.
+- `finalpass channels` - per-channel integrity diagnostics on one or more
+  logical assets.
 - `finalpass wizard` - guide a user through folder-first analysis and optional
   `FinalPass Prep/` curation.
 - `finalpass specs list` and `finalpass specs show` - inspect bundled spec
@@ -52,6 +54,8 @@ FinalPass currently supports:
 - ITU-R BS.1770-4 loudness measurement, 4x oversampled true peak, and LRA.
 - Standalone and automatic stem-sum null checks.
 - Standalone and automatic M&E dialogue-bleed checks.
+- Standalone channel-integrity diagnostics: dead legs, duplicated channels,
+  polarity inversion, broadband LFE content, and channel-imbalance notes.
 - Program-window comparison logic for null and M&E checks when files differ only
   by pre-program or tail MOS.
 - Self-contained HTML reports rendered from the persisted report model.
@@ -148,6 +152,12 @@ uv run finalpass me <me_file> --dx <dx_file> [--out <dir>] [--json-only] [--fps 
                                              [--corr-threshold <value>]
                                              [--coherence-threshold <value>]
                                              [--dx-gate-dbfs <dbfs>] [--me-floor-dbfs <dbfs>]
+uv run finalpass channels <file-or-seed>... [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
+                                           [--window-ms <ms>] [--hop-ms <ms>]
+                                           [--activity-dbfs <dbfs>] [--silence-dbfs <dbfs>]
+                                           [--duplicate-null-db <db>] [--polarity-corr <value>]
+                                           [--lfe-cutoff-hz <hz>] [--lfe-energy-ratio <value>]
+                                           [--imbalance-db <db>] [--fail-dual-mono]
 uv run finalpass all <folder> --spec <name-or-yaml> [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
                                                     [--patterns <config.yaml>] [--include-unclassified]
                                                     [--null-window-ms <ms>] [--null-hop-ms <ms>]
@@ -352,6 +362,10 @@ Exportable timed flags:
 - `all`: `groups[].files[].flags[]`, `groups[].null_test.flags[]`, and
   `groups[].me_check.flags[]`.
 
+Channel-integrity findings are never exported: they describe a channel, not a
+moment on the timeline, so `finalpass channels` writes `report.json` and
+`report.html` only — even when it fails.
+
 The exported AAF contains:
 
 - A top-level composition named `FinalPass Markers`.
@@ -417,6 +431,50 @@ subtracts in the sample domain.
 
 This is an honest heuristic for likely dialogue bleed. It is not speech
 recognition, transcription, diarization, or Dolby Dialogue Intelligence.
+
+### Channel Integrity
+
+`finalpass channels` inspects one logical asset at a time and reports what its
+individual channels actually contain. Every detector is a deterministic
+statistic; nothing here is auto-repaired, and FinalPass never remaps channels.
+
+- **Silent leg** - a channel whose full-span RMS falls below `--silence-dbfs`
+  while the asset is otherwise active. Every delivered full-range channel is
+  expected to carry at least minimal content, so a dead leg fails regardless of
+  the asset's role. The LFE is exempt and reported as an informational note:
+  programs that never feed the LFE are legitimate deliveries.
+- **Duplicate channels** - a phase-invert null test. For each qualifying window
+  FinalPass fits the gain that best cancels one channel with the other and
+  measures how far the residual sits below the content. A median null depth at
+  or beyond `--duplicate-null-db` with a positive fitted gain means the pair is
+  the same signal, and the reported level offset quantifies a scaled copy. On a
+  5.1 or 7.1 asset this fails - that is fake surround. On a stereo asset it is
+  an informational notification by default, because dual-mono 2.0 is low-rent
+  but real; `--fail-dual-mono` escalates it.
+- **Polarity inversion** - a canonical pair (L/R, Ls/Rs, Lss/Rss) whose median
+  windowed signed correlation falls at or below `--polarity-corr`. A pair that
+  nulls deeply against a *negative* fitted gain is an inverted copy and is
+  reported here rather than as a duplicate.
+- **Broadband LFE** - with the LFE above the silence floor, the fraction of its
+  energy surviving a 4th-order zero-phase high-pass at `--lfe-cutoff-hz`. At or
+  above `--lfe-energy-ratio` this fails and names the likely cause: a film-order
+  interleave (L C R Ls Rs LFE) read as SMPTE (L R C LFE Ls Rs).
+- **Channel imbalance** - an L/R full-span RMS delta beyond `--imbalance-db`.
+  Always informational, never a failure.
+
+Pairwise statistics are windowed and reduced by median rather than measured
+across the whole file. Identical head tone, sync pops, and silence would
+otherwise dominate a whole-file correlation and manufacture duplicate findings
+on legitimately decorrelated content. A pair needs at least eight windows where
+both channels exceed `--activity-dbfs`; below that the duplicate and polarity
+findings are recorded as skipped with `insufficient_active_content` rather than
+presented as a pass. Silence, LFE, and imbalance statistics use the whole file,
+because head and tail material are part of the delivered channel truth.
+
+When a 5.0 split family is assembled into a 5.1 container, its LFE is
+FinalPass-synthesized silence. All LFE findings are suppressed for that asset
+and the report records `lfe_synthesized_from_5_0_source`. A mono asset reports
+its pairwise checks as structurally not applicable and passes.
 
 ### Program-Window Comparison
 
@@ -517,6 +575,7 @@ Current schema versions:
 - `null`: `schema_version: 4`
 - `me`: `schema_version: 4`
 - `all`: `schema_version: 9`
+- `channels`: `schema_version: 1`
 
 The version bumps from 3/3/3/8 add one envelope field: `drop_frame: bool`,
 recorded beside `fps`. Timecode strings persist in the selected counting mode
