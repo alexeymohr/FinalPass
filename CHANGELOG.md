@@ -25,7 +25,7 @@
 - The 29.97/59.94 stderr note now recommends `--drop-frame` for drop-frame
   shows instead of only describing the drift.
 
-### Internal — analysis run settings
+### Internal refactors
 
 - Runner interfaces now take immutable settings values instead of loose
   knob parameters: `NullTunables` / `METunables` (owned by their check
@@ -33,6 +33,10 @@
   scope plus per-check tunables. CLI flags, JSON/HTML output, and defaults
   are unchanged; `fps`/`--drop-frame` remain explicit timecode-mode
   parameters. Added `CONTEXT.md` (domain glossary).
+- The two group-processing paths in `jobs.py` (plain spec and bundled-spec
+  family) now share one selection/measurement/check/finalize core instead
+  of ~160 duplicated lines; the family path keeps its multi-layout
+  measurement loop and report ordering. Output is unchanged.
 
 ### Earlier unreleased changes
 

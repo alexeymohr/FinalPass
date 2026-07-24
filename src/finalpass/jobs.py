@@ -678,10 +678,172 @@ def _process_group(
     errors: list[GroupError] = []
     used_by: dict[str, list[str]] = {asset.logical_asset.asset_id: [] for asset in classified_assets}
     selection_notes: dict[str, str | None] = {asset.logical_asset.asset_id: None for asset in classified_assets}
-    target_layout = _target_layout_for_spec(spec)
+    role_to_assets = _assets_by_role(classified_assets)
+
+    selection = _select_group_assets(
+        group_id=group_id,
+        spec=spec,
+        role_to_assets=role_to_assets,
+        include_unclassified=settings.include_unclassified,
+        errors=errors,
+        used_by=used_by,
+        selection_notes=selection_notes,
+    )
+    file_reports = _measure_selected_files(
+        measure_targets=selection.measure_targets,
+        errors=errors,
+        fps=fps,
+        drop_frame=drop_frame,
+    )
+    null_test, me_check = _run_group_checks(
+        printmaster=selection.pm_asset,
+        selected_assets=selection.selected_target_assets,
+        used_by=used_by,
+        fps=fps,
+        drop_frame=drop_frame,
+        settings=settings,
+    )
+    return _finalize_group(
+        group_id=group_id,
+        classified_assets=classified_assets,
+        file_reports=file_reports,
+        null_test=null_test,
+        me_check=me_check,
+        used_by=used_by,
+        selection_notes=selection_notes,
+        errors=errors,
+    )
+
+
+def _process_group_with_spec_family(
+    *,
+    group_id: str,
+    classified_assets: list[ClassifiedLogicalAsset],
+    family: BundledSpecFamily,
+    fps: float,
+    drop_frame: bool = False,
+    settings: AllSettings = AllSettings(),
+) -> Group:
+    errors: list[GroupError] = []
+    used_by: dict[str, list[str]] = {asset.logical_asset.asset_id: [] for asset in classified_assets}
+    selection_notes: dict[str, str | None] = {asset.logical_asset.asset_id: None for asset in classified_assets}
+    role_to_assets = _assets_by_role(classified_assets)
+
+    pm_layouts = {
+        asset.logical_asset.channel_config_actual
+        for asset in role_to_assets.get("pm", [])
+        if family.supports_channel_config(asset.logical_asset.channel_config_actual)
+    }
+    primary_spec = family.best_spec_for_channel_configs(pm_layouts)
+
+    if primary_spec is None:
+        errors.append(GroupError(
+            type="MissingFamilyLayoutPrintmaster",
+            message=(
+                f"group {group_id!r} has no printmaster asset matching any "
+                f"{family.display_name} layout ({', '.join(family.supported_channel_configs)})."
+            ),
+        ))
+        for asset in role_to_assets.get("unknown", []):
+            _append_selection_note(selection_notes, asset, "unknown_skipped")
+        null_test, me_check = _run_group_checks(
+            printmaster=None,
+            selected_assets={},
+            used_by=used_by,
+            fps=fps,
+            drop_frame=drop_frame,
+            settings=settings,
+        )
+        return _finalize_group(
+            group_id=group_id,
+            classified_assets=classified_assets,
+            file_reports=[],
+            null_test=null_test,
+            me_check=me_check,
+            used_by=used_by,
+            selection_notes=selection_notes,
+            errors=errors,
+        )
+
+    selection = _select_group_assets(
+        group_id=group_id,
+        spec=primary_spec,
+        role_to_assets=role_to_assets,
+        include_unclassified=settings.include_unclassified,
+        errors=errors,
+        used_by=used_by,
+        selection_notes=selection_notes,
+    )
+    measure_targets = [
+        *selection.measure_targets,
+        *_family_extra_measure_targets(
+            group_id=group_id,
+            family=family,
+            pm_layouts=pm_layouts,
+            primary_layout=_target_layout_for_spec(primary_spec),
+            role_to_assets=role_to_assets,
+            errors=errors,
+            used_by=used_by,
+            selection_notes=selection_notes,
+        ),
+    ]
+    file_reports = _measure_selected_files(
+        measure_targets=measure_targets,
+        errors=errors,
+        fps=fps,
+        drop_frame=drop_frame,
+    )
+    null_test, me_check = _run_group_checks(
+        printmaster=selection.pm_asset,
+        selected_assets=selection.selected_target_assets,
+        used_by=used_by,
+        fps=fps,
+        drop_frame=drop_frame,
+        settings=settings,
+    )
+    # Family reports span layouts, so they sort for presentation; plain-spec
+    # runs keep measurement order.
+    file_reports.sort(key=lambda item: (item.role, -item.channel_count, item.path.lower()))
+    return _finalize_group(
+        group_id=group_id,
+        classified_assets=classified_assets,
+        file_reports=file_reports,
+        null_test=null_test,
+        me_check=me_check,
+        used_by=used_by,
+        selection_notes=selection_notes,
+        errors=errors,
+    )
+
+
+def _assets_by_role(
+    classified_assets: list[ClassifiedLogicalAsset],
+) -> dict[FileRole, list[ClassifiedLogicalAsset]]:
     role_to_assets: dict[FileRole, list[ClassifiedLogicalAsset]] = {}
     for asset in classified_assets:
         role_to_assets.setdefault(asset.role, []).append(asset)
+    return role_to_assets
+
+
+@dataclass(frozen=True)
+class _GroupSelection:
+    pm_asset: ClassifiedLogicalAsset | None
+    selected_target_assets: dict[FileRole, ClassifiedLogicalAsset]
+    measure_targets: list[tuple[ClassifiedLogicalAsset, FileRole, Spec]]
+
+
+def _select_group_assets(
+    *,
+    group_id: str,
+    spec: Spec,
+    role_to_assets: dict[FileRole, list[ClassifiedLogicalAsset]],
+    include_unclassified: bool,
+    errors: list[GroupError],
+    used_by: dict[str, list[str]],
+    selection_notes: dict[str, str | None],
+) -> _GroupSelection:
+    """Pick the target-layout asset per role and build the base measure plan."""
+    target_layout = _target_layout_for_spec(spec)
     target_layout_matches: dict[FileRole, list[ClassifiedLogicalAsset]] = {
         role: [
             asset for asset in assets
@@ -789,7 +951,7 @@ def _process_group(
                 _append_selection_note(selection_notes, asset, "dialog_fallback_ambiguous")
 
     unknown_assets = role_to_assets.get("unknown", [])
-    if settings.include_unclassified:
+    if include_unclassified:
         for asset in unknown_assets:
             _mark_used(used_by, asset, "unknown_loudness")
             _append_selection_note(selection_notes, asset, "selected_for_loudness_only")
@@ -797,16 +959,90 @@ def _process_group(
         for asset in unknown_assets:
             _append_selection_note(selection_notes, asset, "unknown_skipped")
 
-    file_reports: list[FileReport] = []
-    measure_targets: list[tuple[ClassifiedLogicalAsset, FileRole]] = []
+    measure_targets: list[tuple[ClassifiedLogicalAsset, FileRole, Spec]] = []
     if pm_asset is not None:
-        measure_targets.append((pm_asset, "pm"))
+        measure_targets.append((pm_asset, "pm", spec))
     if dialog_dx is not None:
-        measure_targets.append((dialog_dx, "dx"))
-    if settings.include_unclassified:
-        measure_targets.extend((asset, "unknown") for asset in unknown_assets)
+        measure_targets.append((dialog_dx, "dx", spec))
+    if include_unclassified:
+        measure_targets.extend((asset, "unknown", spec) for asset in unknown_assets)
 
-    for asset, role in measure_targets:
+    return _GroupSelection(
+        pm_asset=pm_asset,
+        selected_target_assets=selected_target_assets,
+        measure_targets=measure_targets,
+    )
+
+
+def _family_extra_measure_targets(
+    *,
+    group_id: str,
+    family: BundledSpecFamily,
+    pm_layouts: set[str],
+    primary_layout: str,
+    role_to_assets: dict[FileRole, list[ClassifiedLogicalAsset]],
+    errors: list[GroupError],
+    used_by: dict[str, list[str]],
+    selection_notes: dict[str, str | None],
+) -> list[tuple[ClassifiedLogicalAsset, FileRole, Spec]]:
+    """Add per-layout PM/DX measurements for the family's non-primary layouts."""
+    extras: list[tuple[ClassifiedLogicalAsset, FileRole, Spec]] = []
+    for layout in sorted(pm_layouts, key=lambda value: CHANNEL_COUNTS[value]):
+        if layout == primary_layout:
+            continue
+        layout_spec = family.spec_for_channel_config(layout)
+        if layout_spec is None:
+            continue
+        extra_pm, _, _ = _select_target_layout_asset(
+            group_id=group_id,
+            role="pm",
+            assets=role_to_assets.get("pm", []),
+            target_layout=layout,
+            errors=errors,
+            selection_notes=selection_notes,
+            required=True,
+            missing_type="MissingFamilyLayoutPrintmaster",
+            duplicate_is_blocking=True,
+            selection_note_for_match="selected_for_family_loudness",
+            selection_note_for_alternates=None,
+        )
+        if extra_pm is not None:
+            _mark_used(used_by, extra_pm, "pm_loudness")
+            extras.append((extra_pm, "pm", layout_spec))
+
+        if layout_spec.dialog_lufs is not None:
+            extra_dx, _, _ = _select_target_layout_asset(
+                group_id=group_id,
+                role="dx",
+                assets=role_to_assets.get("dx", []),
+                target_layout=layout,
+                errors=errors,
+                selection_notes=selection_notes,
+                required=False,
+                duplicate_is_blocking=True,
+                selection_note_for_match="selected_for_family_dialog_loudness",
+                selection_note_for_alternates=None,
+            )
+            if extra_dx is not None:
+                _mark_used(used_by, extra_dx, "dialog_loudness")
+                extras.append((extra_dx, "dx", layout_spec))
+    return extras
+
+
+def _measure_selected_files(
+    *,
+    measure_targets: list[tuple[ClassifiedLogicalAsset, FileRole, Spec]],
+    errors: list[GroupError],
+    fps: float,
+    drop_frame: bool,
+) -> list[FileReport]:
+    file_reports: list[FileReport] = []
+    seen_measurements: set[tuple[str, FileRole]] = set()
+    for asset, role, spec in measure_targets:
+        measurement_key = (asset.logical_asset.asset_id, role)
+        if measurement_key in seen_measurements:
+            continue
+        seen_measurements.add(measurement_key)
         try:
             audio = read_classified_audio(asset)
             fr = _measure_asset_file(asset, audio, spec, role, fps=fps, drop_frame=drop_frame)
@@ -817,333 +1053,47 @@ def _process_group(
             errors.append(GroupError(type=exc.__class__.__name__, message=str(exc)))
             continue
         file_reports.append(fr)
+    return file_reports
 
+
+def _run_group_checks(
+    *,
+    printmaster: ClassifiedLogicalAsset | None,
+    selected_assets: dict[FileRole, ClassifiedLogicalAsset],
+    used_by: dict[str, list[str]],
+    fps: float,
+    drop_frame: bool,
+    settings: AllSettings,
+) -> tuple[AutoNullTestResult, MECheckResult]:
     null_test = _run_group_null_test(
-        printmaster=pm_asset,
-        selected_assets=selected_target_assets,
+        printmaster=printmaster,
+        selected_assets=selected_assets,
         used_by=used_by,
         fps=fps,
         drop_frame=drop_frame,
         tunables=settings.null,
     )
     me_check = _run_group_me_check(
-        selected_assets=selected_target_assets,
+        selected_assets=selected_assets,
         used_by=used_by,
         fps=fps,
         drop_frame=drop_frame,
         tunables=settings.me,
     )
-
-    inventory = [
-        _inventory_entry(
-            asset,
-            used_by=used_by[asset.logical_asset.asset_id],
-            selection_note=selection_notes[asset.logical_asset.asset_id],
-        )
-        for asset in classified_assets
-    ]
-    inventory.sort(key=lambda item: (item.role, item.path.lower()))
-
-    all_checks = [c for fr in file_reports for c in fr.checks]
-    passed = sum(1 for c in all_checks if c.pass_ is True)
-    failed = sum(1 for c in all_checks if c.pass_ is False)
-    skipped = sum(1 for c in all_checks if c.skipped)
-    if null_test.pass_ is True:
-        passed += 1
-    elif null_test.pass_ is False:
-        failed += 1
-    if null_test.skipped:
-        skipped += 1
-    if me_check.pass_ is True:
-        passed += 1
-    elif me_check.pass_ is False:
-        failed += 1
-    if me_check.skipped:
-        skipped += 1
-    summary = GroupSummary(
-        total_checks=len(all_checks) + 2,
-        passed=passed,
-        failed=failed,
-        skipped=skipped,
-        overall_pass=failed == 0 and not errors,
-    )
-
-    return Group(
-        group_id=group_id,
-        assets=inventory,
-        files=file_reports,
-        null_test=null_test,
-        me_check=me_check,
-        group_summary=summary,
-        errors=errors,
-    )
+    return null_test, me_check
 
 
-def _process_group_with_spec_family(
+def _finalize_group(
     *,
     group_id: str,
     classified_assets: list[ClassifiedLogicalAsset],
-    family: BundledSpecFamily,
-    fps: float,
-    drop_frame: bool = False,
-    settings: AllSettings = AllSettings(),
+    file_reports: list[FileReport],
+    null_test: AutoNullTestResult,
+    me_check: MECheckResult,
+    used_by: dict[str, list[str]],
+    selection_notes: dict[str, str | None],
+    errors: list[GroupError],
 ) -> Group:
-    errors: list[GroupError] = []
-    used_by: dict[str, list[str]] = {asset.logical_asset.asset_id: [] for asset in classified_assets}
-    selection_notes: dict[str, str | None] = {asset.logical_asset.asset_id: None for asset in classified_assets}
-    role_to_assets: dict[FileRole, list[ClassifiedLogicalAsset]] = {}
-    for asset in classified_assets:
-        role_to_assets.setdefault(asset.role, []).append(asset)
-
-    pm_layouts = {
-        asset.logical_asset.channel_config_actual
-        for asset in role_to_assets.get("pm", [])
-        if family.supports_channel_config(asset.logical_asset.channel_config_actual)
-    }
-    primary_spec = family.best_spec_for_channel_configs(pm_layouts)
-
-    file_reports: list[FileReport] = []
-    selected_target_assets: dict[FileRole, ClassifiedLogicalAsset] = {}
-    null_test: AutoNullTestResult
-    me_check: MECheckResult
-
-    if primary_spec is None:
-        errors.append(GroupError(
-            type="MissingFamilyLayoutPrintmaster",
-            message=(
-                f"group {group_id!r} has no printmaster asset matching any "
-                f"{family.display_name} layout ({', '.join(family.supported_channel_configs)})."
-            ),
-        ))
-        for asset in role_to_assets.get("unknown", []):
-            _append_selection_note(selection_notes, asset, "unknown_skipped")
-        null_test = AutoNullTestResult(
-            **{"pass": None},
-            skipped=True,
-            reason="missing_target_layout_printmaster",
-            stem_strategy=None,
-            selected_roles=[],
-            window_ms=settings.null.window_ms,
-            hop_ms=settings.null.hop_ms,
-            threshold_dbfs=settings.null.threshold_dbfs,
-            summary=None,
-            flags=[],
-            errors=[],
-        )
-        me_check = MECheckResult(
-            **{"pass": None},
-            skipped=True,
-            reason="missing_dx_or_me",
-            analysis_signal=ANALYSIS_SIGNAL_NAME,
-            window_ms=settings.me.window_ms,
-            hop_ms=settings.me.hop_ms,
-            band_low_hz=settings.me.band_low_hz,
-            band_high_hz=settings.me.band_high_hz,
-            corr_threshold=settings.me.corr_threshold,
-            coherence_threshold=settings.me.coherence_threshold,
-            dx_gate_dbfs=settings.me.dx_gate_dbfs,
-            me_floor_dbfs=settings.me.me_floor_dbfs,
-            summary=None,
-            flags=[],
-            errors=[],
-        )
-    else:
-        target_layout = _target_layout_for_spec(primary_spec)
-        target_layout_matches: dict[FileRole, list[ClassifiedLogicalAsset]] = {
-            role: [
-                asset for asset in assets
-                if asset.logical_asset.channel_config_actual == target_layout
-            ]
-            for role, assets in role_to_assets.items()
-        }
-
-        def has_target(role: FileRole) -> bool:
-            return bool(target_layout_matches.get(role, []))
-
-        dx_duplicate_is_blocking = (
-            primary_spec.dialog_lufs is not None
-            or has_target("me")
-            or (has_target("mx") and has_target("fx"))
-        )
-        mx_duplicate_is_blocking = has_target("dx") and has_target("fx")
-        fx_duplicate_is_blocking = has_target("dx") and has_target("mx")
-        me_duplicate_is_blocking = has_target("dx")
-
-        pm_asset, _, _ = _select_target_layout_asset(
-            group_id=group_id,
-            role="pm",
-            assets=role_to_assets.get("pm", []),
-            target_layout=target_layout,
-            errors=errors,
-            selection_notes=selection_notes,
-            required=True,
-            missing_type="MissingTargetLayoutPrintmaster",
-            duplicate_is_blocking=True,
-        )
-        dx_target, _, dx_alternates = _select_target_layout_asset(
-            group_id=group_id,
-            role="dx",
-            assets=role_to_assets.get("dx", []),
-            target_layout=target_layout,
-            errors=errors,
-            selection_notes=selection_notes,
-            required=False,
-            duplicate_is_blocking=dx_duplicate_is_blocking,
-        )
-        mx_target, _, _ = _select_target_layout_asset(
-            group_id=group_id,
-            role="mx",
-            assets=role_to_assets.get("mx", []),
-            target_layout=target_layout,
-            errors=errors,
-            selection_notes=selection_notes,
-            required=False,
-            duplicate_is_blocking=mx_duplicate_is_blocking,
-        )
-        fx_target, _, _ = _select_target_layout_asset(
-            group_id=group_id,
-            role="fx",
-            assets=role_to_assets.get("fx", []),
-            target_layout=target_layout,
-            errors=errors,
-            selection_notes=selection_notes,
-            required=False,
-            duplicate_is_blocking=fx_duplicate_is_blocking,
-        )
-        me_target, _, _ = _select_target_layout_asset(
-            group_id=group_id,
-            role="me",
-            assets=role_to_assets.get("me", []),
-            target_layout=target_layout,
-            errors=errors,
-            selection_notes=selection_notes,
-            required=False,
-            duplicate_is_blocking=me_duplicate_is_blocking,
-        )
-
-        for role, asset in (
-            ("pm", pm_asset),
-            ("dx", dx_target),
-            ("mx", mx_target),
-            ("fx", fx_target),
-            ("me", me_target),
-        ):
-            if asset is not None:
-                selected_target_assets[role] = asset
-
-        if pm_asset is not None:
-            _mark_used(used_by, pm_asset, "pm_loudness")
-
-        dialog_dx: ClassifiedLogicalAsset | None = None
-        if primary_spec.dialog_lufs is not None:
-            if dx_target is not None:
-                dialog_dx = dx_target
-                _mark_used(used_by, dx_target, "dialog_loudness")
-            elif len(dx_alternates) == 1:
-                dialog_dx = dx_alternates[0]
-                _mark_used(used_by, dialog_dx, "dialog_loudness")
-                _append_selection_note(selection_notes, dialog_dx, "selected_for_dialog_fallback")
-            elif len(dx_alternates) > 1:
-                errors.append(GroupError(
-                    type="DialogFallbackAmbiguity",
-                    message=(
-                        f"group {group_id!r} has no target-layout DX asset for {target_layout}, "
-                        f"and {len(dx_alternates)} alternate-layout DX assets compete for dialog fallback."
-                    ),
-                ))
-                for asset in dx_alternates:
-                    _append_selection_note(selection_notes, asset, "dialog_fallback_ambiguous")
-
-        unknown_assets = role_to_assets.get("unknown", [])
-        if settings.include_unclassified:
-            for asset in unknown_assets:
-                _mark_used(used_by, asset, "unknown_loudness")
-                _append_selection_note(selection_notes, asset, "selected_for_loudness_only")
-        else:
-            for asset in unknown_assets:
-                _append_selection_note(selection_notes, asset, "unknown_skipped")
-
-        measure_targets: list[tuple[ClassifiedLogicalAsset, FileRole, Spec]] = []
-        if pm_asset is not None:
-            measure_targets.append((pm_asset, "pm", primary_spec))
-        if dialog_dx is not None:
-            measure_targets.append((dialog_dx, "dx", primary_spec))
-        if settings.include_unclassified:
-            measure_targets.extend((asset, "unknown", primary_spec) for asset in unknown_assets)
-
-        for layout in sorted(pm_layouts, key=lambda value: CHANNEL_COUNTS[value]):
-            if layout == target_layout:
-                continue
-            layout_spec = family.spec_for_channel_config(layout)
-            if layout_spec is None:
-                continue
-            extra_pm, _, _ = _select_target_layout_asset(
-                group_id=group_id,
-                role="pm",
-                assets=role_to_assets.get("pm", []),
-                target_layout=layout,
-                errors=errors,
-                selection_notes=selection_notes,
-                required=True,
-                missing_type="MissingFamilyLayoutPrintmaster",
-                duplicate_is_blocking=True,
-                selection_note_for_match="selected_for_family_loudness",
-                selection_note_for_alternates=None,
-            )
-            if extra_pm is not None:
-                _mark_used(used_by, extra_pm, "pm_loudness")
-                measure_targets.append((extra_pm, "pm", layout_spec))
-
-            if layout_spec.dialog_lufs is not None:
-                extra_dx, _, _ = _select_target_layout_asset(
-                    group_id=group_id,
-                    role="dx",
-                    assets=role_to_assets.get("dx", []),
-                    target_layout=layout,
-                    errors=errors,
-                    selection_notes=selection_notes,
-                    required=False,
-                    duplicate_is_blocking=True,
-                    selection_note_for_match="selected_for_family_dialog_loudness",
-                    selection_note_for_alternates=None,
-                )
-                if extra_dx is not None:
-                    _mark_used(used_by, extra_dx, "dialog_loudness")
-                    measure_targets.append((extra_dx, "dx", layout_spec))
-
-        seen_measurements: set[tuple[str, FileRole]] = set()
-        for asset, role, spec in measure_targets:
-            measurement_key = (asset.logical_asset.asset_id, role)
-            if measurement_key in seen_measurements:
-                continue
-            seen_measurements.add(measurement_key)
-            try:
-                audio = read_classified_audio(asset)
-                fr = _measure_asset_file(asset, audio, spec, role, fps=fps, drop_frame=drop_frame)
-            except ChannelMismatchError as exc:
-                errors.append(GroupError(type="ChannelMismatchError", message=str(exc)))
-                continue
-            except FinalPassError as exc:
-                errors.append(GroupError(type=exc.__class__.__name__, message=str(exc)))
-                continue
-            file_reports.append(fr)
-
-        null_test = _run_group_null_test(
-            printmaster=pm_asset,
-            selected_assets=selected_target_assets,
-            used_by=used_by,
-            fps=fps,
-            drop_frame=drop_frame,
-            tunables=settings.null,
-        )
-        me_check = _run_group_me_check(
-            selected_assets=selected_target_assets,
-            used_by=used_by,
-            fps=fps,
-            drop_frame=drop_frame,
-            tunables=settings.me,
-        )
-
     inventory = [
         _inventory_entry(
             asset,
@@ -1153,14 +1103,12 @@ def _process_group_with_spec_family(
         for asset in classified_assets
     ]
     inventory.sort(key=lambda item: (item.role, item.path.lower()))
-    file_reports.sort(key=lambda item: (item.role, -item.channel_count, item.path.lower()))
     summary = _group_summary_from_results(
         file_reports=file_reports,
         null_test=null_test,
         me_check=me_check,
         errors=errors,
     )
-
     return Group(
         group_id=group_id,
         assets=inventory,
