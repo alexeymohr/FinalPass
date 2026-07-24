@@ -1,4 +1,4 @@
-"""Settings-value tests: defaults stay sourced from the check modules."""
+"""Runtime-value tests: settings defaults and metric-display formatting."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from finalpass.null_test import (
     DEFAULT_NULL_WINDOW_MS,
     NullTunables,
 )
+from finalpass.presentation import format_metric_value, format_target_limit, metric_value_header
 from finalpass.run_settings import AllSettings
 
 
@@ -55,3 +56,28 @@ def test_settings_values_are_frozen_and_reject_unknown_knobs() -> None:
         METunables(corr=0.5)  # type: ignore[call-arg]
     with pytest.raises(pydantic.ValidationError):
         AllSettings(nulls=NullTunables())  # type: ignore[call-arg]
+
+
+def test_metric_display_is_one_truth_for_every_flag_metric() -> None:
+    assert format_metric_value(-24.03, metric="residual_rms_dbfs") == "-24.0 dBFS"
+    assert format_metric_value(0.857, metric="dialog_bleed_score") == "0.86"
+    assert format_metric_value(-0.94, metric="true_peak_dbtp") == "-0.9 dBTP"
+    assert format_metric_value(None, metric="residual_rms_dbfs") == "—"
+    # An unmapped metric still renders rather than raising.
+    assert format_metric_value(-12.0, metric="not_a_metric") == "-12.0 dBFS"
+
+    assert metric_value_header("residual_rms_dbfs") == "peak residual"
+    assert metric_value_header("dialog_bleed_score") == "bleed score"
+    assert metric_value_header("true_peak_dbtp") == "peak true peak"
+
+
+def test_format_target_limit_covers_target_limit_and_missing() -> None:
+    class _Check:
+        def __init__(self, target=None, tolerance=None, limit=None):
+            self.target = target
+            self.tolerance = tolerance
+            self.limit = limit
+
+    assert format_target_limit(_Check(target=-23.0, tolerance=2.0)) == "-23.0 ±2.0"
+    assert format_target_limit(_Check(limit=-1.0)) == "≤ -1.0"
+    assert format_target_limit(_Check()) == "—"

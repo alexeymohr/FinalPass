@@ -218,22 +218,10 @@
         <td class="mono">{{ flag.end_tc }}</td>
         <td>{{ flag.duration_seconds|fmt_seconds(2) }}</td>
         <td>
-          {% if flag.metric == "dialog_bleed_score" %}
-            {{ flag.value|fmt_float(2) }}
-          {% elif flag.metric == "true_peak_dbtp" %}
-            {{ flag.value|fmt_float(1) }} dBTP
-          {% else %}
-            {{ flag.value|fmt_float(1) }} dBFS
-          {% endif %}
+            {{ flag.value|metric_value(metric=flag.metric) }}
         </td>
         <td>
-          {% if flag.metric == "dialog_bleed_score" %}
-            {{ flag.threshold|fmt_float(2) }}
-          {% elif flag.metric == "true_peak_dbtp" %}
-            {{ flag.threshold|fmt_float(1) }} dBTP
-          {% else %}
-            {{ flag.threshold|fmt_float(1) }} dBFS
-          {% endif %}
+            {{ flag.threshold|metric_value(metric=flag.metric) }}
         </td>
         <td>{{ flag.detail }}</td>
       </tr>

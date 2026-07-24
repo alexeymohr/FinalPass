@@ -37,6 +37,11 @@
   family) now share one selection/measurement/check/finalize core instead
   of ~160 duplicated lines; the family path keeps its multi-layout
   measurement loop and report ordering. Output is unchanged.
+- Flagged-region display (decimal places, unit, terminal column header) and
+  loudness target/limit formatting now live once in `presentation.py`; the
+  terminal renderer and the HTML templates consume it instead of each
+  carrying their own metric conditionals. Terminal and HTML output are
+  unchanged.
 
 ### Earlier unreleased changes
 

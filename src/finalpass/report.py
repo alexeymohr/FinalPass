@@ -19,6 +19,8 @@ from .models import AllReport, FileReport, FlaggedRegion, Group, MEReport, NullR
 from .presentation import (
     blocking_issue_count,
     display_group_name,
+    format_metric_value,
+    format_target_limit,
     humanize_code,
     humanize_code_list,
     logical_asset_display_name,
@@ -101,8 +103,9 @@ def _environment() -> Environment:
     env.filters["basename"] = _basename
     env.filters["verdict_label"] = _verdict_label
     env.filters["verdict_class"] = _verdict_class
+    env.filters["metric_value"] = format_metric_value
     env.globals.update(
-        format_target_limit=_format_target_limit,
+        format_target_limit=format_target_limit,
         timeline_lane=_timeline_lane,
         group_anchor_file=_group_anchor_file,
         group_duration_seconds=_group_duration_seconds,
@@ -240,14 +243,6 @@ def _verdict_class(value: bool | None, skipped: bool = False) -> str:
     return "badge-pass" if value else "badge-fail"
 
 
-def _format_target_limit(check) -> str:
-    if check.target is not None and check.tolerance is not None:
-        return f"{check.target:.1f} ±{check.tolerance:.1f}"
-    if check.limit is not None:
-        return f"≤ {check.limit:.1f}"
-    return "—"
-
-
 def _channel_display(channel_config_actual: str | None, channel_count: int) -> str:
     return channel_config_actual or f"{channel_count}ch"
 
@@ -301,8 +296,8 @@ def _timeline_lane(flags: list[FlaggedRegion], *, sample_rate: int, duration_sec
 
 
 def _flag_title(flag: FlaggedRegion) -> str:
-    value_label = _flag_numeric_label(flag.value, metric=flag.metric)
-    threshold_label = _flag_numeric_label(flag.threshold, metric=flag.metric)
+    value_label = format_metric_value(flag.value, metric=flag.metric)
+    threshold_label = format_metric_value(flag.threshold, metric=flag.metric)
     return "\n".join([
         f"{flag.code} {flag.metric}",
         f"{flag.start_tc} → {flag.end_tc}",
@@ -311,11 +306,3 @@ def _flag_title(flag: FlaggedRegion) -> str:
         f"threshold: {threshold_label}",
         flag.detail,
     ])
-
-
-def _flag_numeric_label(value: float, *, metric: str) -> str:
-    if metric == "dialog_bleed_score":
-        return f"{value:.2f}"
-    if metric == "true_peak_dbtp":
-        return f"{value:.1f} dBTP"
-    return f"{value:.1f} dBFS"

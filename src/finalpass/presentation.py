@@ -81,6 +81,17 @@ _SPECIAL_GROUP_LABELS = {
 }
 _CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
+# How each flagged-region metric reads: decimal places, unit suffix, and the
+# terminal column header. One entry per metric; every surface (terminal tables,
+# HTML tables, timeline tooltips) formats through here so a new metric is a
+# single edit.
+_METRIC_DISPLAY = {
+    "residual_rms_dbfs": (1, "dBFS", "peak residual"),
+    "dialog_bleed_score": (2, "", "bleed score"),
+    "true_peak_dbtp": (1, "dBTP", "peak true peak"),
+}
+_METRIC_DISPLAY_FALLBACK = (1, "dBFS", "value")
+
 
 def logical_asset_display_name(item: Any) -> str:
     display = _to_display_item(item)
@@ -159,6 +170,30 @@ def skip_detail(reason: str | None) -> str:
     if not reason:
         return "This analysis was not run."
     return _SKIP_DETAIL_LABELS.get(reason, humanize_code(reason))
+
+
+def format_metric_value(value: float | None, *, metric: str) -> str:
+    """Render a flagged-region value or threshold in its metric's own terms."""
+    if value is None:
+        return "—"
+    digits, unit, _ = _METRIC_DISPLAY.get(metric, _METRIC_DISPLAY_FALLBACK)
+    text = f"{value:.{digits}f}"
+    return f"{text} {unit}" if unit else text
+
+
+def metric_value_header(metric: str) -> str:
+    """Column header for the value column of a flagged-region table."""
+    _, _, header = _METRIC_DISPLAY.get(metric, _METRIC_DISPLAY_FALLBACK)
+    return header
+
+
+def format_target_limit(check: Any) -> str:
+    """Render a loudness check's target ± tolerance, or its limit."""
+    if check.target is not None and check.tolerance is not None:
+        return f"{check.target:.1f} ±{check.tolerance:.1f}"
+    if check.limit is not None:
+        return f"≤ {check.limit:.1f}"
+    return "—"
 
 
 def blocking_issue_count(item: Any) -> int:

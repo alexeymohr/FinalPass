@@ -49,9 +49,12 @@ from .null_test import (
 from .presentation import (
     blocking_issue_count,
     display_group_name,
+    format_metric_value,
+    format_target_limit,
     humanize_code,
     humanize_code_list,
     logical_asset_display_name,
+    metric_value_header,
     source_summary,
     verdict_explainer,
 )
@@ -417,8 +420,6 @@ def _render_null_report(report: NullReport) -> None:
             _flagged_regions_table(
                 report.null_test.flags,
                 title="Flagged Regions",
-                value_header="peak residual",
-                value_formatter=lambda flag: f"{flag.value:.1f} dBFS",
             )
         )
 
@@ -465,8 +466,6 @@ def _render_me_report(report: MEReport) -> None:
             _flagged_regions_table(
                 report.me_check.flags,
                 title="Flagged Regions",
-                value_header="bleed score",
-                value_formatter=lambda flag: f"{flag.value:.2f}",
             )
         )
 
@@ -535,8 +534,6 @@ def _render_all_report(report: AllReport) -> None:
                     _flagged_regions_table(
                         null_test.flags,
                         title="Null Flags",
-                        value_header="peak residual",
-                        value_formatter=lambda flag: f"{flag.value:.1f} dBFS",
                     )
                 )
 
@@ -560,8 +557,6 @@ def _render_all_report(report: AllReport) -> None:
                     _flagged_regions_table(
                         me_check.flags,
                         title="M&E Flags",
-                        value_header="bleed score",
-                        value_formatter=lambda flag: f"{flag.value:.2f}",
                     )
                 )
 
@@ -607,8 +602,6 @@ def _render_file_checks(file_report: FileReport) -> None:
             _flagged_regions_table(
                 file_report.flags,
                 title="Loudness Flags",
-                value_header="peak true peak",
-                value_formatter=lambda flag: f"{flag.value:.1f} dBTP",
             )
         )
 
@@ -638,7 +631,7 @@ def _checks_table(file_report: FileReport) -> Table:
     table.add_column("pass")
     for check in file_report.checks:
         measured = "—" if check.measured is None else f"{check.measured:.1f}"
-        target_limit = _format_target_limit(check)
+        target_limit = format_target_limit(check)
         if check.skipped:
             status = f"[dim]— (skipped: {check.reason})[/dim]"
         elif check.pass_:
@@ -685,27 +678,19 @@ def _expected_aaf_path(written: WrittenArtifacts) -> Path:
     return written.json_path.with_name(f"{marker_stem}{suffix}.aaf")
 
 
-def _format_target_limit(check) -> str:
-    if check.target is not None and check.tolerance is not None:
-        return f"{check.target} ±{check.tolerance}"
-    if check.limit is not None:
-        return f"≤ {check.limit}"
-    return "—"
-
-
-def _flagged_regions_table(flags, *, title: str, value_header: str, value_formatter) -> Table:
+def _flagged_regions_table(flags, *, title: str) -> Table:
     table = Table(title=title, title_justify="left")
     table.add_column("start", style="cyan")
     table.add_column("end", style="cyan")
     table.add_column("duration", justify="right")
-    table.add_column(value_header, justify="right")
+    table.add_column(metric_value_header(flags[0].metric) if flags else "value", justify="right")
     table.add_column("detail")
     for flag in flags[:_FLAG_TABLE_MAX_ROWS]:
         table.add_row(
             flag.start_tc,
             flag.end_tc,
             f"{flag.duration_seconds:.2f}s",
-            value_formatter(flag),
+            format_metric_value(flag.value, metric=flag.metric),
             flag.detail,
         )
     if len(flags) > _FLAG_TABLE_MAX_ROWS:

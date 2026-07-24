@@ -321,9 +321,7 @@ def test_flagged_regions_table_caps_rows_for_terminal() -> None:
         for index in range(25)
     ]
 
-    table = _flagged_regions_table(
-        flags, title="Flags", value_header="value", value_formatter=lambda flag: "x"
-    )
+    table = _flagged_regions_table(flags, title="Flags")
 
     assert table.row_count == _FLAG_TABLE_MAX_ROWS
     assert "25" in (table.caption or "")
