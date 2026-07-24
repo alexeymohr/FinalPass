@@ -166,7 +166,9 @@ Exit codes:
 - `2` - tool, validation, input, or runtime error.
 
 `--fps` is the frame rate used for timecode strings and AAF marker placement.
-FinalPass does not infer FPS from WAV/BWF metadata.
+FinalPass does not infer FPS from WAV/BWF metadata. Timecode strings are
+always non-drop; at 29.97 or 59.94 fps the CLI prints a note that a drop-frame
+session counter runs about 3.6 seconds per hour ahead of the reported values.
 
 ## Main Workflows
 

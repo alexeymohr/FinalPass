@@ -55,6 +55,7 @@ from .presentation import (
 )
 from .specs import list_bundled, load_spec
 from .terminal_spinner import processing_spinner
+from .timecode import frame_rate_info
 from .wizard import run_wizard
 
 _err_console = Console(stderr=True)
@@ -63,6 +64,16 @@ _out_console = Console()
 # Terminal readability cap only; the JSON and HTML reports always carry the
 # full flagged-region list.
 _FLAG_TABLE_MAX_ROWS = 20
+
+
+def _warn_if_drop_frame_rate(fps: float) -> None:
+    """One-line honesty note: FinalPass timecode strings are non-drop only."""
+    info = frame_rate_info(fps)
+    if info.edit_rate.denominator == 1001 and info.nominal_fps in (30, 60):
+        _err_console.print(
+            "[yellow]note:[/yellow] timecode strings are non-drop; a drop-frame "
+            "session counter runs ~3.6s per hour ahead of these values."
+        )
 
 
 def _validate_fps_option(_ctx: click.Context, _param: click.Parameter, value: float) -> float:
@@ -85,6 +96,7 @@ def main() -> None:
 @click.option("--json-only", is_flag=True, help="Suppress the table; emit JSON to stdout.")
 @click.option("--fps", type=float, default=23.976, show_default=True, callback=_validate_fps_option, help="Frame rate (for downstream TC display).")
 def loudness_cmd(files: tuple[Path, ...], spec_name: str, dx_file: Path | None, out_dir: Path, json_only: bool, fps: float) -> None:
+    _warn_if_drop_frame_rate(fps)
     try:
         effective_dx = dx_file
         spec, _, _ = load_spec(spec_name)
@@ -163,6 +175,7 @@ def wizard_cmd(folder: Path | None, out_dir: Path, fps: float) -> None:
 @click.option("--hop-ms", type=float, default=DEFAULT_NULL_HOP_MS, show_default=True, help="Residual RMS hop size in milliseconds.")
 @click.option("--threshold-dbfs", type=float, default=DEFAULT_NULL_THRESHOLD_DBFS, show_default=True, help="Flag windows whose residual RMS exceeds this dBFS threshold.")
 def null_cmd(pm: Path, stems: tuple[Path, ...], out_dir: Path, json_only: bool, fps: float, window_ms: float, hop_ms: float, threshold_dbfs: float) -> None:
+    _warn_if_drop_frame_rate(fps)
     try:
         report, payload, written = _execute_direct_job(
             runner=lambda: execute_null(
@@ -213,6 +226,7 @@ def me_cmd(
     dx_gate_dbfs: float,
     me_floor_dbfs: float,
 ) -> None:
+    _warn_if_drop_frame_rate(fps)
     try:
         report, payload, written = _execute_direct_job(
             runner=lambda: execute_me(
@@ -278,6 +292,7 @@ def all_cmd(
     me_dx_gate_dbfs: float,
     me_me_floor_dbfs: float,
 ) -> None:
+    _warn_if_drop_frame_rate(fps)
     try:
         report, payload, written = _execute_direct_job(
             runner=lambda: execute_all(

@@ -15,6 +15,7 @@
   "showing first N of M" caption; JSON/HTML reports keep the full list.
 - Silenced the scipy coherence RuntimeWarning on windows with silent
   segments; undefined coherence bins are now dropped instead of averaged.
+- The CLI prints a one-line non-drop timecode note at 29.97/59.94 fps.
 
 ## v0.1.0
 

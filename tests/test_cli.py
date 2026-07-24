@@ -323,3 +323,34 @@ def test_flagged_regions_table_caps_rows_for_terminal() -> None:
 
     assert table.row_count == _FLAG_TABLE_MAX_ROWS
     assert "25" in (table.caption or "")
+
+
+def _combined_output(result) -> str:
+    try:
+        return result.output + result.stderr
+    except ValueError:
+        return result.output
+
+
+def test_fractional_broadcast_fps_prints_non_drop_note(pink_stereo_10s: Path, tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness", str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+        "--fps", "29.97",
+    ])
+    assert result.exit_code in (0, 1)
+    assert "non-drop" in _combined_output(result)
+
+
+def test_film_fps_prints_no_non_drop_note(pink_stereo_10s: Path, tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "loudness", str(pink_stereo_10s),
+        "--spec", "ebu_r128",
+        "--out", str(tmp_path / "out"),
+        "--fps", "23.976",
+    ])
+    assert result.exit_code in (0, 1)
+    assert "non-drop" not in _combined_output(result)
