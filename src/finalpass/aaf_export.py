@@ -136,6 +136,17 @@ def collect_marker_candidates(report: ExportableReport) -> list[MarkerCandidate]
                         group_id=group.group_id,
                     )
                 )
+            if group.downmix_check is not None:
+                downmix_sample_rate = _analysis_sample_rate(group.downmix_check) or sample_rate
+                candidates.extend(
+                    _candidates_from_flags(
+                        flags=group.downmix_check.flags,
+                        sample_rate=downmix_sample_rate,
+                        mode=mode,
+                        time_reference_samples=_time_reference_samples(group.downmix_check),
+                        group_id=group.group_id,
+                    )
+                )
 
     candidates = sorted(
         candidates,

@@ -16,6 +16,7 @@ from finalpass.timecode import sample_to_edit_units, timecode_mode
 from tests.audio_cases import (
     SEED,
     SR,
+    build_downmix_pair,
     build_two_episodes,
     exact_sum_components,
     me_check_components,
@@ -506,6 +507,62 @@ def test_collect_marker_candidates_from_all_uses_only_timed_flags(tmp_path: Path
     assert candidates
     assert {candidate.code for candidate in candidates} == {"NULL", "ME"}
     assert all(candidate.group_id == "S01E04" for candidate in candidates)
+
+
+def _write_downmix_defect_group(root: Path) -> Path:
+    """A group whose only defect is a delivered 2.0 that diverges from the fold."""
+    root.mkdir(parents=True, exist_ok=True)
+    stereo, surround = build_downmix_pair(
+        "inverted_region", seed=SEED + 610, invert_region=(4.0, 6.0)
+    )
+    write_audio(root / "SHOW_S01E04_PM_STEREO.wav", stereo)
+    write_audio(root / "SHOW_S01E04_PM_5.1.wav", surround)
+    return root
+
+
+def test_all_run_exports_downmix_markers(tmp_path: Path) -> None:
+    """Downmix flags are timed, so `all` must place them like null and M&E."""
+    folder = _write_downmix_defect_group(tmp_path / "delivery")
+
+    report = run_all(
+        folder=folder,
+        spec_name="ebu_r128",
+        patterns_path=None,
+        fps=24.0,
+    )
+
+    downmix_flags = report.groups[0].downmix_check.flags
+    assert downmix_flags, "fixture should produce downmix flags to export"
+    candidates = [
+        candidate
+        for candidate in aaf_export.collect_marker_candidates(report)
+        if candidate.code == "DOWNMIX"
+    ]
+    assert len(candidates) == len(downmix_flags)
+    assert all(candidate.group_id == "S01E04" for candidate in candidates)
+    assert candidates[0].start_edit_unit == sample_to_edit_units(
+        downmix_flags[0].start_sample,
+        report.groups[0].downmix_check._sample_rate,
+        timecode_mode(24.0),
+    )
+
+
+def test_all_run_with_downmix_only_failure_writes_aaf(tmp_path: Path) -> None:
+    folder = _write_downmix_defect_group(tmp_path / "delivery")
+    out_dir = tmp_path / "out"
+
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "all", str(folder),
+        "--spec", "ebu_r128",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 1, result.output
+
+    aaf_path = out_dir / "show-s01e04-markers.aaf"
+    assert aaf_path.exists(), result.output
+    markers = _read_marker_aaf(aaf_path)["markers"]
+    assert any("[DOWNMIX]" in marker["title"] for marker in markers)
 
 
 def test_all_me_marker_candidates_use_me_analysis_sample_rate(tmp_path: Path) -> None:
