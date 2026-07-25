@@ -1,4 +1,11 @@
-# FinalPass v0.1 Design Limitation: No Native Split-Mono Stem Support
+# FinalPass Design Limitation: No Native Split-Mono Stem Support
+
+> **Status: resolved.** This is a historical design note describing FinalPass
+> before native split-mono support existed. The limitation it analyzes was
+> addressed by the SM-1 – SM-6 work and shipped in 0.2.0: split-mono families
+> are discovered, validated, and analyzed as first-class logical assets in
+> every command, with no external pre-interleave step. The document is kept
+> because it records why the ingest layer is shaped the way it is.
 
 ## Bottom line
 

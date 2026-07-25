@@ -1,10 +1,7 @@
-# TODO — Deferred beyond the v0.1 release candidate
+# TODO — Deferred work
 
-Features outside the current phase's spec go here, not into the code.
-
-## Manual release step after acceptance
-- Create the local `v0.1.0` tag only after human sign-off. The exact command
-  lives in `RELEASE_CHECKLIST.md`; do not automate it in normal phase work.
+Features outside the current phase's spec are recorded here, not built into the
+code.
 
 ## Split-mono follow-up
 

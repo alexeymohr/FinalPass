@@ -179,7 +179,7 @@ def _extract_channel_hint(stem: str, cfg: ClassifierConfig) -> str | None:
 
 
 def scan_folder(folder: Path, cfg: ClassifierConfig) -> FolderScan:
-    """Walk ``folder`` one level deep (no recursion in v0.1), classify, group."""
+    """Walk ``folder`` one level deep (no recursion), classify, group."""
     if not folder.is_dir():
         raise ClassifierConfigError(f"Not a directory: {folder}")
 

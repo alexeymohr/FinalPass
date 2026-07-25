@@ -54,7 +54,7 @@ class AlignmentError(FinalPassError):
 
 
 class UnsupportedChannelConfigError(FinalPassError):
-    """A file's channel count is outside FinalPass v0.1 support."""
+    """A file's channel count is outside FinalPass support."""
 
 
 class ChannelConfigLabelMismatch(FinalPassError):

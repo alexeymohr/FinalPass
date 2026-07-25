@@ -12,7 +12,7 @@ and does not replace current delivery paperwork or platform-specific tools.
 
 ## Current Status
 
-This repository is a `0.1.0` release candidate. The implemented commands are:
+This repository is at `0.2.0`. The implemented commands are:
 
 - `finalpass loudness` - measure one or more program files against a bundled or
   user loudness spec.
@@ -64,7 +64,8 @@ FinalPass currently supports:
 - Program-window comparison logic for null and M&E checks when files differ only
   by pre-program or tail MOS.
 - Self-contained HTML reports rendered from the persisted report model.
-- Optional AAF marker export for timed loudness, null, and M&E flags.
+- Optional AAF marker export for timed loudness, null, M&E, and downmix flags,
+  with drop-frame carried through to the AAF timecode track.
 - Deterministic examples and a GitHub Actions test/smoke workflow.
 
 FinalPass intentionally does not make network calls during analysis. There is no
@@ -391,11 +392,10 @@ Exportable timed flags:
 - Standalone `loudness`: `files[].flags[]` for true-peak-over regions.
 - Standalone `null`: `null_test.flags[]`.
 - Standalone `me`: `me_check.flags[]`.
-- `all`: `groups[].files[].flags[]`, `groups[].null_test.flags[]`,
-  `groups[].me_check.flags[]`, and `groups[].downmix_check.flags[]`.
-
 - Standalone `downmix`: `downmix_check.flags[]` for both timed lanes, with
   marker labels `downmix mismatch` and `mono compatibility`.
+- `all`: `groups[].files[].flags[]`, `groups[].null_test.flags[]`,
+  `groups[].me_check.flags[]`, and `groups[].downmix_check.flags[]`.
 
 Channel-integrity findings are never exported: they describe a channel, not a
 moment on the timeline, so `finalpass channels` writes `report.json` and
@@ -805,7 +805,7 @@ without explicit review.
 
 ## Contributing
 
-This is an early release candidate. Useful contributions should include:
+This is an early project. Useful contributions should include:
 
 - A clear description of the delivery layout or failure case.
 - Small reproducible fixtures when possible.

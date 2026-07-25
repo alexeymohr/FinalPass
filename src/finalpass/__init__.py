@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Four schema versions because `loudness`, `null`, `me`, and `all` emit
 # different shapes. Phase 8T added `drop_frame` to every envelope; Phase 8C

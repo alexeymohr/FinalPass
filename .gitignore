@@ -19,3 +19,6 @@ stems_to_test/
 
 # Local research / planning artifacts (not part of the shipped product surface)
 resources/
+specs/
+docs/SM4_READY_HANDOFF.md
+PHASE_1_SPEC.md

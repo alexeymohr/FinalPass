@@ -1,6 +1,39 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-07-24
+
+Two new checks, drop-frame timecode, and the interactive wizard reaching every
+check the CLI can run.
+
+### Highlights
+
+- **`finalpass channels`** — per-channel integrity diagnostics on one logical
+  asset: silent legs, duplicated channels, polarity inversion, broadband
+  content in the LFE slot, and left/right imbalance notes.
+- **`finalpass downmix`** — compares a delivered 2.0 against a Lo/Ro-style
+  fold-down derived from its own 5.1/7.1 master: loudness delta, windowed
+  similarity, and mono compatibility.
+- **SMPTE ST 12-1 drop-frame timecode** at 29.97 and 59.94 via `--drop-frame`,
+  including semicolon timecode strings, a drop-frame-aware whole-hour program
+  window, and the drop flag on exported AAF timecode tracks.
+- **Both new checks run automatically inside `finalpass all`** and are offered
+  by `finalpass wizard` wherever the scanned assets support them.
+
+### Upgrading from 0.1.0
+
+Report consumers should read this section; CLI users are unaffected.
+
+- Report schemas bumped: `loudness` / `null` / `me` 3 → 4, `all` 8 → 10. New
+  `channels` and `downmix` envelopes start at 1.
+- Every report envelope gains `drop_frame: bool` beside `fps`. Non-drop
+  timecode strings are byte-identical to 0.1.0.
+- `all` reports gain `groups[].channel_checks[]` and `groups[].downmix_check`,
+  and each contributes to the group and run check counts.
+- `FlaggedRegion.code` gains `"DOWNMIX"`; `FlaggedRegion.metric` gains
+  `downmix_correlation` and `stereo_correlation`. Consumers pinned to the old
+  literal sets must widen them.
+- No measurement changed. The regenerated `all` golden is additive: 55 new
+  keys, no removed keys, no type changes, no drift in any pre-existing value.
 
 ### Phase 8D — wizard exposure
 
@@ -136,7 +169,19 @@
   carrying their own metric conditionals. Terminal and HTML output are
   unchanged.
 
-### Earlier unreleased changes
+### Fixes
+
+- **AAF export dropped every downmix flag from folder runs.** `finalpass all`
+  collected null and M&E flags per group but never downmix flags, so a bad
+  Lo/Ro fold-down produced no marker — and no `markers.aaf` at all when the
+  downmix was a group's only timed failure. The standalone `finalpass downmix`
+  path was unaffected. Found by the release checklist's DAW marker check.
+
+Two further fixes are described in their own sections above: the wizard's
+missing `drop_frame` (Phase 8D) and the drop-frame whole-hour program window
+(Phase 8T).
+
+### Also in this release
 
 - Split-mono discovery accepts Pro Tools bounce naming: spelled-out channel
   words (`Left`, `Right`, `Center`/`Centre`, `Left Front`, `Right Front`,

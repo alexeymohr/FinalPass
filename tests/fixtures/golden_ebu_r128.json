@@ -1,5 +1,5 @@
 {
-  "finalpass_version": "0.1.0",
+  "finalpass_version": "<version>",
   "schema_version": 4,
   "spec": {
     "name": "ebu_r128",

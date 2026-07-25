@@ -145,7 +145,7 @@ def _validate_inputs(printmaster: AudioFile, stems: list[AudioFile]) -> None:
         if channel_config_from_count(audio.channel_count) is None:
             raise UnsupportedChannelConfigError(
                 f"{audio.path.name}: unsupported channel count {audio.channel_count}. "
-                "FinalPass v0.1 supports mono, stereo, 5.1, and 7.1 only."
+                "FinalPass supports mono, stereo, 5.1, and 7.1 only."
             )
 
 

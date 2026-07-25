@@ -2,6 +2,9 @@
 
 Structural comparison with tolerances — we deliberately ignore ``run_id``,
 ``run_started_at``, and absolute paths, since those legitimately vary per run.
+``finalpass_version`` is asserted to match the package and then normalized to a
+placeholder, so a release bump does not masquerade as measurement drift: a
+golden diff should mean the numbers moved, not that the version did.
 Float metrics are compared with 0.1 LU / 0.1 dBTP tolerance (the same
 precision the terminal table shows).
 """
@@ -13,16 +16,26 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+from finalpass import __version__
 from finalpass.cli import main
 from tests.audio_cases import build_two_episodes
 
 FLOAT_TOLERANCE = 0.1
+VERSION_PLACEHOLDER = "<version>"
+
+
+def _normalize_version(report: dict) -> None:
+    assert report["finalpass_version"] == __version__, (
+        f"report version {report['finalpass_version']!r} != package {__version__!r}"
+    )
+    report["finalpass_version"] = VERSION_PLACEHOLDER
 
 
 def _normalize(report: dict) -> dict:
     report = dict(report)
     report.pop("run_id", None)
     report.pop("run_started_at", None)
+    _normalize_version(report)
     for f in report.get("files", []):
         f["path"] = Path(f["path"]).name  # keep only basename
         if "source_paths" in f:
@@ -77,6 +90,7 @@ def _normalize_all(report: dict) -> dict:
     report.pop("run_id", None)
     report.pop("run_started_at", None)
     report.pop("folder", None)  # absolute path varies with tmp_path
+    _normalize_version(report)
     for g in report.get("groups", []):
         _normalize_analysis_window(g.get("null_test"))
         _normalize_analysis_window(g.get("me_check"))

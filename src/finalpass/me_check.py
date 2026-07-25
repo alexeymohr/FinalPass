@@ -188,7 +188,7 @@ def _validate_inputs(me_file: AudioFile, dx_file: AudioFile) -> None:
         if channel_config_from_count(audio.channel_count) is None:
             raise UnsupportedChannelConfigError(
                 f"{audio.path.name}: unsupported channel count {audio.channel_count}. "
-                "FinalPass v0.1 supports mono, stereo, 5.1, and 7.1 only."
+                "FinalPass supports mono, stereo, 5.1, and 7.1 only."
             )
 
 
@@ -236,7 +236,7 @@ def _downmix_to_analysis_signal(data: np.ndarray) -> np.ndarray:
     if channel_count == 8:
         return np.mean(data[:, [0, 1, 2, 4, 5, 6, 7]], axis=1, dtype=np.float64)
     raise UnsupportedChannelConfigError(
-        f"unsupported channel count {channel_count}. FinalPass v0.1 supports mono, stereo, 5.1, and 7.1 only."
+        f"unsupported channel count {channel_count}. FinalPass supports mono, stereo, 5.1, and 7.1 only."
     )
 
 
