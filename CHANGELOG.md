@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Phase 8D — wizard exposure
+
+- The wizard job menu gains `Run channel integrity` and `Run downmix
+  consistency`, wired to the same `jobs.py` runners as the direct commands.
+  Downmix is offered only where `group_plan` reports an unambiguous stereo +
+  surround printmaster pairing, so the menu can no longer offer a job the
+  runner would skip. Wizard flows use default thresholds only.
+- **Fixed:** the wizard previously omitted `drop_frame` from every runner
+  call, so it silently ran non-drop regardless of the show. Its fps menu now
+  offers 29.97 and 59.94 in both counting modes, the choice persists across
+  jobs in a session, and it reaches the report envelope. A custom fps value
+  is counted non-drop, since drop-frame exists only at those two rates and
+  both are explicit menu entries.
+
 ### Phase 8C — channels and downmix inside `all`
 
 - `finalpass all` now runs both Phase 8 passes automatically and persists

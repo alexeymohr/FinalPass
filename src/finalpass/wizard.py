@@ -16,6 +16,8 @@ from .group_plan import (
     AutoNullPlan,
     available_auto_null_plans,
     same_layout_companions,
+    select_downmix_pair,
+    supports_downmix_job,
     supports_loudness_job,
     supports_me_job,
     supports_null_job,
@@ -26,24 +28,46 @@ from .jobs import (
     run_all_filtered,
     run_all_filtered_with_spec_family,
     run_all_with_spec_family,
+    run_channels,
+    run_downmix,
     run_loudness,
     run_me,
     run_null,
     write_report_artifacts,
 )
-from .models import AllReport, MEReport, NullReport, Report
-from .presentation import asset_menu_label, logical_asset_display_name, source_summary
+from .models import AllReport, ChannelsReport, DownmixReport, MEReport, NullReport, Report
+from .presentation import (
+    asset_menu_label,
+    humanize_code,
+    humanize_code_list,
+    logical_asset_display_name,
+    source_summary,
+)
 from .prep_folders import PrepLayout, PrepScanResult, create_prep_layout, detect_prep_layout, scan_prep_layout
 from .run_settings import AllSettings
 from .specs import BundledSpecFamily, CHANNEL_COUNTS, Spec, list_bundled_families, load_spec
 from .wizard_io import Choice, WizardBack, WizardQuit, choose_many, choose_one, print_section, prompt_text
 
 WizardAction = Literal["job_menu", "choose_folder", "exit"]
+WizardJob = Literal[
+    "all", "loudness", "null", "me", "channels", "downmix", "choose_folder", "exit"
+]
 WizardStatus = Literal["PASS", "FAIL", "TOOL ERROR"]
 WizardMode = Literal["folder", "prep"]
 
 DEFAULT_OUTPUT_DIR = Path("./finalpass-report")
-COMMON_FPS_OPTIONS = [23.976, 24.0, 25.0, 29.97, 30.0]
+# (fps, drop_frame). Drop-frame is offered only where SMPTE ST 12-1 defines
+# it; a custom value is always counted non-drop.
+COMMON_FPS_OPTIONS: list[tuple[float, bool]] = [
+    (23.976, False),
+    (24.0, False),
+    (25.0, False),
+    (29.97, False),
+    (29.97, True),
+    (30.0, False),
+    (59.94, False),
+    (59.94, True),
+]
 _SPINNER_INTERVAL_SECONDS = 0.2
 _SPINNER_MESSAGE = "Running job"
 
@@ -66,6 +90,7 @@ class FlowResult:
     action: WizardAction
     out_dir: Path
     fps: float
+    drop_frame: bool = False
 
 
 @dataclass(frozen=True)
@@ -90,6 +115,7 @@ def run_wizard(*, folder: Path | None, out_dir: Path, fps: float) -> None:
     current_folder = folder.expanduser() if folder is not None else None
     current_out_dir = out_dir
     current_fps = fps
+    current_drop_frame = False
 
     try:
         while True:
@@ -106,17 +132,24 @@ def run_wizard(*, folder: Path | None, out_dir: Path, fps: float) -> None:
                 if action == "exit":
                     return
 
-                if action == "all":
-                    flow = _all_flow(folder_context, default_out_dir=current_out_dir, default_fps=current_fps)
-                elif action == "loudness":
-                    flow = _loudness_flow(folder_context, default_out_dir=current_out_dir, default_fps=current_fps)
-                elif action == "null":
-                    flow = _null_flow(folder_context, default_out_dir=current_out_dir, default_fps=current_fps)
-                else:
-                    flow = _me_flow(folder_context, default_out_dir=current_out_dir, default_fps=current_fps)
+                flow_for_action = {
+                    "all": _all_flow,
+                    "loudness": _loudness_flow,
+                    "null": _null_flow,
+                    "me": _me_flow,
+                    "channels": _channels_flow,
+                    "downmix": _downmix_flow,
+                }[action]
+                flow = flow_for_action(
+                    folder_context,
+                    default_out_dir=current_out_dir,
+                    default_fps=current_fps,
+                    default_drop_frame=current_drop_frame,
+                )
 
                 current_out_dir = flow.out_dir
                 current_fps = flow.fps
+                current_drop_frame = flow.drop_frame
                 if flow.action == "choose_folder":
                     current_folder = None
                     break
@@ -254,7 +287,7 @@ def _choose_folder_context(initial_folder: Path | None) -> FolderContext | None:
         return context
 
 
-def _job_menu(folder_context: FolderContext) -> Literal["all", "loudness", "null", "me", "choose_folder", "exit"]:
+def _job_menu(folder_context: FolderContext) -> WizardJob:
     print_section("Choose a job:")
     if folder_context.mode == "prep":
         options = _prep_job_options(folder_context)
@@ -264,6 +297,12 @@ def _job_menu(folder_context: FolderContext) -> Literal["all", "loudness", "null
             Choice("Measure loudness on one asset", "loudness"),
             Choice("Run printmaster null", "null"),
             Choice("Run M&E bleed check", "me"),
+            Choice("Run channel integrity", "channels"),
+            *(
+                [Choice("Run downmix consistency", "downmix")]
+                if _downmix_available(folder_context)
+                else []
+            ),
             Choice("Choose a different folder", "choose_folder"),
             Choice("Exit", "exit"),
         ]
@@ -274,12 +313,12 @@ def _job_menu(folder_context: FolderContext) -> Literal["all", "loudness", "null
     )
 
 
-def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float) -> FlowResult:
+def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float, default_drop_frame: bool) -> FlowResult:
     while True:
         try:
             spec_selection = _choose_spec_for_all(folder_context)
         except WizardBack:
-            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps)
+            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps, drop_frame=default_drop_frame)
 
         while True:
             try:
@@ -289,7 +328,7 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
 
             while True:
                 try:
-                    fps = _choose_fps(default_fps)
+                    fps, drop_frame = _choose_fps(default_fps, default_drop_frame)
                 except WizardBack:
                     break
 
@@ -299,7 +338,7 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
                         *_context_review_lines(folder_context),
                         f"Loudness standard: {spec_selection.review_label}",
                         f"Output: {out_dir}",
-                        f"FPS: {fps:g}",
+                        _fps_review_line(fps, drop_frame),
                     ])
                 except WizardBack:
                     continue
@@ -319,15 +358,15 @@ def _all_flow(folder_context: FolderContext, *, default_out_dir: Path, default_f
                         fps=fps,
                     ),
                 )
-                return _result_screen(result, out_dir=out_dir, fps=fps)
+                return _result_screen(result, out_dir=out_dir, fps=fps, drop_frame=drop_frame)
 
 
-def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float) -> FlowResult:
+def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float, default_drop_frame: bool) -> FlowResult:
     while True:
         try:
             group_id = _choose_group(folder_context, title="Choose a group for loudness.")
         except WizardBack:
-            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps)
+            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps, drop_frame=default_drop_frame)
 
         group_assets = folder_context.scan.groups[group_id]
         while True:
@@ -360,7 +399,7 @@ def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, defa
 
                         while True:
                             try:
-                                fps = _choose_fps(default_fps)
+                                fps, drop_frame = _choose_fps(default_fps, default_drop_frame)
                             except WizardBack:
                                 break
 
@@ -373,7 +412,7 @@ def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, defa
                                     f"Loudness standard: {spec_selection.review_label}",
                                     _review_asset_line("DX asset", dx_asset),
                                     f"Output: {out_dir}",
-                                    f"FPS: {fps:g}",
+                                    _fps_review_line(fps, drop_frame),
                                 ]
                                 _review_and_confirm(review_lines)
                             except WizardBack:
@@ -393,15 +432,15 @@ def _loudness_flow(folder_context: FolderContext, *, default_out_dir: Path, defa
                                     fps=fps,
                                 ),
                             )
-                            return _result_screen(result, out_dir=out_dir, fps=fps)
+                            return _result_screen(result, out_dir=out_dir, fps=fps, drop_frame=drop_frame)
 
 
-def _null_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float) -> FlowResult:
+def _null_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float, default_drop_frame: bool) -> FlowResult:
     while True:
         try:
             group_id = _choose_group(folder_context, title="Choose a group for null.")
         except WizardBack:
-            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps)
+            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps, drop_frame=default_drop_frame)
 
         group_assets = folder_context.scan.groups[group_id]
         pm_candidates = [asset for asset in group_assets if asset.role == "pm"]
@@ -433,7 +472,7 @@ def _null_flow(folder_context: FolderContext, *, default_out_dir: Path, default_
 
                     while True:
                         try:
-                            fps = _choose_fps(default_fps)
+                            fps, drop_frame = _choose_fps(default_fps, default_drop_frame)
                         except WizardBack:
                             break
 
@@ -445,7 +484,7 @@ def _null_flow(folder_context: FolderContext, *, default_out_dir: Path, default_
                                 _review_asset_line("Printmaster", pm_asset),
                                 f"Stems: {', '.join(logical_asset_display_name(asset) for asset in stem_assets)}",
                                 f"Output: {out_dir}",
-                                f"FPS: {fps:g}",
+                                _fps_review_line(fps, drop_frame),
                             ])
                         except WizardBack:
                             continue
@@ -460,15 +499,15 @@ def _null_flow(folder_context: FolderContext, *, default_out_dir: Path, default_
                                 fps=fps,
                             ),
                         )
-                        return _result_screen(result, out_dir=out_dir, fps=fps)
+                        return _result_screen(result, out_dir=out_dir, fps=fps, drop_frame=drop_frame)
 
 
-def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float) -> FlowResult:
+def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fps: float, default_drop_frame: bool) -> FlowResult:
     while True:
         try:
             group_id = _choose_group(folder_context, title="Choose a group for M&E.")
         except WizardBack:
-            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps)
+            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps, drop_frame=default_drop_frame)
 
         group_assets = folder_context.scan.groups[group_id]
         me_candidates = [asset for asset in group_assets if asset.role == "me"]
@@ -500,7 +539,7 @@ def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fp
 
                     while True:
                         try:
-                            fps = _choose_fps(default_fps)
+                            fps, drop_frame = _choose_fps(default_fps, default_drop_frame)
                         except WizardBack:
                             break
 
@@ -512,7 +551,7 @@ def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fp
                                 _review_asset_line("M&E asset", me_asset),
                                 _review_asset_line("DX asset", dx_asset),
                                 f"Output: {out_dir}",
-                                f"FPS: {fps:g}",
+                                _fps_review_line(fps, drop_frame),
                             ])
                         except WizardBack:
                             continue
@@ -527,7 +566,176 @@ def _me_flow(folder_context: FolderContext, *, default_out_dir: Path, default_fp
                                 fps=fps,
                             ),
                         )
-                        return _result_screen(result, out_dir=out_dir, fps=fps)
+                        return _result_screen(result, out_dir=out_dir, fps=fps, drop_frame=drop_frame)
+
+
+def _channels_flow(
+    folder_context: FolderContext,
+    *,
+    default_out_dir: Path,
+    default_fps: float,
+    default_drop_frame: bool,
+) -> FlowResult:
+    while True:
+        try:
+            group_id = _choose_group(folder_context, title="Choose a group for channel integrity.")
+        except WizardBack:
+            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps, drop_frame=default_drop_frame)
+
+        group_assets = folder_context.scan.groups[group_id]
+        if not group_assets:
+            click.echo(f"No assets are available in {group_id}.")
+            continue
+
+        while True:
+            try:
+                assets = _choose_channels_assets(group_id, group_assets)
+            except WizardBack:
+                break
+
+            while True:
+                try:
+                    out_dir = _choose_output_dir(default_out_dir)
+                except WizardBack:
+                    break
+
+                while True:
+                    try:
+                        fps, drop_frame = _choose_fps(default_fps, default_drop_frame)
+                    except WizardBack:
+                        break
+
+                    try:
+                        _review_and_confirm([
+                            "Job: channels",
+                            *_context_review_lines(folder_context),
+                            f"Group: {group_id}",
+                            f"Assets: {', '.join(logical_asset_display_name(asset) for asset in assets)}",
+                            f"Output: {out_dir}",
+                            _fps_review_line(fps, drop_frame),
+                        ])
+                    except WizardBack:
+                        continue
+
+                    result = _execute_report_job(
+                        job_name="channels",
+                        out_dir=out_dir,
+                        summary_builder=_channels_summary_line,
+                        runner=lambda: run_channels(
+                            files=tuple(asset.logical_asset.canonical_path for asset in assets),
+                            fps=fps,
+                            drop_frame=drop_frame,
+                        ),
+                    )
+                    return _result_screen(result, out_dir=out_dir, fps=fps, drop_frame=drop_frame)
+
+
+def _downmix_flow(
+    folder_context: FolderContext,
+    *,
+    default_out_dir: Path,
+    default_fps: float,
+    default_drop_frame: bool,
+) -> FlowResult:
+    while True:
+        try:
+            group_id = _choose_group(folder_context, title="Choose a group for downmix consistency.")
+        except WizardBack:
+            return FlowResult(action="job_menu", out_dir=default_out_dir, fps=default_fps, drop_frame=default_drop_frame)
+
+        # The pairing is the same query the folder runner uses, so the wizard
+        # can never offer a pairing the runner would refuse.
+        pair, skip_reason = select_downmix_pair(folder_context.scan.groups[group_id])
+        if pair is None:
+            click.echo(f"{group_id} cannot run downmix: {humanize_code(skip_reason)}.")
+            continue
+
+        while True:
+            try:
+                out_dir = _choose_output_dir(default_out_dir)
+            except WizardBack:
+                break
+
+            while True:
+                try:
+                    fps, drop_frame = _choose_fps(default_fps, default_drop_frame)
+                except WizardBack:
+                    break
+
+                try:
+                    _review_and_confirm([
+                        "Job: downmix",
+                        *_context_review_lines(folder_context),
+                        f"Group: {group_id}",
+                        _review_asset_line("Delivered 2.0", pair.stereo),
+                        _review_asset_line("Surround master", pair.surround),
+                        f"Output: {out_dir}",
+                        _fps_review_line(fps, drop_frame),
+                    ])
+                except WizardBack:
+                    continue
+
+                result = _execute_report_job(
+                    job_name="downmix",
+                    out_dir=out_dir,
+                    summary_builder=_downmix_summary_line,
+                    runner=lambda: run_downmix(
+                        stereo=pair.stereo.logical_asset.canonical_path,
+                        surround=pair.surround.logical_asset.canonical_path,
+                        fps=fps,
+                        drop_frame=drop_frame,
+                    ),
+                )
+                return _result_screen(result, out_dir=out_dir, fps=fps, drop_frame=drop_frame)
+
+
+def _choose_channels_assets(
+    group_id: str,
+    group_assets: list[ClassifiedLogicalAsset],
+) -> list[ClassifiedLogicalAsset]:
+    choice = choose_one(
+        f"Choose which assets in {group_id} to check.",
+        [
+            Choice(f"All {len(group_assets)} assets in this group", "all"),
+            Choice("Choose specific assets", "some"),
+        ],
+    )
+    if choice == "all":
+        return list(group_assets)
+
+    while True:
+        selected = choose_many(
+            "Choose one or more assets.",
+            [Choice(asset_menu_label(asset), asset) for asset in group_assets],
+        )
+        if selected:
+            return selected
+        click.echo("Choose at least one asset.")
+
+
+def _channels_summary_line(report: ChannelsReport) -> str:
+    failing = [asset for asset in report.assets if asset.pass_ is False]
+    if not failing:
+        noun = "asset" if len(report.assets) == 1 else "assets"
+        return f"{len(report.assets)} {noun} clean."
+    noun = "asset" if len(failing) == 1 else "assets"
+    kinds = sorted({
+        finding.kind
+        for asset in failing
+        for finding in asset.findings
+        if finding.severity == "fail" and not finding.skipped
+    })
+    return f"{len(failing)} {noun} with findings: {humanize_code_list(kinds)}."
+
+
+def _downmix_summary_line(report: DownmixReport) -> str:
+    summary = report.downmix_check.summary
+    if summary is None:
+        return humanize_code(report.downmix_check.reason)
+    delta = "—" if summary.loudness_delta_lu is None else f"{summary.loudness_delta_lu:.1f} LU"
+    regions = summary.flagged_regions
+    noun = "region" if regions == 1 else "regions"
+    return f"Loudness delta {delta}; {regions} flagged {noun}."
 
 
 def _resolve_folder(folder: Path) -> tuple[Path | None, str | None]:
@@ -658,6 +866,10 @@ def _prep_job_options(folder_context: FolderContext) -> list[Choice[str]]:
         options.append(Choice("Run printmaster null", "null"))
     if _me_available(folder_context):
         options.append(Choice("Run M&E bleed check", "me"))
+    if folder_context.asset_count:
+        options.append(Choice("Run channel integrity", "channels"))
+    if _downmix_available(folder_context):
+        options.append(Choice("Run downmix consistency", "downmix"))
     options.extend([
         Choice("Choose a different folder", "choose_folder"),
         Choice("Exit", "exit"),
@@ -675,6 +887,10 @@ def _null_available(folder_context: FolderContext) -> bool:
 
 def _me_available(folder_context: FolderContext) -> bool:
     return any(supports_me_job(assets) for assets in folder_context.scan.groups.values())
+
+
+def _downmix_available(folder_context: FolderContext) -> bool:
+    return any(supports_downmix_job(assets) for assets in folder_context.scan.groups.values())
 
 
 def _run_all_for_context(
@@ -999,10 +1215,10 @@ def _choose_output_dir(default_out_dir: Path) -> Path:
         click.echo("Enter a valid output directory path.")
 
 
-def _choose_fps(default_fps: float) -> float:
+def _choose_fps(default_fps: float, default_drop_frame: bool = False) -> tuple[float, bool]:
     default_index = None
     for index, option in enumerate(COMMON_FPS_OPTIONS, start=1):
-        if option == default_fps:
+        if option == (default_fps, default_drop_frame):
             default_index = index
             break
     if default_index is None:
@@ -1011,17 +1227,17 @@ def _choose_fps(default_fps: float) -> float:
     choice = choose_one(
         "Choose the frame rate.",
         [
-            Choice("23.976 fps", 23.976),
-            Choice("24 fps", 24.0),
-            Choice("25 fps", 25.0),
-            Choice("29.97 fps", 29.97),
-            Choice("30 fps", 30.0),
+            *(
+                Choice(_fps_option_label(fps, drop_frame), (fps, drop_frame))
+                for fps, drop_frame in COMMON_FPS_OPTIONS
+            ),
             Choice("Enter a custom value", "__custom__"),
         ],
         default_index=default_index,
     )
     if choice != "__custom__":
-        return float(choice)
+        fps, drop_frame = choice
+        return float(fps), bool(drop_frame)
 
     while True:
         try:
@@ -1036,7 +1252,16 @@ def _choose_fps(default_fps: float) -> float:
         if value <= 0:
             click.echo("FPS must be greater than zero.")
             continue
-        return value
+        # Drop-frame exists only at 29.97/59.94, and both are menu entries.
+        return value, False
+
+
+def _fps_option_label(fps: float, drop_frame: bool) -> str:
+    return f"{fps:g} fps{' drop-frame' if drop_frame else ''}"
+
+
+def _fps_review_line(fps: float, drop_frame: bool) -> str:
+    return f"FPS: {fps:g}{' (drop-frame)' if drop_frame else ''}"
 
 
 def _review_and_confirm(lines: list[str]) -> None:
@@ -1088,7 +1313,7 @@ def _execute_report_job(*, job_name: str, out_dir: Path, summary_builder, runner
     )
 
 
-def _result_screen(result: JobExecutionResult, *, out_dir: Path, fps: float) -> FlowResult:
+def _result_screen(result: JobExecutionResult, *, out_dir: Path, fps: float, drop_frame: bool = False) -> FlowResult:
     print_section("Result:")
     click.echo(f"Job: {result.job_name}")
     click.echo(f"Status: {result.status}")

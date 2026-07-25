@@ -251,6 +251,42 @@ Features outside the current phase's spec go here, not into the code.
   deliveries are far longer; the 10-second example fixtures are why the
   smoke flow and several tests pass an explicit shorter window.
 
+## Deferred feature — dialog-gated loudness approximation
+
+- **Why it matters.** Shows mixed to a dialog-gated spec measure correctly
+  under that gate but read hot under an ungated integrated target. Confirmed
+  on PYL704 (2026-07-24): the stereo mix measures -21.5 LUFS integrated,
+  while its dialog-gated value is around -23 and in spec. FinalPass reports
+  the -21.5 accurately; it simply is not measuring the same quantity the
+  delivery was graded against.
+- **What FinalPass does today.** `dialog_lufs` is the integrated LUFS of the
+  DX stem — a different measurement, and the README says so plainly. Dolby
+  Dialogue Intelligence is licensed and explicitly out of scope.
+- **Possible future direction.** An open, honestly-labelled approximation of
+  a dialogue gate (never called Dialogue Intelligence, never claiming
+  equivalence), so a dialog-gated delivery can be measured against its own
+  target. Needs its own spec: what gates, what the report calls it, and how
+  loudly it disclaims being the licensed process.
+- Not scheduled. Recorded so the -21.5-style result is understood as a
+  measurement mismatch rather than a defect.
+
+## Phase 8D — design decisions
+
+- **Menu availability comes from `group_plan`,** the same query the runners
+  use for their skip decisions. The wizard cannot offer a job the runner
+  would refuse. Channels is offered whenever the folder has any asset;
+  downmix only where a group has an unambiguous stereo + surround pairing.
+- **Wizard flows use default thresholds only.** No tuning menus, consistent
+  with the SM-6 deferral of advanced tuning; the direct CLI carries every
+  knob.
+- **A custom wizard fps is counted non-drop.** Drop-frame is defined only at
+  29.97 and 59.94, and both appear as explicit menu entries, so the custom
+  prompt does not need a follow-up question.
+- **Fixed a real gap:** the wizard had never passed `drop_frame` to any
+  runner, so it silently ran non-drop even for drop-frame shows. Found by the
+  architecture pass, fixed here, and pinned by a test that asserts the
+  selection reaches the report envelope.
+
 ## Future optional artifacts
 
 - `summary.txt` — optional one-page text artifact if it proves useful after HTML and AAF land.

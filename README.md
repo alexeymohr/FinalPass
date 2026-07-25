@@ -27,7 +27,8 @@ This repository is a `0.1.0` release candidate. The implemented commands are:
 - `finalpass downmix` - compare a delivered 2.0 against a fold-down derived
   from the matching 5.1/7.1 master.
 - `finalpass wizard` - guide a user through folder-first analysis and optional
-  `FinalPass Prep/` curation.
+  `FinalPass Prep/` curation. Every check above is available as a job, offered
+  only where the scanned assets support it.
 - `finalpass specs list` and `finalpass specs show` - inspect bundled spec
   presets.
 
@@ -147,6 +148,8 @@ uv run finalpass --version
 uv run finalpass specs list
 uv run finalpass specs show <name>
 uv run finalpass wizard [folder] [--out <dir>] [--fps <rate>]
+#   the wizard fps menu offers 23.976 / 24 / 25 / 29.97 / 29.97 DF / 30 /
+#   59.94 / 59.94 DF, or a custom value (counted non-drop)
 uv run finalpass loudness <file>... --spec <name-or-yaml> [--dx <file>] [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
 uv run finalpass null <pm> <stems>... [--out <dir>] [--json-only] [--fps <rate>] [--drop-frame]
                                       [--window-ms <ms>] [--hop-ms <ms>] [--threshold-dbfs <dbfs>]

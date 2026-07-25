@@ -48,6 +48,12 @@ for one channel layout.
 Bundled spec presets spanning multiple layouts under one delivery standard
 (e.g. ATSC A/85, Netflix Original).
 
+**Dialog LUFS**:
+Integrated loudness of the dialogue stem, as FinalPass measures it. Not the
+same quantity as a dialog-gated loudness spec, which gates the full mix on
+detected speech; FinalPass does not measure that.
+_Avoid_: dialog-gated loudness (a different measurement), dialnorm
+
 **Program window**:
 The sample span a comparison check actually analyzes: bounded by the
 whole-hour timecode boundary when BWF time references allow, with MOS tails

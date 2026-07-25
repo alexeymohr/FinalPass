@@ -11,7 +11,13 @@ from click.testing import CliRunner
 import finalpass.wizard as wizard_module
 from finalpass.cli import main
 from finalpass.prep_folders import BUCKET_SPECS, PREP_ROOT_NAME, create_prep_layout
-from tests.audio_cases import SEED, build_split_group
+from tests.audio_cases import (
+    SEED,
+    build_clean_51,
+    build_split_group,
+    fold_down_of,
+    write_split_role,
+)
 
 
 def _copy_family(members: dict[str, Path], target_dir: Path) -> None:
@@ -596,3 +602,96 @@ def test_job_spinner_is_silent_when_not_tty(monkeypatch) -> None:
         time.sleep(0.02)
 
     assert stream.getvalue() == ""
+
+
+# --- Phase 8D: channels and downmix in the wizard ----------------------------
+
+
+def _downmix_group(root: Path, group_id: str = "S01E03", *, seed: int = SEED + 2400) -> None:
+    """A group with exactly one surround PM and one stereo PM: a valid pairing."""
+    surround = build_clean_51(seed=seed)
+    write_split_role(root, group_id, "pm", "5.1", surround)
+    write_split_role(root, group_id, "pm", "stereo", fold_down_of(surround))
+
+
+def test_wizard_offers_channels_and_runs_it(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx"), base_seed=SEED + 2410)
+    out_dir = tmp_path / "out"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["wizard", str(folder), "--out", str(out_dir)],
+        input="1\n5\n1\n1\n1\n1\n3\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Run channel integrity" in result.output
+    payload = json.loads(_report_path(out_dir).read_text(encoding="utf-8"))
+    assert payload["command"] == "channels"
+    assert len(payload["assets"]) == 2
+
+
+def test_wizard_hides_downmix_when_no_valid_pairing_exists(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx"), base_seed=SEED + 2420)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["wizard", str(folder)], input="1\nq\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Run channel integrity" in result.output
+    # No stereo printmaster, so the runner would skip it — the menu must not
+    # offer a job the runner cannot perform.
+    assert "Run downmix consistency" not in result.output
+
+
+def test_wizard_offers_downmix_when_the_pairing_is_unambiguous(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    _downmix_group(folder)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["wizard", str(folder)], input="1\nq\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Run downmix consistency" in result.output
+
+
+def test_wizard_downmix_flow_runs_through_the_shared_runner(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    _downmix_group(folder, seed=SEED + 2430)
+    out_dir = tmp_path / "out"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["wizard", str(folder), "--out", str(out_dir)],
+        input="1\n6\n1\n1\n1\n3\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(_report_path(out_dir).read_text(encoding="utf-8"))
+    assert payload["command"] == "downmix"
+    assert payload["downmix_check"]["analysis_signal"] == "loro_fold_down"
+    assert payload["downmix_check"]["pass"] is True
+
+
+def test_wizard_drop_frame_selection_reaches_the_report(tmp_path: Path) -> None:
+    folder = tmp_path / "delivery"
+    build_split_group(folder, "S01E03", layout="5.1", write_roles=("pm", "dx"), base_seed=SEED + 2440)
+    out_dir = tmp_path / "out"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["wizard", str(folder), "--out", str(out_dir)],
+        # Job 5 is channels; fps menu entry 5 is "29.97 fps drop-frame".
+        input="1\n5\n1\n1\n5\n1\n3\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "29.97 fps drop-frame" in result.output
+    payload = json.loads(_report_path(out_dir).read_text(encoding="utf-8"))
+    assert payload["fps"] == 29.97
+    assert payload["drop_frame"] is True
