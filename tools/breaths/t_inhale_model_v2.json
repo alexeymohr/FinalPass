@@ -1,0 +1,45 @@
+{
+ "name": "t_inhale_score",
+ "version": 2,
+ "created": "2026-09-26",
+ "trained_on": "operator labels, one delivered AI-narrated audiobook (41 chapters): ch. 001-003 file-name tags (out of context) + grading rounds 1-2 (in context, 26+24 chapters)",
+ "positives": 40,
+ "negatives": 603,
+ "held_out_auc_leave_one_group_out": 0.899,
+ "label_caveat": "T-inhale vs breath-after-hard-consonant is the least reliable distinction; ch. 1-3 labels were made without context",
+ "features": [
+  "burst_rise_db",
+  "closure_below_body_db",
+  "context_rel_db",
+  "gap_before_ms",
+  "burst_width_ms",
+  "burst_above_4k"
+ ],
+ "gap_before_ms_is_log10": true,
+ "mean": [
+  10.026267496111965,
+  -5.024556765163296,
+  -3.1042768273716965,
+  2.1259289651660245,
+  11.094867807153966,
+  0.2544802488335924
+ ],
+ "std": [
+  5.891306911219953,
+  11.762974780319576,
+  11.028918776672466,
+  0.3828128856862636,
+  26.059604280723928,
+  0.3695409302369054
+ ],
+ "intercept": -1.9179846826619504,
+ "weights": [
+  0.7842536121746785,
+  0.7093114852388156,
+  -0.26232083705029585,
+  0.4428543081312551,
+  -2.6877396763595724,
+  1.3287790970048579
+ ],
+ "flag_threshold": 1.7643258434122662
+}

@@ -363,6 +363,65 @@ def channels_cmd(
     _finalize_run(report, payload=payload, written=written, json_only=json_only, renderer=_render_channels_report)
 
 
+@main.command("breaths")
+@click.argument("files", nargs=-1, type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
+@click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
+@click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
+@click.option("--list", "list_mode", type=click.Choice(["t-inhale", "grade-3", "all"]), default="t-inhale", show_default=True, help="Which breaths to list in the terminal. The text file always lists every breath.")
+@click.option("--min-ms", type=float, default=150.0, show_default=True, help="Ignore breaths shorter than this; shorter ones are too brief to judge.")
+@click.option("--no-t-inhale", is_flag=True, help="Do not flag mouth-release (T-inhale) breaths as a client QC risk.")
+def breaths_cmd(files: tuple[Path, ...], out_dir: Path, json_only: bool, list_mode: str, min_ms: float, no_t_inhale: bool) -> None:
+    """Audiobook breath check: find, grade (1-3) and flag breaths. Informational only."""
+    from .breath_check import BreathTunables
+    from .jobs import run_breaths, write_breath_artifacts
+
+    if min_ms <= 0:
+        _err_console.print("[red]error:[/red] --min-ms must be positive.")
+        sys.exit(2)
+    tunables = BreathTunables(min_breath_ms=min_ms, t_inhale=not no_t_inhale)
+    try:
+        if json_only:
+            report = run_breaths(files=files, tunables=tunables)
+        else:
+            with _err_console.status("Running breath check..."):
+                report = run_breaths(files=files, tunables=tunables)
+        json_path, text_path = write_breath_artifacts(report, out_dir)
+    except FinalPassError as exc:
+        _err_console.print(f"[red]error:[/red] {exc}")
+        sys.exit(2)
+    if json_only:
+        click.echo(report.model_dump_json(indent=2))
+        sys.exit(0)
+    _render_breaths_report(report, list_mode=list_mode)
+    _out_console.print(f"\nWrote {text_path}\nWrote {json_path}")
+    sys.exit(0)
+
+
+def _render_breaths_report(report, *, list_mode: str) -> None:
+    from .breath_check import summary_line
+
+    for asset in report.assets:
+        _out_console.print(f"\n[bold]{Path(asset.path).name}[/bold]  [dim]{asset.duration_seconds:.1f}s[/dim]")
+        _out_console.print(f"  {summary_line(asset.counts)}")
+        for note in asset.notes:
+            _out_console.print(f"  [dim]note: {note}[/dim]")
+        rows = [e for e in asset.breaths
+                if list_mode == "all" or e.t_inhale or (list_mode == "grade-3" and e.grade == 3)]
+        if not rows:
+            continue
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("time")
+        table.add_column("length", justify="right")
+        table.add_column("grade", justify="center")
+        table.add_column("flag")
+        for e in rows:
+            table.add_row(e.start_time, f"{e.duration_ms} ms", str(e.grade),
+                          "[yellow]T-inhale — client QC risk[/yellow]" if e.t_inhale else "")
+        _out_console.print(table)
+    _out_console.print(f"\n[bold]All files:[/bold] {summary_line(report.summary)}")
+    _out_console.print("[dim]Informational only — nothing here fails a delivery.[/dim]")
+
+
 @main.command("downmix")
 @click.argument("stereo", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument("surround", type=click.Path(exists=True, dir_okay=False, path_type=Path))

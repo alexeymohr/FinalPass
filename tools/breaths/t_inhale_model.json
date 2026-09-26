@@ -1,0 +1,44 @@
+{
+ "name": "t_inhale_score",
+ "version": 1,
+ "created": "2026-09-25",
+ "trained_on": "operator file-name labels, one delivered AI-narrated audiobook (41 chapters) ch. 001-003, 150 ms floor applied; 27 T-inhale vs 506 other (plain breath, consonant-then-inhale, not-breath, unknown); 3 'possible' T-inhales excluded",
+ "held_out_auc_leave_one_chapter_out": 0.89,
+ "held_out_at_threshold": "top 27 in unseen chapters: 15/27 T-inhales, 56% of flags",
+ "label_caveat": "labels made from out-of-context excerpts; T-inhale vs consonant-then-inhale is the least reliable distinction",
+ "features": [
+  "burst_rise_db",
+  "closure_below_body_db",
+  "context_rel_db",
+  "gap_before_ms",
+  "burst_width_ms",
+  "burst_above_4k"
+ ],
+ "gap_before_ms_is_log10": true,
+ "mean": [
+  9.630825515947453,
+  -5.636660412757975,
+  -2.8703377110694204,
+  2.1328493974458165,
+  11.206378986866792,
+  0.25594540337711047
+ ],
+ "std": [
+  5.240168215931162,
+  11.564995420520747,
+  10.74360925713119,
+  0.36796714117464796,
+  26.032642892068353,
+  0.3727300506955378
+ ],
+ "intercept": -1.7239717987460135,
+ "weights": [
+  0.6622030904023023,
+  0.7430956471682508,
+  -0.425000807448593,
+  0.02094531878978869,
+  -2.605552901299702,
+  1.5997510750169934
+ ],
+ "flag_threshold": 1.8358247754692147
+}

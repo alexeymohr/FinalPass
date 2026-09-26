@@ -1987,3 +1987,49 @@ def _run_timestamp() -> tuple[datetime, str]:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     run_id = now.strftime("%Y-%m-%dT%H-%M-%SZ") + "-" + secrets.token_hex(3)
     return now, run_id
+
+
+# --- breaths (audiobook breath check) -----------------------------------------
+# Kept as one self-contained block: informational only, its own small artifact
+# set (JSON record + plain-text list), no HTML or markers yet by design.
+
+BREATHS_JSON_NAME = "breaths-report.json"
+BREATHS_TEXT_NAME = "breaths.txt"
+
+
+def run_breaths(*, files: tuple[Path, ...], tunables=None):
+    """Find, grade and flag breaths in each narration file. Never fails a run."""
+    from .breath_check import (
+        BREATHS_SCHEMA_VERSION, BreathCounts, BreathsReport, BreathTunables, analyze_breaths,
+    )
+
+    tunables = tunables or BreathTunables()
+    assets = []
+    total = BreathCounts()
+    for path in files:
+        resolved = resolve_standalone_asset(path)
+        result = analyze_breaths(resolved.audio, tunables)
+        assets.append(result)
+        total.add(result.counts)
+    now, run_id = _run_timestamp()
+    return BreathsReport(
+        finalpass_version=__version__,
+        schema_version=BREATHS_SCHEMA_VERSION,
+        run_id=run_id,
+        run_started_at=now.isoformat().replace("+00:00", "Z"),
+        tunables=tunables.as_dict(),
+        assets=assets,
+        summary=total,
+    )
+
+
+def write_breath_artifacts(report, out_dir: Path) -> tuple[Path, Path]:
+    """Write the JSON record and the plain-text breath list."""
+    from .breath_check import render_breath_list
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / BREATHS_JSON_NAME
+    text_path = out_dir / BREATHS_TEXT_NAME
+    json_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    text_path.write_text(render_breath_list(report), encoding="utf-8")
+    return json_path, text_path

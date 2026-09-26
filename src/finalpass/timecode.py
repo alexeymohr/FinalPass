@@ -154,6 +154,22 @@ def samples_to_tc(
     return frames_to_tc(total_frames, mode)
 
 
+def samples_to_clock(sample_index: int, sample_rate: int) -> str:
+    """``H:MM:SS.mmm`` from the start of the file, in exact integer arithmetic.
+
+    File-relative on purpose: audiobook chapter files are auditioned on their own,
+    usually without an embedded start time, and editors locate by clock time.
+    Milliseconds are truncated, never rounded up past the sample.
+    """
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
+    ms = (int(sample_index) * 1000) // int(sample_rate)
+    hours, rem = divmod(ms, 3_600_000)
+    minutes, rem = divmod(rem, 60_000)
+    seconds, millis = divmod(rem, 1000)
+    return f"{hours}:{minutes:02d}:{seconds:02d}.{millis:03d}"
+
+
 def frames_to_tc(total_frames: int, mode: TimecodeMode) -> str:
     """Format edit units as an ``HH:MM:SS:FF`` / ``HH:MM:SS;FF`` timecode string."""
     frames_per_second = mode.nominal_fps
