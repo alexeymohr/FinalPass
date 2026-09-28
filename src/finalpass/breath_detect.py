@@ -27,7 +27,7 @@ Every threshold lives in `BreathParams` so it can be reported and tuned openly.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 import numpy as np
 
@@ -81,6 +81,27 @@ def narration_level(f: Frames, p: BreathParams = BreathParams()) -> float:
     return float(np.median(f.rms_db[loud])) if loud.any() else float("nan")
 
 
+def speech_mask(f: Frames, level: float, p: BreathParams = BreathParams()) -> np.ndarray:
+    """Frames of pitched, narration-loud speech."""
+    return (~f.zero) & (f.voicing > p.speech_voicing) & (f.rms_db - level > p.speech_min_rel_db)
+
+
+def frame_centre(f: Frames) -> int:
+    """Sample offset from a frame's start to the point it represents."""
+    return (int(round(0.035 * f.sample_rate)) - f.hop) // 2
+
+
+def shorten(b: Breath, end_sample: int, f: Frames, level: float) -> Breath:
+    """The same breath ending earlier, with its level measures taken again."""
+    end_frame = max(b.start_frame + 1, (end_sample - frame_centre(f)) // f.hop)
+    body = f.rms_db[b.start_frame:end_frame] - level
+    return replace(
+        b, end_sample=end_sample, end_frame=end_frame,
+        duration_s=round((end_sample - b.start_sample) / f.sample_rate, 3),
+        peak_rel_db=round(float(body.max()), 2), median_rel_db=round(float(np.median(body)), 2),
+    )
+
+
 def _runs(mask: np.ndarray, bridge: int) -> list[tuple[int, int]]:
     idx = np.flatnonzero(mask)
     if idx.size == 0:
@@ -110,13 +131,12 @@ def detect(f: Frames, p: BreathParams = BreathParams()) -> tuple[list[Breath], f
         return [], level
     rel = f.rms_db - level
     audible = ~f.zero
-    speech = audible & (f.voicing > p.speech_voicing) & (rel > p.speech_min_rel_db)
-    cand = (audible & ~speech & (rel > p.floor_rel_db) & (rel < p.ceiling_rel_db)
+    speech = speech_mask(f, level, p)
+    cand =(audible & ~speech & (rel > p.floor_rel_db) & (rel < p.ceiling_rel_db)
             & (f.voicing < p.frame_max_voicing) & (f.high_ratio < p.frame_max_high_ratio)
             & (f.centroid_hz > p.frame_centroid_hz[0]) & (f.centroid_hz < p.frame_centroid_hz[1]))
     speech_idx = np.flatnonzero(speech)
     hop_s = f.hop / f.sample_rate
-    win = int(round(0.035 * f.sample_rate))
 
     out: list[Breath] = []
     for a, b in _runs(cand, p.bridge_frames):
@@ -145,7 +165,7 @@ def detect(f: Frames, p: BreathParams = BreathParams()) -> tuple[list[Breath], f
         a, b, ref = _body(rel, a, b, p)
         if (b - a) * hop_s < p.min_body_s:
             continue
-        centre = (win - f.hop) // 2   # frame i represents its centre +/- hop/2
+        centre = frame_centre(f)   # frame i represents its centre +/- hop/2
         body = rel[a:b]
         out.append(Breath(
             start_sample=a * f.hop + centre, end_sample=b * f.hop + centre,

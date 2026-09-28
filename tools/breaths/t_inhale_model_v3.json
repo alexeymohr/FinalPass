@@ -1,0 +1,49 @@
+{
+ "name": "t_inhale_score",
+ "version": 3,
+ "created": "2026-09-28",
+ "trained_on": "operator labels, one delivered AI-narrated audiobook (41 chapters): ch. 001-003 file-name tags (out of context) + grading rounds 1-2 + h-check round (in context); spans after the pause rule",
+ "positives": 64,
+ "negatives": 583,
+ "held_out_auc_leave_one_group_out": 0.9,
+ "features": [
+  "burst_rise_db",
+  "closure_below_body_db",
+  "context_rel_db",
+  "gap_before_ms",
+  "burst_width_ms",
+  "burst_above_4k",
+  "burst_low_rise_db"
+ ],
+ "gap_before_ms_is_log10": true,
+ "l2": 1.0,
+ "mean": [
+  10.145981452859337,
+  -4.388624420401853,
+  -3.3880989180834664,
+  2.1419383761568613,
+  10.927357032457497,
+  0.24866089644513142,
+  15.648006182380225
+ ],
+ "std": [
+  5.933956583021879,
+  11.975214284075905,
+  11.034125747300457,
+  0.37051721656126624,
+  25.9865494211915,
+  0.3659923623183324,
+  12.915639210282565
+ ],
+ "intercept": -3.4591851770369355,
+ "weights": [
+  0.37219906274753234,
+  0.5262293312422694,
+  -0.627225074749413,
+  0.2006787603138893,
+  -0.39668442724830905,
+  0.8283971933571342,
+  1.1604004908003849
+ ],
+ "flag_threshold": -0.604201487944017
+}

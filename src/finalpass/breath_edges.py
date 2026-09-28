@@ -1,21 +1,13 @@
-"""What happens at the edges of a breath: its onset, and the sound after it.
+"""What happens at the onset of a breath: is there a mouth-release burst?
 
-Numbers only. Two questions are answered here.
-
-**Does the breath open with a mouth-release burst (a "T-inhale")?**
-
-A "T-inhale" is a breath that opens with a mouth or tongue release: a burst a few
-milliseconds long, bright in the high frequencies, usually out of a closed-mouth
-silence, before the inhale noise. A breath that follows a word ending in a hard
-consonant can also open with a burst — but that burst belongs to the word, and
-a vowel sits just before it. These features measure both halves of that
+Numbers only. A "T-inhale" is a breath that opens with a mouth or tongue release:
+a burst a few milliseconds long, close to full-band — a low thump as well as a
+bright click — usually out of a closed-mouth silence, before an inhale that has
+almost nothing below ~350 Hz. A breath that follows a word ending in a hard
+consonant can also open with a burst — but that burst belongs to the word, and a
+vowel sits just before it. These features measure both halves of that
 description around the start of each detected breath, and a small fitted score
 combines them.
-
-**Is the "breath" really an "h" sound?** An "h" is breath noise through a vocal
-tract already shaped for the vowel that follows, so its spectrum carries that
-vowel's resonances; an inhale does not. `following_similarity` measures exactly
-that.
 """
 from __future__ import annotations
 
@@ -24,6 +16,7 @@ from scipy.signal import butter, sosfiltfilt
 
 MS = 0.001
 HP_HZ = 2000.0
+THUMP_HZ = 300.0        # below this, the burst's thump; the inhale has almost none
 LOOK_BEFORE_S = 0.060    # the release can sit just ahead of the tightened start
 LOOK_AFTER_S = 0.100
 CONTEXT_S = 0.300        # how far back to look for the preceding word
@@ -46,8 +39,10 @@ def onset_features(x: np.ndarray, sr: int, start: int, end: int,
     if len(seg) < 30 * ms:
         return {}
     hp = sosfiltfilt(butter(4, HP_HZ, btype="high", fs=sr, output="sos"), seg)
+    lp = sosfiltfilt(butter(4, THUMP_HZ, btype="low", fs=sr, output="sos"), seg)
     full = _env(seg, ms)
     high = _env(hp, ms)
+    low = _env(lp, ms)
     s0 = (start - lo) // ms
     w0 = max(0, s0 - int(LOOK_BEFORE_S / MS))
     w1 = min(len(high), s0 + int(LOOK_AFTER_S / MS))
@@ -68,6 +63,8 @@ def onset_features(x: np.ndarray, sr: int, start: int, end: int,
     context = full[max(0, k - int(CONTEXT_S / MS)):max(0, k - 30)]
 
     c0 = lo + k * ms
+    inhale = low[s0 + 30:] if len(low) - s0 > 60 else low[s0:]
+    thump = low[max(0, k - 3):k + 4]
     burst = seg[max(0, k * ms - 2 * ms):k * ms + 3 * ms]
     if burst.size >= 8:
         spec = np.abs(np.fft.rfft(burst * np.hanning(len(burst)))) ** 2
@@ -88,21 +85,25 @@ def onset_features(x: np.ndarray, sr: int, start: int, end: int,
         "closure_below_body_db": round(float(np.median(body_full) - np.median(closure)), 2)
         if closure.size else 0.0,
         "context_rel_db": round(float(context.max() - narration_dbfs), 2) if context.size else -200.0,
+        "burst_low_rise_db": round(float(thump.max() - np.median(inhale)), 2)
+        if thump.size and inhale.size else 0.0,
     }
 
 
-# Fitted on the operator's own labels from one delivered audiobook: 643 events,
-# 40 T-inhales (chapters 1-3 tagged without context, plus two grading rounds
-# heard in context across 50 further chapters). Leave-one-group-out AUC 0.90.
-# Least reliable distinction in the labels: T-inhale vs a breath that directly
-# follows a word ending in a hard consonant.
-T_INHALE_FEATURES = ("burst_rise_db", "closure_below_body_db", "context_rel_db",
-                     "gap_before_ms", "burst_width_ms", "burst_above_4k")
-T_INHALE_MEAN = (10.026267, -5.024557, -3.104277, 2.125929, 11.094868, 0.254480)
-T_INHALE_STD = (5.891307, 11.762975, 11.028919, 0.382813, 26.059604, 0.369541)
-T_INHALE_INTERCEPT = -1.917985
-T_INHALE_WEIGHTS = (0.784254, 0.709311, -0.262321, 0.442854, -2.687740, 1.328779)
-T_INHALE_THRESHOLD = 1.764326   # flags about as many as the operator labelled
+# Fitted on the operator's own labels from one delivered audiobook: 647 breaths,
+# 64 T-inhales (chapters 1-3 tagged without context, plus three rounds heard in
+# context across the other chapters), measured on spans after the pause rule.
+# Leave-one-chapter-out AUC 0.90 (0.83 without the low thump, which
+# carries the largest weight). Least reliable distinction in the labels:
+# T-inhale vs a breath that directly follows a word ending in a hard consonant.
+# Source: tools/breaths/t_inhale_model_v3.json (tools/breaths/fit_t_inhale.py).
+T_INHALE_FEATURES = ("burst_rise_db", "closure_below_body_db", "context_rel_db", "gap_before_ms",
+                     "burst_width_ms", "burst_above_4k", "burst_low_rise_db")
+T_INHALE_MEAN = (10.145981, -4.388624, -3.388099, 2.141938, 10.927357, 0.248661, 15.648006)
+T_INHALE_STD = (5.933957, 11.975214, 11.034126, 0.370517, 25.986549, 0.365992, 12.915639)
+T_INHALE_INTERCEPT = -3.459185
+T_INHALE_WEIGHTS = (0.372199, 0.526229, -0.627225, 0.200679, -0.396684, 0.828397, 1.160400)
+T_INHALE_THRESHOLD = -0.604201   # flags about as many as the operator labelled
 
 
 def t_inhale_score(features: dict, gap_before_s: float) -> float:
@@ -115,40 +116,3 @@ def t_inhale_score(features: dict, gap_before_s: float) -> float:
             vals.append(features[name])
     z = (np.asarray(vals) - np.asarray(T_INHALE_MEAN)) / np.asarray(T_INHALE_STD)
     return float(T_INHALE_INTERCEPT + z @ np.asarray(T_INHALE_WEIGHTS))
-
-
-SIM_LO_HZ, SIM_HI_HZ, SIM_BANDS = 150.0, 5000.0, 24
-FOLLOW_S = 0.080
-
-
-def _band_logspec(x: np.ndarray, sr: int) -> np.ndarray:
-    """Mean log spectrum in ~1/6-octave bands: resonances, not harmonics."""
-    n = 2048
-    if len(x) < n:
-        x = np.pad(x, (0, n - len(x)))
-    w = np.hanning(n)
-    frames = [x[i:i + n] for i in range(0, len(x) - n + 1, n // 2)]
-    p = np.mean([np.abs(np.fft.rfft(fr * w)) ** 2 for fr in frames], axis=0)
-    f = np.fft.rfftfreq(n, 1.0 / sr)
-    m = (f >= SIM_LO_HZ) & (f <= SIM_HI_HZ)
-    edges = np.geomspace(SIM_LO_HZ, SIM_HI_HZ, SIM_BANDS + 1)
-    b = np.digitize(f[m], edges)
-    s = np.array([np.log10(p[m][b == k].mean() + 1e-20)
-                  for k in range(1, len(edges)) if (b == k).any()])
-    return s - s.mean()
-
-
-def following_similarity(x: np.ndarray, sr: int, start: int, end: int,
-                         gap_after_s: float) -> float | None:
-    """Spectral-shape correlation between a breath and the next 80 ms of sound.
-
-    Near or above ~0.1 the event shares the following vowel's resonances, as an
-    "h" does; real inhales sit well below (median about -0.4). None when there
-    is not enough audio after the event to judge.
-    """
-    after_start = end + int(gap_after_s * sr)
-    after = x[after_start:after_start + int(FOLLOW_S * sr)]
-    event = x[start:end]
-    if len(after) <= 512 or len(event) < 64:
-        return None
-    return float(np.corrcoef(_band_logspec(event, sr), _band_logspec(after, sr))[0, 1])

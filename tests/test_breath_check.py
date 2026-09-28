@@ -1,4 +1,4 @@
-"""`finalpass breaths`: detection, grading, T-inhale flag, H-sound filter, CLI.
+"""`finalpass breaths`: detection, pause rule, grading, T-inhale flag, CLI.
 
 Synthetic audio only.
 """
@@ -20,7 +20,10 @@ from finalpass.audio_io import AudioFile
 from finalpass.breath_check import (
     GRADE_2_FROM_DB, GRADE_3_FROM_DB, BreathTunables, analyze_breaths, grade_for, noticeability_db,
 )
-from finalpass.breath_edges import following_similarity, t_inhale_score
+from finalpass.breath_detect import detect
+from finalpass.breath_edges import onset_features, t_inhale_score
+from finalpass.breath_features import compute
+from finalpass.breath_pause import breath_end
 from finalpass.cli import main
 from finalpass.errors import UnsupportedChannelConfigError
 from finalpass.timecode import samples_to_clock
@@ -44,6 +47,11 @@ def _band_noise(seconds: float, lo: float, hi: float, level_db: float) -> np.nda
 
 def _floor(seconds: float) -> np.ndarray:
     return RNG.standard_normal(int(seconds * SR)) * 1e-4
+
+
+def _word() -> np.ndarray:
+    """A word whose first 25 ms are voiced but soft, as real vowel onsets are."""
+    return np.concatenate([_vowel(0.025) * 10 ** (-30 / 20), _vowel(1.0)])
 
 
 def _narration(*breath_db: float) -> np.ndarray:
@@ -84,7 +92,7 @@ def test_grade_cut_points() -> None:
 
 
 def test_embedded_t_inhale_score_reproduces_the_saved_model() -> None:
-    model = json.loads((ROOT / "tools" / "breaths" / "t_inhale_model_v2.json").read_text())
+    model = json.loads((ROOT / "tools" / "breaths" / "t_inhale_model_v3.json").read_text())
     rng = np.random.default_rng(3)
     for _ in range(50):
         feats = {f: float(rng.normal(m, s)) for f, m, s in zip(model["features"], model["mean"], model["std"])}
@@ -130,17 +138,58 @@ def test_t_inhale_flag_can_be_switched_off() -> None:
     assert all(e.t_inhale is False and e.t_inhale_score is None for e in result.breaths)
 
 
-def test_similarity_to_the_following_sound_separates_shared_resonances() -> None:
-    shaped = butter(4, [500, 1500], btype="band", fs=SR, output="sos")
-    same = sosfilt(shaped, RNG.standard_normal(int(0.4 * SR))) * 0.05
-    after_same = sosfilt(shaped, RNG.standard_normal(int(0.2 * SR))) * 0.2
-    after_other = _vowel(0.2, f0=220.0)
-    event_len = int(0.2 * SR)
-    x1 = np.concatenate([same[:event_len], after_same])
-    x2 = np.concatenate([_band_noise(0.2, 2500, 4500, -26), after_other])
-    s_same = following_similarity(x1, SR, 0, event_len, 0.0)
-    s_other = following_similarity(x2, SR, 0, event_len, 0.0)
-    assert s_same > 0.5 > s_other
+def test_breath_end_needs_a_pause_and_cuts_what_follows_it() -> None:
+    breath = _band_noise(0.30, 900, 3200, -26)
+    pause = _band_noise(0.06, 900, 3200, -46)             # about -66 dBFS
+    h = _band_noise(0.05, 900, 3200, -24)
+    x = np.concatenate([breath, pause, h, _word()])
+    b_end, h_end = len(breath), len(breath) + len(pause) + len(h)
+    # the detected span runs through the pause into the "h": it ends at the pause
+    assert abs(breath_end(x, SR, 0, h_end, h_end + int(0.03 * SR)) - b_end) < int(0.002 * SR)
+    # a span that already stops before the pause is left alone
+    assert breath_end(x, SR, 0, b_end, h_end + int(0.03 * SR)) == b_end
+    # no stretch reaches -60 dBFS before the word: not a breath
+    run_on = np.concatenate([breath, _band_noise(0.08, 900, 3200, -36), _word()])
+    assert breath_end(run_on, SR, 0, int(0.38 * SR), int(0.4 * SR)) is None
+
+
+def test_breath_running_straight_into_the_word_is_not_reported() -> None:
+    x = np.concatenate([_vowel(1.0), _floor(0.3), _band_noise(0.30, 900, 3200, -26),
+                        _band_noise(0.08, 900, 3200, -36), _word()])
+    result = analyze_breaths(_audio(x))
+    assert result.counts.breaths == 0 and result.counts.excluded_no_pause == 1
+
+
+def test_h_after_the_pause_is_cut_off_the_breath() -> None:
+    breath_end_at = int(1.6 * SR)
+    x = np.concatenate([_vowel(1.0), _floor(0.3), _band_noise(0.30, 900, 3200, -26),
+                        _band_noise(0.06, 900, 3200, -46), _band_noise(0.05, 900, 3200, -24), _word()])
+    (raw,), _ = detect(compute(x, SR))
+    assert raw.end_sample > breath_end_at + int(0.06 * SR)      # the detector alone runs on into the "h"
+    (e,) = analyze_breaths(_audio(x)).breaths
+    assert abs(e.end_sample - breath_end_at) < int(0.005 * SR)
+    assert e.end_time == samples_to_clock(e.end_sample, SR)
+
+
+def test_low_thump_at_the_onset_is_measured() -> None:
+    """A T-inhale's release is near full-band: a low thump as well as a click."""
+    breath = _band_noise(0.30, 900, 3200, -26)
+    click = np.zeros(int(0.004 * SR))
+    click[: len(click) // 2], click[len(click) // 2:] = 0.08, -0.08
+    t = np.arange(int(0.012 * SR)) / SR
+    thump = 0.1 * np.sin(2 * np.pi * 90 * t) * np.exp(-t / 0.004)
+    bright = sosfilt(butter(4, 3000, btype="high", fs=SR, output="sos"), click)
+    level = 20 * np.log10(np.sqrt(np.mean(_vowel(0.5) ** 2)))
+    lead = np.concatenate([_vowel(1.0), np.zeros(int(0.35 * SR))])
+    start = len(lead)
+
+    def feats(burst: np.ndarray) -> dict:
+        burst = np.pad(burst, (0, max(0, len(thump) - len(burst))))
+        x = np.concatenate([lead, burst, breath, _floor(0.1), _vowel(0.5)])
+        return onset_features(x, SR, start, start + len(burst) + len(breath), level)
+
+    with_thump, click_only = feats(np.pad(click, (0, len(thump) - len(click))) + thump), feats(bright)
+    assert with_thump["burst_low_rise_db"] > click_only["burst_low_rise_db"] + 10
 
 
 # --- CLI ------------------------------------------------------------------

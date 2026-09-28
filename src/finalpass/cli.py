@@ -370,15 +370,18 @@ def channels_cmd(
 @click.option("--list", "list_mode", type=click.Choice(["t-inhale", "grade-3", "all"]), default="t-inhale", show_default=True, help="Which breaths to list in the terminal. The text file always lists every breath.")
 @click.option("--min-ms", type=float, default=150.0, show_default=True, help="Ignore breaths shorter than this; shorter ones are too brief to judge.")
 @click.option("--no-t-inhale", is_flag=True, help="Do not flag mouth-release (T-inhale) breaths as a client QC risk.")
-def breaths_cmd(files: tuple[Path, ...], out_dir: Path, json_only: bool, list_mode: str, min_ms: float, no_t_inhale: bool) -> None:
+@click.option("--pause-db", type=float, default=-60.0, show_default=True, help="A breath must fade into a pause at or below this level (dBFS) before the next word.")
+@click.option("--pause-ms", type=float, default=10.0, show_default=True, help="Shortest pause that counts, in milliseconds.")
+def breaths_cmd(files: tuple[Path, ...], out_dir: Path, json_only: bool, list_mode: str, min_ms: float, no_t_inhale: bool, pause_db: float, pause_ms: float) -> None:
     """Audiobook breath check: find, grade (1-3) and flag breaths. Informational only."""
     from .breath_check import BreathTunables
     from .jobs import run_breaths, write_breath_artifacts
 
-    if min_ms <= 0:
-        _err_console.print("[red]error:[/red] --min-ms must be positive.")
+    if min_ms <= 0 or pause_ms <= 0:
+        _err_console.print("[red]error:[/red] --min-ms and --pause-ms must be positive.")
         sys.exit(2)
-    tunables = BreathTunables(min_breath_ms=min_ms, t_inhale=not no_t_inhale)
+    tunables = BreathTunables(min_breath_ms=min_ms, t_inhale=not no_t_inhale,
+                              pause_dbfs=pause_db, pause_min_ms=pause_ms)
     try:
         if json_only:
             report = run_breaths(files=files, tunables=tunables)

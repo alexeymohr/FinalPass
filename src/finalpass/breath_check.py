@@ -11,8 +11,9 @@ Informational only — nothing here fails a delivery. For each breath:
   rejects these, so they are reported as a *client QC risk*, not a defect.
 
 Events shorter than 150 ms are not reported: the reviewing mixer found them too
-short to judge. Events whose spectrum carries the following vowel's resonances
-are dropped as likely "h" sounds.
+short to judge. A breath must also fade into a pause (about -60 dBFS for 10 ms)
+before the next word; a sound that runs straight into the word — an "h", or a
+consonant — is not reported, and an "h" after the pause is cut off the breath.
 """
 from __future__ import annotations
 
@@ -23,15 +24,15 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from .audio_io import AudioFile
-from .breath_detect import BreathParams, detect
-from .breath_edges import T_INHALE_THRESHOLD, following_similarity, onset_features, t_inhale_score
-from .breath_features import compute
+from .breath_detect import Breath, BreathParams, detect, frame_centre, shorten, speech_mask
+from .breath_edges import T_INHALE_THRESHOLD, onset_features, t_inhale_score
+from .breath_features import Frames, compute
+from .breath_pause import DEFAULT_PAUSE_DBFS, DEFAULT_PAUSE_MIN_MS, breath_end
 from .errors import UnsupportedChannelConfigError
 from .timecode import samples_to_clock
 
-BREATHS_SCHEMA_VERSION = 1
+BREATHS_SCHEMA_VERSION = 2
 DEFAULT_MIN_BREATH_MS = 150.0
-DEFAULT_H_SIMILARITY = 0.10
 GRADE_2_FROM_DB = -31.6
 GRADE_3_FROM_DB = -24.2
 GRADE_REF_S = 0.25
@@ -44,7 +45,8 @@ DUAL_MONO_TOLERANCE = 1e-6
 class BreathTunables:
     min_breath_ms: float = DEFAULT_MIN_BREATH_MS
     t_inhale: bool = True
-    h_similarity: float = DEFAULT_H_SIMILARITY
+    pause_dbfs: float = DEFAULT_PAUSE_DBFS
+    pause_min_ms: float = DEFAULT_PAUSE_MIN_MS
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -71,7 +73,7 @@ class BreathCounts(BaseModel):
     grade_2: int = 0
     grade_3: int = 0
     t_inhale: int = 0
-    excluded_h_sound: int = 0
+    excluded_no_pause: int = 0
 
     def add(self, other: "BreathCounts") -> None:
         for name in type(self).model_fields:
@@ -121,18 +123,34 @@ def _mono(audio: AudioFile) -> tuple[np.ndarray, list[str]]:
     )
 
 
+def followed_by_pause(x: np.ndarray, f: Frames, level: float, found: list[Breath],
+                      tunables: BreathTunables) -> tuple[list[Breath], int]:
+    """Keep the breaths that fade into a pause, each ending where its pause begins."""
+    speech_idx = np.flatnonzero(speech_mask(f, level))
+    kept, dropped = [], 0
+    for b in found:
+        k = np.searchsorted(speech_idx, b.start_frame)
+        nxt = int(speech_idx[k]) * f.hop + frame_centre(f) if k < len(speech_idx) else len(x)
+        end = breath_end(x, f.sample_rate, b.start_sample, b.end_sample, nxt,
+                         tunables.pause_dbfs, tunables.pause_min_ms)
+        if end is None or (end - b.start_sample) * 1000 < tunables.min_breath_ms * f.sample_rate:
+            dropped += 1
+            continue
+        kept.append(b if end == b.end_sample else shorten(b, end, f, level))
+    return kept, dropped
+
+
 def analyze_breaths(audio: AudioFile, tunables: BreathTunables = BreathTunables()) -> BreathAssetResult:
     x, notes = _mono(audio)
     sr = audio.sample_rate
     params = BreathParams(min_body_s=tunables.min_breath_ms / 1000.0)
-    found, level = detect(compute(x, sr), params)
+    frames = compute(x, sr)
+    found, level = detect(frames, params)
     counts = BreathCounts()
     events: list[BreathEvent] = []
+    if found:
+        found, counts.excluded_no_pause = followed_by_pause(x, frames, level, found, tunables)
     for b in found:
-        sim = following_similarity(x, sr, b.start_sample, b.end_sample, b.gap_after_s)
-        if sim is not None and sim >= tunables.h_similarity:
-            counts.excluded_h_sound += 1
-            continue
         feats = onset_features(x, sr, b.start_sample, b.end_sample, level)
         score = round(t_inhale_score(feats, b.gap_before_s), 3) if feats else None
         is_t = bool(tunables.t_inhale and score is not None and score >= T_INHALE_THRESHOLD)
@@ -162,8 +180,8 @@ def summary_line(c: BreathCounts) -> str:
     parts = [f"{c.breaths} breaths",
              f"grades {c.grade_1} / {c.grade_2} / {c.grade_3}",
              f"{c.t_inhale} T-inhale ({T_INHALE_NOTE})"]
-    if c.excluded_h_sound:
-        parts.append(f"{c.excluded_h_sound} likely \"h\" sounds excluded")
+    if c.excluded_no_pause:
+        parts.append(f"{c.excluded_no_pause} excluded (no pause before the next word)")
     return " · ".join(parts)
 
 
@@ -174,6 +192,8 @@ def render_breath_list(report: BreathsReport) -> str:
         "Grades: 1 very minor, 2 noticeable, 3 quite noticeable.",
         f"T-INHALE = breath opening with a mouth-release burst: {T_INHALE_NOTE}, not a failure.",
         "Informational only. Times are from the start of each file.",
+        "A breath must fade into a pause before the next word; sounds that run",
+        "straight into the word (an \"h\", a consonant) are not listed.",
         "",
         f"All files: {summary_line(report.summary)}",
     ]
