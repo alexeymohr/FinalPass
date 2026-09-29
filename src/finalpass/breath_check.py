@@ -25,13 +25,13 @@ from pydantic import BaseModel, Field
 
 from .audio_io import AudioFile
 from .breath_detect import Breath, BreathParams, detect, frame_centre, shorten, speech_mask
-from .breath_edges import T_INHALE_THRESHOLD, onset_features, t_inhale_score
+from .breath_edges import T_INHALE_THRESHOLD, click_gap, onset_features, t_inhale_score
 from .breath_features import Frames, compute
 from .breath_pause import DEFAULT_PAUSE_DBFS, DEFAULT_PAUSE_MIN_MS, breath_end
 from .errors import UnsupportedChannelConfigError
 from .timecode import samples_to_clock
 
-BREATHS_SCHEMA_VERSION = 2
+BREATHS_SCHEMA_VERSION = 3
 DEFAULT_MIN_BREATH_MS = 150.0
 GRADE_2_FROM_DB = -31.6
 GRADE_3_FROM_DB = -24.2
@@ -64,6 +64,11 @@ class BreathEvent(BaseModel):
     grade: int
     t_inhale: bool
     t_inhale_score: float | None
+    click_gap_samples: int | None = Field(None, description="longest stretch at or below -60 dBFS "
+                                          "in the 30 ms before the opening burst (32-sample RMS)")
+    click_gap_ms: float | None = None
+    click_rel_db: float | None = Field(None, description="opening burst peak (32-sample RMS) "
+                                       "relative to the narration, dB")
     note: str = ""
 
 
@@ -154,6 +159,7 @@ def analyze_breaths(audio: AudioFile, tunables: BreathTunables = BreathTunables(
         feats = onset_features(x, sr, b.start_sample, b.end_sample, level)
         score = round(t_inhale_score(feats, b.gap_before_s), 3) if feats else None
         is_t = bool(tunables.t_inhale and score is not None and score >= T_INHALE_THRESHOLD)
+        gap = click_gap(x, sr, b.start_sample, b.end_sample, level) if tunables.t_inhale else {}
         n_db = noticeability_db(b.median_rel_db, b.duration_s)
         g = grade_for(n_db)
         counts.breaths += 1
@@ -167,6 +173,8 @@ def analyze_breaths(audio: AudioFile, tunables: BreathTunables = BreathTunables(
             peak_db=round(b.peak_rel_db, 2), body_db=round(b.median_rel_db, 2),
             noticeability_db=round(n_db, 2), grade=g,
             t_inhale=is_t, t_inhale_score=score if tunables.t_inhale else None,
+            click_gap_samples=gap.get("click_gap_samples"), click_gap_ms=gap.get("click_gap_ms"),
+            click_rel_db=gap.get("click_rel_db"),
             note=T_INHALE_NOTE if is_t else "",
         ))
     return BreathAssetResult(

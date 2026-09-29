@@ -21,7 +21,7 @@ from finalpass.breath_check import (
     GRADE_2_FROM_DB, GRADE_3_FROM_DB, BreathTunables, analyze_breaths, grade_for, noticeability_db,
 )
 from finalpass.breath_detect import detect
-from finalpass.breath_edges import onset_features, t_inhale_score
+from finalpass.breath_edges import click_gap, onset_features, t_inhale_score
 from finalpass.breath_features import compute
 from finalpass.breath_pause import breath_end
 from finalpass.cli import main
@@ -136,6 +136,49 @@ def test_dual_mono_is_accepted_and_discrete_stereo_refused() -> None:
 def test_t_inhale_flag_can_be_switched_off() -> None:
     result = analyze_breaths(_audio(_narration(-24)), BreathTunables(t_inhale=False))
     assert all(e.t_inhale is False and e.t_inhale_score is None for e in result.breaths)
+    assert all(e.click_gap_samples is None and e.click_rel_db is None for e in result.breaths)
+
+
+def test_every_breath_reports_its_click_gap_and_level() -> None:
+    result = analyze_breaths(_audio(_narration(-24, -38)))
+    assert result.breaths and all(
+        e.click_gap_samples is not None and e.click_rel_db is not None for e in result.breaths)
+
+
+def _click(amp: float) -> np.ndarray:
+    c = np.zeros(int(0.004 * SR))
+    c[: len(c) // 2], c[len(c) // 2:] = amp, -amp
+    return c
+
+
+def _click_gap(before: np.ndarray, amp: float = 0.08) -> dict:
+    breath = _band_noise(0.30, 900, 3200, -26)
+    level = 20 * np.log10(np.sqrt(np.mean(_vowel(0.5) ** 2)))
+    start = len(before)
+    click = _click(amp)
+    x = np.concatenate([before, click, breath, _floor(0.1), _vowel(0.5)])
+    return click_gap(x, SR, start, start + len(click) + len(breath), level)
+
+
+def test_click_out_of_silence_has_a_gap_before_it() -> None:
+    g = _click_gap(np.concatenate([_vowel(1.0), np.zeros(int(0.35 * SR))]))
+    assert g["click_gap_samples"] >= int(0.029 * SR)          # the whole 30 ms search is quiet
+    assert g["click_gap_ms"] == pytest.approx(g["click_gap_samples"] * 1000 / SR, abs=0.01)
+
+
+def test_click_straight_out_of_a_vowel_has_no_gap() -> None:
+    assert _click_gap(_vowel(1.0))["click_gap_samples"] == 0
+
+
+def test_short_gap_is_measured_in_samples() -> None:
+    gap = 300
+    g = _click_gap(np.concatenate([_vowel(1.0), np.zeros(gap)]))
+    assert abs(g["click_gap_samples"] - gap) <= 40              # 32-sample RMS smears the edges
+
+
+def test_louder_click_reads_louder_against_the_narration() -> None:
+    lead = np.concatenate([_vowel(1.0), np.zeros(int(0.35 * SR))])
+    assert _click_gap(lead, 0.3)["click_rel_db"] > _click_gap(lead, 0.03)["click_rel_db"] + 15
 
 
 def test_breath_end_needs_a_pause_and_cuts_what_follows_it() -> None:

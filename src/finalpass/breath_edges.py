@@ -30,6 +30,13 @@ def _env(x: np.ndarray, n: int) -> np.ndarray:
     return 20 * np.log10(np.maximum(e, 1e-10))
 
 
+def _brightest_ms(high: np.ndarray, s0: int) -> int:
+    """The burst: the brightest millisecond around the breath's start (index into `high`)."""
+    w0 = max(0, s0 - int(LOOK_BEFORE_S / MS))
+    w1 = min(len(high), s0 + int(LOOK_AFTER_S / MS))
+    return w0 + int(np.argmax(high[w0:w1]))
+
+
 def onset_features(x: np.ndarray, sr: int, start: int, end: int,
                    narration_dbfs: float) -> dict:
     """Features of the release burst (if any) at the start of one breath."""
@@ -44,11 +51,9 @@ def onset_features(x: np.ndarray, sr: int, start: int, end: int,
     high = _env(hp, ms)
     low = _env(lp, ms)
     s0 = (start - lo) // ms
-    w0 = max(0, s0 - int(LOOK_BEFORE_S / MS))
-    w1 = min(len(high), s0 + int(LOOK_AFTER_S / MS))
     body = high[s0:] if len(high) > s0 else high
     body_full = full[s0:] if len(full) > s0 else full
-    k = w0 + int(np.argmax(high[w0:w1]))           # the burst: brightest ms at onset
+    k = _brightest_ms(high, s0)
 
     peak = high[k]
     above = high >= peak - 6.0
@@ -87,6 +92,57 @@ def onset_features(x: np.ndarray, sr: int, start: int, end: int,
         "context_rel_db": round(float(context.max() - narration_dbfs), 2) if context.size else -200.0,
         "burst_low_rise_db": round(float(thump.max() - np.median(inhale)), 2)
         if thump.size and inhale.size else 0.0,
+    }
+
+
+CLICK_RMS_SAMPLES = 32   # short enough to see a few-millisecond gap
+CLICK_GAP_DBFS = -60.0
+CLICK_GAP_SEARCH_S = 0.030
+CLICK_ONSET_DROP_DB = 20.0
+CLICK_ONSET_MAX_S = 0.010
+
+
+def click_gap(x: np.ndarray, sr: int, start: int, end: int, narration_dbfs: float) -> dict:
+    """Does the breath's opening burst stand apart from what came before it?
+
+    A mouth click out of a closed-mouth silence has a short gap (at or below
+    -60 dBFS) just before it; a word's own final consonant running into the
+    breath has none, or only its stop closure. Measured on the same burst as
+    `onset_features`: walk back from the burst's peak to its onset (20 dB under
+    the peak, at most 10 ms), then take the longest run at or below -60 dBFS in
+    the 30 ms before that onset (32-sample RMS). Also the burst's peak level
+    relative to the narration.
+
+    On the operator's context-tagged breaths from one audiobook, 32-sample RMS:
+    T-inhales 9/11 (one chapter) and 15/19 (other chapters) had a gap of at
+    least 250 samples at 44.1 kHz; breaths after a word's hard consonant 2/11.
+    """
+    ms = max(1, int(MS * sr))
+    lo = max(0, start - int((CONTEXT_S + LOOK_BEFORE_S) * sr))
+    seg = x[lo:end].astype(np.float64)
+    if len(seg) < 30 * ms:
+        return {}
+    high = _env(sosfiltfilt(butter(4, HP_HZ, btype="high", fs=sr, output="sos"), seg), ms)
+    burst = lo + _brightest_ms(high, (start - lo) // ms) * ms
+
+    a0 = max(0, burst - int(0.100 * sr))
+    y = x[a0:min(len(x), burst + ms + CLICK_RMS_SAMPLES)].astype(np.float64)
+    power = np.convolve(y ** 2, np.ones(CLICK_RMS_SAMPLES) / CLICK_RMS_SAMPLES, mode="same")
+    db = 10 * np.log10(np.maximum(power, 1e-20))
+    b = burst - a0
+    i = b + int(np.argmax(db[b:b + ms]))
+    peak = float(db[i])
+    stop = b - int(CLICK_ONSET_MAX_S * sr)
+    while i > max(stop, 0) and db[i] > peak - CLICK_ONSET_DROP_DB:
+        i -= 1
+    quiet = db[max(0, i - int(CLICK_GAP_SEARCH_S * sr)):i] <= CLICK_GAP_DBFS
+    edges = np.diff(np.concatenate(([0], quiet.astype(np.int8), [0])))
+    runs = np.flatnonzero(edges == -1) - np.flatnonzero(edges == 1)
+    gap = int(runs.max()) if runs.size else 0
+    return {
+        "click_gap_samples": gap,
+        "click_gap_ms": round(gap * 1000.0 / sr, 2),
+        "click_rel_db": round(peak - narration_dbfs, 2),
     }
 
 
