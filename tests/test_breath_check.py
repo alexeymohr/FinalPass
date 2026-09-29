@@ -287,3 +287,22 @@ def test_breath_list_says_mouth_click_inhale_not_t_inhale(tmp_path: Path) -> Non
         text = (tmp_path / "o" / "breaths.txt").read_text()
         assert "MOUTH-CLICK INHALE" in text and "T-INHALE" not in text and "T-inhale" not in text
         assert "T-inhale" not in r.output
+
+
+def test_click_gap_measures_the_same_time_at_any_sample_rate() -> None:
+    """A 7 ms gap of digital silence before the click reads about 7 ms at 22.05, 44.1 and 96 kHz."""
+    from scipy.signal import resample_poly
+    gaps = {}
+    for sr in (22050, 44100, 96000):
+        t = np.arange(int(0.6 * sr)) / sr
+        word = 0.2 * np.sin(2 * np.pi * 150 * t)
+        gap = np.zeros(int(0.007 * sr))
+        c = np.zeros(max(2, int(0.004 * sr)))
+        c[: len(c) // 2], c[len(c) // 2:] = 0.08, -0.08
+        rng = np.random.default_rng(1)
+        breath = sosfilt(butter(4, [900, 3200], btype="band", fs=sr, output="sos"), rng.standard_normal(int(0.3 * sr))) * 0.01
+        x = np.concatenate([word, gap, c, breath, np.zeros(int(0.1 * sr))])
+        start = len(word) + len(gap)
+        g = click_gap(x, sr, start, start + len(c) + len(breath), -20.0)
+        gaps[sr] = g["click_gap_ms"]
+    assert max(gaps.values()) - min(gaps.values()) < 0.6, gaps

@@ -66,9 +66,9 @@ class BreathEvent(BaseModel):
     t_inhale: bool
     t_inhale_score: float | None
     click_gap_samples: int | None = Field(None, description="longest stretch at or below -60 dBFS "
-                                          "in the 30 ms before the opening burst (32-sample RMS)")
+                                          "in the 30 ms before the opening burst (0.73 ms RMS)")
     click_gap_ms: float | None = None
-    click_rel_db: float | None = Field(None, description="opening burst peak (32-sample RMS) "
+    click_rel_db: float | None = Field(None, description="opening burst peak (0.73 ms RMS) "
                                        "relative to the narration, dB")
     note: str = ""
 

@@ -95,7 +95,8 @@ def onset_features(x: np.ndarray, sr: int, start: int, end: int,
     }
 
 
-CLICK_RMS_SAMPLES = 32   # short enough to see a few-millisecond gap
+CLICK_RMS_SAMPLES = 32   # at 44.1 kHz (0.73 ms): short enough to see a few-millisecond gap;
+                         # scaled with the sample rate so a gap measures the same at any rate
 CLICK_GAP_DBFS = -60.0
 CLICK_GAP_SEARCH_S = 0.030
 CLICK_ONSET_DROP_DB = 20.0
@@ -110,10 +111,10 @@ def click_gap(x: np.ndarray, sr: int, start: int, end: int, narration_dbfs: floa
     breath has none, or only its stop closure. Measured on the same burst as
     `onset_features`: walk back from the burst's peak to its onset (20 dB under
     the peak, at most 10 ms), then take the longest run at or below -60 dBFS in
-    the 30 ms before that onset (32-sample RMS). Also the burst's peak level
+    the 30 ms before that onset (0.73 ms RMS: 32 samples at 44.1 kHz). Also the burst's peak level
     relative to the narration.
 
-    On the operator's context-tagged breaths from one audiobook, 32-sample RMS:
+    On the operator's context-tagged breaths from one audiobook (44.1 kHz):
     T-inhales 9/11 (one chapter) and 15/19 (other chapters) had a gap of at
     least 250 samples at 44.1 kHz; breaths after a word's hard consonant 2/11.
     """
@@ -126,8 +127,9 @@ def click_gap(x: np.ndarray, sr: int, start: int, end: int, narration_dbfs: floa
     burst = lo + _brightest_ms(high, (start - lo) // ms) * ms
 
     a0 = max(0, burst - int(0.100 * sr))
-    y = x[a0:min(len(x), burst + ms + CLICK_RMS_SAMPLES)].astype(np.float64)
-    power = np.convolve(y ** 2, np.ones(CLICK_RMS_SAMPLES) / CLICK_RMS_SAMPLES, mode="same")
+    n_rms = max(1, round(CLICK_RMS_SAMPLES * sr / 44100))
+    y = x[a0:min(len(x), burst + ms + n_rms)].astype(np.float64)
+    power = np.convolve(y ** 2, np.ones(n_rms) / n_rms, mode="same")
     db = 10 * np.log10(np.maximum(power, 1e-20))
     b = burst - a0
     i = b + int(np.argmax(db[b:b + ms]))
