@@ -367,9 +367,9 @@ def channels_cmd(
 @click.argument("files", nargs=-1, type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
 @click.option("--out", "out_dir", type=click.Path(file_okay=False, path_type=Path), default=Path("./finalpass-report"), show_default=True)
 @click.option("--json-only", is_flag=True, help="Suppress terminal output; emit JSON to stdout.")
-@click.option("--list", "list_mode", type=click.Choice(["t-inhale", "grade-3", "all"]), default="t-inhale", show_default=True, help="Which breaths to list in the terminal. The text file always lists every breath.")
+@click.option("--list", "list_mode", type=click.Choice(["mouth-click", "t-inhale", "grade-3", "all"]), default="mouth-click", show_default=True, help="Which breaths to list in the terminal (t-inhale is the old name for mouth-click). The text file always lists every breath.")
 @click.option("--min-ms", type=float, default=150.0, show_default=True, help="Ignore breaths shorter than this; shorter ones are too brief to judge.")
-@click.option("--no-t-inhale", is_flag=True, help="Do not flag mouth-release (T-inhale) breaths as a client QC risk.")
+@click.option("--no-mouth-click", "--no-t-inhale", "no_t_inhale", is_flag=True, help="Do not flag mouth-click inhales (breaths opening with a mouth click) as a client QC risk.")
 @click.option("--pause-db", type=float, default=-60.0, show_default=True, help="A breath must fade into a pause at or below this level (dBFS) before the next word.")
 @click.option("--pause-ms", type=float, default=10.0, show_default=True, help="Shortest pause that counts, in milliseconds.")
 def breaths_cmd(files: tuple[Path, ...], out_dir: Path, json_only: bool, list_mode: str, min_ms: float, no_t_inhale: bool, pause_db: float, pause_ms: float) -> None:
@@ -419,7 +419,7 @@ def _render_breaths_report(report, *, list_mode: str) -> None:
         table.add_column("flag")
         for e in rows:
             table.add_row(e.start_time, f"{e.duration_ms} ms", str(e.grade),
-                          "[yellow]T-inhale — client QC risk[/yellow]" if e.t_inhale else "")
+                          "[yellow]mouth-click inhale — client QC risk[/yellow]" if e.t_inhale else "")
         _out_console.print(table)
     _out_console.print(f"\n[bold]All files:[/bold] {summary_line(report.summary)}")
     _out_console.print("[dim]Informational only — nothing here fails a delivery.[/dim]")

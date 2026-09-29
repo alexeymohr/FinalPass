@@ -7,8 +7,9 @@ Informational only — nothing here fails a delivery. For each breath:
   plus 6 dB per doubling of its length (re 250 ms). The cut points were fitted
   to an experienced re-recording mixer's grades (43 breaths: leave-one-out
   exact 86 %, never more than one grade off);
-* **T-inhale**: the breath opens with a mouth-release burst. Some clients' QC
-  rejects these, so they are reported as a *client QC risk*, not a defect.
+* **mouth-click inhale** (internally "T-inhale"): the breath opens with a
+  mouth-release burst. Some clients' QC rejects these, so they are reported
+  as a *client QC risk*, not a defect.
 
 Events shorter than 150 ms are not reported: the reviewing mixer found them too
 short to judge. A breath must also fade into a pause (about -60 dBFS for 10 ms)
@@ -187,7 +188,7 @@ def analyze_breaths(audio: AudioFile, tunables: BreathTunables = BreathTunables(
 def summary_line(c: BreathCounts) -> str:
     parts = [f"{c.breaths} breaths",
              f"grades {c.grade_1} / {c.grade_2} / {c.grade_3}",
-             f"{c.t_inhale} T-inhale ({T_INHALE_NOTE})"]
+             f"{c.t_inhale} mouth-click inhale ({T_INHALE_NOTE})"]
     if c.excluded_no_pause:
         parts.append(f"{c.excluded_no_pause} excluded (no pause before the next word)")
     return " · ".join(parts)
@@ -198,7 +199,7 @@ def render_breath_list(report: BreathsReport) -> str:
     lines = [
         f"FinalPass {report.finalpass_version} — breath check — run {report.run_id}",
         "Grades: 1 very minor, 2 noticeable, 3 quite noticeable.",
-        f"T-INHALE = breath opening with a mouth-release burst: {T_INHALE_NOTE}, not a failure.",
+        f"MOUTH-CLICK INHALE = breath opening with a mouth click: {T_INHALE_NOTE}, not a failure.",
         "Informational only. Times are from the start of each file.",
         "A breath must fade into a pause before the next word; sounds that run",
         "straight into the word (an \"h\", a consonant) are not listed.",
@@ -210,6 +211,6 @@ def render_breath_list(report: BreathsReport) -> str:
         lines += ["", f"== {name} — {summary_line(asset.counts)}"]
         lines += [f"   note: {n}" for n in asset.notes]
         for e in asset.breaths:
-            tag = "  T-INHALE (client QC risk)" if e.t_inhale else ""
+            tag = "  MOUTH-CLICK INHALE (client QC risk)" if e.t_inhale else ""
             lines.append(f"   {e.start_time}  {e.duration_ms:>4} ms  grade {e.grade}{tag}")
     return "\n".join(lines) + "\n"

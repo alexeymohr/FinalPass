@@ -276,3 +276,14 @@ def test_breath_modules_use_no_ml_stack() -> None:
             elif isinstance(node, ast.ImportFrom) and node.module:
                 mods = [node.module.split(".")[0]]
             assert not (set(mods) & banned), (name, mods)
+
+
+def test_breath_list_says_mouth_click_inhale_not_t_inhale(tmp_path: Path) -> None:
+    wav = tmp_path / "chapter.wav"
+    sf.write(str(wav), _narration(-24, -38), SR, subtype="PCM_16")
+    for opts in ([], ["--list", "mouth-click"], ["--list", "t-inhale"], ["--no-mouth-click"], ["--no-t-inhale"]):
+        r = CliRunner().invoke(main, ["breaths", "--out", str(tmp_path / "o"), *opts, str(wav)])
+        assert r.exit_code == 0, r.output
+        text = (tmp_path / "o" / "breaths.txt").read_text()
+        assert "MOUTH-CLICK INHALE" in text and "T-INHALE" not in text and "T-inhale" not in text
+        assert "T-inhale" not in r.output
