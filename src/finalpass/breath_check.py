@@ -15,6 +15,9 @@ Events shorter than 150 ms are not reported: the reviewing mixer found them too
 short to judge. A breath must also fade into a pause (about -60 dBFS for 10 ms)
 before the next word; a sound that runs straight into the word — an "h", or a
 consonant — is not reported, and an "h" after the pause is cut off the breath.
+A sound as loud as speech for a quarter of its length or more (within 15 dB of
+the narration) is a speech sound — an "s", "sh" or "ch" left alone before a
+pause — and is not reported either.
 """
 from __future__ import annotations
 
@@ -25,14 +28,16 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from .audio_io import AudioFile
-from .breath_detect import Breath, BreathParams, detect, frame_centre, shorten, speech_mask
+from .breath_detect import (
+    Breath, BreathParams, detect, frame_centre, quieter_than_speech, shorten, speech_mask,
+)
 from .breath_edges import T_INHALE_THRESHOLD, click_gap, onset_features, t_inhale_score
 from .breath_features import Frames, compute
 from .breath_pause import DEFAULT_PAUSE_DBFS, DEFAULT_PAUSE_MIN_MS, breath_end
 from .errors import UnsupportedChannelConfigError
 from .timecode import samples_to_clock
 
-BREATHS_SCHEMA_VERSION = 3
+BREATHS_SCHEMA_VERSION = 4
 DEFAULT_MIN_BREATH_MS = 150.0
 GRADE_2_FROM_DB = -31.6
 GRADE_3_FROM_DB = -24.2
@@ -80,6 +85,7 @@ class BreathCounts(BaseModel):
     grade_3: int = 0
     t_inhale: int = 0
     excluded_no_pause: int = 0
+    excluded_as_loud_as_speech: int = 0
 
     def add(self, other: "BreathCounts") -> None:
         for name in type(self).model_fields:
@@ -156,6 +162,7 @@ def analyze_breaths(audio: AudioFile, tunables: BreathTunables = BreathTunables(
     events: list[BreathEvent] = []
     if found:
         found, counts.excluded_no_pause = followed_by_pause(x, frames, level, found, tunables)
+        found, counts.excluded_as_loud_as_speech = quieter_than_speech(found, frames, level, params)
     for b in found:
         feats = onset_features(x, sr, b.start_sample, b.end_sample, level)
         score = round(t_inhale_score(feats, b.gap_before_s), 3) if feats else None
@@ -191,6 +198,8 @@ def summary_line(c: BreathCounts) -> str:
              f"{c.t_inhale} mouth-click inhale ({T_INHALE_NOTE})"]
     if c.excluded_no_pause:
         parts.append(f"{c.excluded_no_pause} excluded (no pause before the next word)")
+    if c.excluded_as_loud_as_speech:
+        parts.append(f"{c.excluded_as_loud_as_speech} excluded (as loud as speech: an \"s\", \"sh\" or \"ch\")")
     return " · ".join(parts)
 
 
@@ -202,7 +211,8 @@ def render_breath_list(report: BreathsReport) -> str:
         f"MOUTH-CLICK INHALE = breath opening with a mouth click: {T_INHALE_NOTE}, not a failure.",
         "Informational only. Times are from the start of each file.",
         "A breath must fade into a pause before the next word; sounds that run",
-        "straight into the word (an \"h\", a consonant) are not listed.",
+        "straight into the word (an \"h\", a consonant) are not listed, nor are",
+        "sounds as loud as speech (an \"s\", \"sh\" or \"ch\" left alone before a pause).",
         "",
         f"All files: {summary_line(report.summary)}",
     ]

@@ -18,7 +18,7 @@ from scipy.signal import butter, sosfilt
 
 from finalpass.audio_io import AudioFile
 from finalpass.breath_check import (
-    GRADE_2_FROM_DB, GRADE_3_FROM_DB, BreathTunables, analyze_breaths, grade_for, noticeability_db,
+    GRADE_2_FROM_DB, GRADE_3_FROM_DB, BreathTunables, analyze_breaths, grade_for, noticeability_db, summary_line,
 )
 from finalpass.breath_detect import detect
 from finalpass.breath_edges import click_gap, onset_features, t_inhale_score
@@ -212,6 +212,25 @@ def test_h_after_the_pause_is_cut_off_the_breath() -> None:
     (e,) = analyze_breaths(_audio(x)).breaths
     assert abs(e.end_sample - breath_end_at) < int(0.005 * SR)
     assert e.end_time == samples_to_clock(e.end_sample, SR)
+
+
+def test_sibilant_as_loud_as_speech_before_a_pause_is_not_a_breath() -> None:
+    """A dull "sh" left alone at a word's end, after a stop closure, passes every other rule."""
+    sh = _band_noise(0.18, 2500, 3600, -10)
+    closure = np.zeros(int(0.08 * SR))
+    result = analyze_breaths(_audio(np.concatenate([_vowel(1.0), closure, sh, _floor(0.8), _vowel(1.0)])))
+    assert result.counts.breaths == 0 and result.counts.excluded_as_loud_as_speech == 1
+    assert "1 excluded (as loud as speech" in summary_line(result.counts)
+    soft = sh * 10 ** (-16 / 20)                                  # the same sound at a breath's level is one
+    x = np.concatenate([_vowel(1.0), closure, soft, _floor(0.8), _vowel(1.0)])
+    assert analyze_breaths(_audio(x)).counts.breaths == 1
+
+
+def test_breath_opening_with_a_loud_consonant_is_still_a_breath() -> None:
+    x = np.concatenate([_vowel(1.0), _floor(0.3), _band_noise(0.06, 1500, 4000, -10),
+                        _band_noise(0.30, 900, 3200, -27), _floor(0.3), _vowel(1.0)])
+    result = analyze_breaths(_audio(x))
+    assert result.counts.breaths == 1 and result.counts.excluded_as_loud_as_speech == 0
 
 
 def test_low_thump_at_the_onset_is_measured() -> None:

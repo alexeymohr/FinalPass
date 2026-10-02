@@ -15,13 +15,25 @@ by a short gap on both sides. The rules below encode exactly those properties:
   starting inside the gap can reach the next word, so the breath's own peak is
   taken from interior frames only, edge frames louder than that are dropped as
   bleed, quiet lead-in and tail below the body floor are trimmed, and the sample
-  span uses frame centres rather than window extents.
+  span uses frame centres rather than window extents;
+* a breath is quieter than speech for most of its length: when its loudest
+  quarter (the 75th-percentile frame) comes within 15 dB of the narration, it
+  is a speech sound — an "s", "sh" or "ch" left alone at the end of a word
+  before a pause — not a breath (`quieter_than_speech`, applied once the pause
+  rule has set the breath's end). The other rules keep most of these out, but
+  some voices' sibilants are dull, peaking near 3 kHz instead of above 5 kHz, and
+  a stop closure ("ch", "st") gives them their own gap from the word.
 
 Settings: the looser speech gap (10 ms) and 120 ms minimum were adopted after a
 blind operator spot check found all 10 events only they produce to be breaths.
 The 150 ms minimum on the tightened breath body follows the operator's review of
 chapters 1-3 (593 labelled events): it removes 15 of 18 non-breaths and 18 of 20
-unidentifiable events for 22 of 503 plain breaths.
+unidentifiable events for 22 of 503 plain breaths. The 15 dB loudness limit:
+on those chapters' labelled breaths (mouth-click inhales and breaths straight
+after a consonant included) and on the breaths QC cut in a dozen chapters of the
+same book, the loudest quarter never came closer than 16.8 dB; on a test voice
+that makes no breaths, its 12 loud "breaths" (every one the operator auditioned
+was an "s", "sh" or "ch") all came within 12.8 dB.
 
 Every threshold lives in `BreathParams` so it can be reported and tuned openly.
 """
@@ -55,6 +67,7 @@ class BreathParams:
     body_floor_db: float = 20.0        # breath body: within this of its own peak
     bleed_db: float = 3.0              # edge frames this far over the peak are bleed
     min_body_s: float = 0.15           # operator: shorter is rarely identifiable
+    max_loud_quarter_rel_db: float = -15.0  # louder for a quarter of its length: a speech sound
 
 
 @dataclass
@@ -100,6 +113,19 @@ def shorten(b: Breath, end_sample: int, f: Frames, level: float) -> Breath:
         duration_s=round((end_sample - b.start_sample) / f.sample_rate, 3),
         peak_rel_db=round(float(body.max()), 2), median_rel_db=round(float(np.median(body)), 2),
     )
+
+
+def loud_quarter_rel_db(b: Breath, f: Frames, level: float) -> float:
+    """The level a breath's loudest quarter reaches (its 75th-percentile frame), re the narration.
+    A consonant opening the breath is too short to move it."""
+    return float(np.percentile(f.rms_db[b.start_frame:max(b.end_frame, b.start_frame + 1)], 75) - level)
+
+
+def quieter_than_speech(found: list[Breath], f: Frames, level: float,
+                        p: BreathParams = BreathParams()) -> tuple[list[Breath], int]:
+    """Keep the breaths whose loudest quarter stays more than the limit under the narration."""
+    kept = [b for b in found if loud_quarter_rel_db(b, f, level) <= p.max_loud_quarter_rel_db]
+    return kept, len(found) - len(kept)
 
 
 def _runs(mask: np.ndarray, bridge: int) -> list[tuple[int, int]]:
