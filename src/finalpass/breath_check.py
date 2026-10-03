@@ -17,7 +17,10 @@ before the next word; a sound that runs straight into the word — an "h", or a
 consonant — is not reported, and an "h" after the pause is cut off the breath.
 A sound as loud as speech for a quarter of its length or more (within 15 dB of
 the narration) is a speech sound — an "s", "sh" or "ch" left alone before a
-pause — and is not reported either.
+pause — and is not reported either, unless `speech_loud_rule` is off: a caller
+that confirms each breath with a model of its own (FinalPass AudioBook's breath
+model) turns it off, because there it only loses short loud breaths the model
+keeps.
 """
 from __future__ import annotations
 
@@ -53,6 +56,7 @@ class BreathTunables:
     t_inhale: bool = True
     pause_dbfs: float = DEFAULT_PAUSE_DBFS
     pause_min_ms: float = DEFAULT_PAUSE_MIN_MS
+    speech_loud_rule: bool = True       # drop sounds as loud as speech; off when the caller confirms breaths itself
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -162,7 +166,8 @@ def analyze_breaths(audio: AudioFile, tunables: BreathTunables = BreathTunables(
     events: list[BreathEvent] = []
     if found:
         found, counts.excluded_no_pause = followed_by_pause(x, frames, level, found, tunables)
-        found, counts.excluded_as_loud_as_speech = quieter_than_speech(found, frames, level, params)
+        if tunables.speech_loud_rule:
+            found, counts.excluded_as_loud_as_speech = quieter_than_speech(found, frames, level, params)
     for b in found:
         feats = onset_features(x, sr, b.start_sample, b.end_sample, level)
         score = round(t_inhale_score(feats, b.gap_before_s), 3) if feats else None

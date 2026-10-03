@@ -226,6 +226,14 @@ def test_sibilant_as_loud_as_speech_before_a_pause_is_not_a_breath() -> None:
     assert analyze_breaths(_audio(x)).counts.breaths == 1
 
 
+def test_the_speech_loud_rule_can_be_switched_off() -> None:
+    sh = _band_noise(0.18, 2500, 3600, -10)
+    x = np.concatenate([_vowel(1.0), np.zeros(int(0.08 * SR)), sh, _floor(0.8), _vowel(1.0)])
+    off = analyze_breaths(_audio(x), BreathTunables(speech_loud_rule=False))
+    assert off.counts.breaths == 1 and off.counts.excluded_as_loud_as_speech == 0
+    assert BreathTunables().speech_loud_rule is True
+
+
 def test_breath_opening_with_a_loud_consonant_is_still_a_breath() -> None:
     x = np.concatenate([_vowel(1.0), _floor(0.3), _band_noise(0.06, 1500, 4000, -10),
                         _band_noise(0.30, 900, 3200, -27), _floor(0.3), _vowel(1.0)])
